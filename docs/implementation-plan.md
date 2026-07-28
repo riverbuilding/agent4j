@@ -39,12 +39,14 @@ Exit criteria:
 
 ## Phase 2: Core Message And Event Model
 
+Status: in progress
+
 Goal: define the provider-neutral runtime surface used by CLI, RPC, tests, and
 future UI.
 
 Tasks:
 
-- Add `agent4j-core` message model.
+- Add `agent4j-core` message model. Started.
 - Add agent event types for:
   - message start/update/end
   - tool execution start/update/end
@@ -52,9 +54,10 @@ Tasks:
   - agent start/end/settled
   - retry start/end
   - compaction start/end
-- Add event bus and subscription lifecycle.
-- Add abort controller abstraction.
-- Add usage and cost accumulator types.
+- Add event bus and subscription lifecycle. Done.
+- Add abort controller abstraction. Done.
+- Add usage and cost accumulator types. Done.
+- Add fake text-turn runtime for event contract tests. Done.
 
 Exit criteria:
 
@@ -282,11 +285,14 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Decide and document exact resume semantics for multi-process same-file
+1. Finish the core message model by adding typed content blocks for assistant
+   text, tool calls, and reasoning deltas.
+2. Add first tool runtime abstractions from Phase 3: `Tool`, `ToolSpec`,
+   `ToolCall`, `ToolResult`, and operation interfaces.
+3. Decide and document exact resume semantics for multi-process same-file
    sessions, including stale snapshot handling.
-2. Add stronger validation for parent references and malformed typed payloads.
-3. Add remaining session helpers for compaction entries once compaction shape is
+4. Add stronger validation for parent references and malformed typed payloads.
+5. Add remaining session helpers for compaction entries once compaction shape is
    finalized.
-4. Start Phase 2: core message and event model.
-5. Keep expanding fixtures with real PI session samples as they become
+6. Keep expanding fixtures with real PI session samples as they become
    available.
