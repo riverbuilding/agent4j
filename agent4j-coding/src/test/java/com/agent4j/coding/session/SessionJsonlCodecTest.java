@@ -86,7 +86,37 @@ class SessionJsonlCodecTest {
 
         assertThat(document.entries().getFirst().messageRole()).contains(SessionMessageRole.USER);
         assertThat(document.entries().get(1).messageRole()).contains(SessionMessageRole.ASSISTANT);
-        assertThat(document.entries().get(1).payload().at("/message/content/0/text").asText()).isEqualTo("left");
+        assertThat(document.entries().get(1).message().orElseThrow().content().get(0).get("text").asText())
+                .isEqualTo("left");
+    }
+
+    @Test
+    void exposesTypedViewsForAllKnownEntryTypes() throws Exception {
+        SessionDocument document = readFixture("pi-sessions/all-entry-types.jsonl");
+
+        assertThat(document.header().header().orElseThrow().version()).isEqualTo(3);
+        assertThat(document.entries()).extracting(SessionEntry::type).contains(
+                SessionEntryType.MESSAGE,
+                SessionEntryType.MODEL_CHANGE,
+                SessionEntryType.THINKING_LEVEL_CHANGE,
+                SessionEntryType.COMPACTION,
+                SessionEntryType.SESSION_INFO,
+                SessionEntryType.FILE,
+                SessionEntryType.CUSTOM);
+        assertThat(document.entries()).extracting(entry -> entry.messageRole().orElse(null)).contains(
+                SessionMessageRole.USER,
+                SessionMessageRole.ASSISTANT,
+                SessionMessageRole.TOOL_RESULT,
+                SessionMessageRole.BASH_EXECUTION,
+                SessionMessageRole.CUSTOM,
+                SessionMessageRole.BRANCH_SUMMARY,
+                SessionMessageRole.COMPACTION_SUMMARY);
+        assertThat(document.entries().get(7).modelChange().orElseThrow().modelId()).isEqualTo("gpt-5");
+        assertThat(document.entries().get(8).thinkingLevelChange().orElseThrow().thinkingLevel()).isEqualTo("high");
+        assertThat(document.entries().get(9).compaction().orElseThrow().optionalSummary()).isPresent();
+        assertThat(document.entries().get(10).sessionInfo().orElseThrow().optionalName()).contains("work session");
+        assertThat(document.entries().get(11).fileEntry().orElseThrow().optionalPath()).contains("src/Main.java");
+        assertThat(document.entries().get(12).customEntry().orElseThrow().optionalCustomType()).contains("vendor");
     }
 
     private SessionDocument readFixture(String name) throws Exception {

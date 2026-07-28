@@ -22,11 +22,13 @@ Goal: read, validate, write, and navigate PI-shaped session JSONL.
 Tasks:
 
 - Complete typed Java models for all PI session entry types. Started.
-- Complete typed Java models for all PI message roles. Started.
+- Complete typed Java models for all PI message roles. Done.
 - Keep unknown-field preservation for forward compatibility. Done.
-- Add append-only session writer with file locking. Started.
-- Add session cursor management for active branch tracking. Started.
-- Add fork, clone, resume, import, and in-place tree navigation primitives.
+- Add typed payload views for known entry types. Started.
+- Add append-only session writer with file locking. Done.
+- Add typed append helpers for common entry types. Done.
+- Add session cursor management for active branch tracking. Done.
+- Add fork, clone, import, and in-place tree navigation primitives. Started.
 - Add golden fixtures under `agent4j-testkit`. Started.
 
 Exit criteria:
@@ -280,11 +282,11 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Finish fully typed session entry payload views for model changes,
-   thinking-level changes, compactions, session info, file entries, and custom
-   entries.
-2. Add append helpers for common entry types instead of requiring raw
-   `ObjectNode` customization at call sites.
-3. Add session import/resume/fork/clone primitives.
-4. Expand `agent4j-testkit` fixtures to cover all PI entry and message roles.
-5. Start Phase 2: core message and event model.
+1. Decide and document exact resume semantics for multi-process same-file
+   sessions, including stale snapshot handling.
+2. Add stronger validation for parent references and malformed typed payloads.
+3. Add remaining session helpers for compaction entries once compaction shape is
+   finalized.
+4. Start Phase 2: core message and event model.
+5. Keep expanding fixtures with real PI session samples as they become
+   available.

@@ -41,26 +41,97 @@ public record SessionEntry(
     }
 
     @JsonIgnore
-    public Optional<JsonNode> message() {
+    public Optional<SessionHeader> header() {
+        if (type() != SessionEntryType.SESSION) {
+            return Optional.empty();
+        }
+        JsonNode version = payload.get("version");
+        JsonNode cwd = payload.get("cwd");
+        return Optional.of(new SessionHeader(
+                id,
+                version != null && version.canConvertToInt() ? version.asInt() : -1,
+                timestamp,
+                cwd != null && cwd.isTextual() ? cwd.asText() : null,
+                payload));
+    }
+
+    @JsonIgnore
+    public Optional<SessionMessage> message() {
         if (type() != SessionEntryType.MESSAGE) {
             return Optional.empty();
         }
         JsonNode message = payload.get("message");
-        return message == null || message.isNull() ? Optional.empty() : Optional.of(message);
+        if (message == null || message.isNull()) {
+            return Optional.empty();
+        }
+        JsonNode role = message.get("role");
+        JsonNode content = message.get("content");
+        return Optional.of(new SessionMessage(
+                role != null && role.isTextual() ? SessionMessageRole.fromWireName(role.asText()) : SessionMessageRole.UNKNOWN,
+                content,
+                message));
     }
 
     @JsonIgnore
     public Optional<SessionMessageRole> messageRole() {
-        return message()
-                .map(message -> message.get("role"))
-                .filter(JsonNode::isTextual)
-                .map(JsonNode::asText)
-                .map(SessionMessageRole::fromWireName);
+        return message().map(SessionMessage::role);
+    }
+
+    @JsonIgnore
+    public Optional<SessionModelChange> modelChange() {
+        if (type() != SessionEntryType.MODEL_CHANGE) {
+            return Optional.empty();
+        }
+        return Optional.of(new SessionModelChange(textOrNull("provider"), textOrNull("modelId"), payload));
+    }
+
+    @JsonIgnore
+    public Optional<SessionThinkingLevelChange> thinkingLevelChange() {
+        if (type() != SessionEntryType.THINKING_LEVEL_CHANGE) {
+            return Optional.empty();
+        }
+        return Optional.of(new SessionThinkingLevelChange(textOrNull("thinkingLevel"), payload));
+    }
+
+    @JsonIgnore
+    public Optional<SessionCompaction> compaction() {
+        if (type() != SessionEntryType.COMPACTION) {
+            return Optional.empty();
+        }
+        return Optional.of(new SessionCompaction(payload.get("summary"), payload.get("retainedEntries"), payload));
+    }
+
+    @JsonIgnore
+    public Optional<SessionInfo> sessionInfo() {
+        if (type() != SessionEntryType.SESSION_INFO) {
+            return Optional.empty();
+        }
+        return Optional.of(new SessionInfo(textOrNull("name"), payload));
+    }
+
+    @JsonIgnore
+    public Optional<SessionFileEntry> fileEntry() {
+        if (type() != SessionEntryType.FILE) {
+            return Optional.empty();
+        }
+        return Optional.of(new SessionFileEntry(textOrNull("path"), payload));
+    }
+
+    @JsonIgnore
+    public Optional<SessionCustomEntry> customEntry() {
+        if (type() != SessionEntryType.CUSTOM) {
+            return Optional.empty();
+        }
+        return Optional.of(new SessionCustomEntry(textOrNull("customType"), payload));
     }
 
     @JsonIgnore
     public Optional<String> textField(String fieldName) {
+        return Optional.ofNullable(textOrNull(fieldName));
+    }
+
+    private String textOrNull(String fieldName) {
         JsonNode value = payload.get(fieldName);
-        return value != null && value.isTextual() ? Optional.of(value.asText()) : Optional.empty();
+        return value != null && value.isTextual() ? value.asText() : null;
     }
 }

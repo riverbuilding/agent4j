@@ -2,6 +2,7 @@ package com.agent4j.coding.session;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
@@ -93,6 +94,31 @@ public final class SessionManager {
         return new SessionManager(sessionFile, codec, idGenerator, clock, document.header(), document.entries());
     }
 
+    public static SessionManager importFrom(Path sourceFile, Path targetFile) throws IOException {
+        return importFrom(sourceFile, targetFile, new SessionJsonlCodec(), SessionIdGenerator.randomHex(), Clock.systemUTC());
+    }
+
+    public static SessionManager importFrom(
+            Path sourceFile,
+            Path targetFile,
+            SessionJsonlCodec codec,
+            SessionIdGenerator idGenerator,
+            Clock clock
+    ) throws IOException {
+        Objects.requireNonNull(sourceFile, "sourceFile");
+        Objects.requireNonNull(targetFile, "targetFile");
+        if (Files.exists(targetFile)) {
+            throw new IOException("target session file already exists: " + targetFile);
+        }
+        SessionDocument document;
+        try (StringReader reader = new StringReader(Files.readString(sourceFile))) {
+            document = codec.read(reader);
+        }
+        SessionTree.from(document);
+        writeDocument(targetFile, codec, document);
+        return open(targetFile, codec, idGenerator, clock);
+    }
+
     public SessionEntry append(SessionEntryType type, Consumer<ObjectNode> payloadCustomizer) throws IOException {
         Objects.requireNonNull(type, "type");
         Objects.requireNonNull(payloadCustomizer, "payloadCustomizer");
@@ -116,6 +142,66 @@ public final class SessionManager {
         entries.add(entry);
         activeEntryId = entry.id();
         return entry;
+    }
+
+    public SessionEntry appendMessage(SessionMessageRole role, com.fasterxml.jackson.databind.JsonNode content)
+            throws IOException {
+        Objects.requireNonNull(role, "role");
+        return append(SessionEntryType.MESSAGE, payload -> {
+            ObjectNode message = codec.createObjectNode();
+            message.put("role", role.wireName());
+            message.set("content", content);
+            payload.set("message", message);
+        });
+    }
+
+    public SessionEntry appendUserMessage(String content) throws IOException {
+        return appendMessage(SessionMessageRole.USER, codec.textNode(content));
+    }
+
+    public SessionEntry appendAssistantText(String text) throws IOException {
+        var content = codec.createArrayNode();
+        ObjectNode textBlock = codec.createObjectNode();
+        textBlock.put("type", "text");
+        textBlock.put("text", text);
+        content.add(textBlock);
+        return appendMessage(SessionMessageRole.ASSISTANT, content);
+    }
+
+    public SessionEntry appendModelChange(String provider, String modelId) throws IOException {
+        Objects.requireNonNull(provider, "provider");
+        Objects.requireNonNull(modelId, "modelId");
+        return append(SessionEntryType.MODEL_CHANGE, payload -> {
+            payload.put("provider", provider);
+            payload.put("modelId", modelId);
+        });
+    }
+
+    public SessionEntry appendThinkingLevelChange(String thinkingLevel) throws IOException {
+        Objects.requireNonNull(thinkingLevel, "thinkingLevel");
+        return append(SessionEntryType.THINKING_LEVEL_CHANGE, payload -> payload.put("thinkingLevel", thinkingLevel));
+    }
+
+    public SessionEntry appendSessionInfo(String name) throws IOException {
+        return append(SessionEntryType.SESSION_INFO, payload -> payload.put("name", name));
+    }
+
+    public SessionEntry appendFileEntry(String path, Consumer<ObjectNode> payloadCustomizer) throws IOException {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(payloadCustomizer, "payloadCustomizer");
+        return append(SessionEntryType.FILE, payload -> {
+            payload.put("path", path);
+            payloadCustomizer.accept(payload);
+        });
+    }
+
+    public SessionEntry appendCustomEntry(String customType, Consumer<ObjectNode> payloadCustomizer) throws IOException {
+        Objects.requireNonNull(customType, "customType");
+        Objects.requireNonNull(payloadCustomizer, "payloadCustomizer");
+        return append(SessionEntryType.CUSTOM, payload -> {
+            payload.put("customType", customType);
+            payloadCustomizer.accept(payload);
+        });
     }
 
     public void navigateTo(String entryId) {
@@ -143,8 +229,52 @@ public final class SessionManager {
         return activeEntryId;
     }
 
+    public SessionManager cloneTo(Path targetFile) throws IOException {
+        Objects.requireNonNull(targetFile, "targetFile");
+        if (Files.exists(targetFile)) {
+            throw new IOException("target session file already exists: " + targetFile);
+        }
+        writeDocument(targetFile, codec, document());
+        return open(targetFile, codec, idGenerator, clock);
+    }
+
+    public SessionManager forkToActivePath(Path targetFile) throws IOException {
+        Objects.requireNonNull(targetFile, "targetFile");
+        if (Files.exists(targetFile)) {
+            throw new IOException("target session file already exists: " + targetFile);
+        }
+        SessionEntry derivedHeader = derivedHeader();
+        SessionDocument forkedDocument = new SessionDocument(derivedHeader, activePath());
+        writeDocument(targetFile, codec, forkedDocument);
+        return open(targetFile, codec, idGenerator, clock);
+    }
+
     private SessionTree documentTree() {
         return SessionTree.from(document());
+    }
+
+    private SessionEntry derivedHeader() throws IOException {
+        ObjectNode payload = header.payload().deepCopy();
+        payload.put("id", UUID.randomUUID().toString());
+        payload.put("timestamp", Instant.now(clock).toString());
+        if (header.id() != null) {
+            payload.put("sourceSessionId", header.id());
+        }
+        if (activeEntryId != null) {
+            payload.put("forkedFromEntryId", activeEntryId);
+        }
+        return codec.parseLine(codec.writeJson(payload), 1);
+    }
+
+    private static void writeDocument(Path path, SessionJsonlCodec codec, SessionDocument document) throws IOException {
+        Files.createDirectories(path.toAbsolutePath().getParent());
+        try (BufferedWriter writer = Files.newBufferedWriter(
+                path,
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE_NEW,
+                StandardOpenOption.WRITE)) {
+            codec.write(document, writer);
+        }
     }
 
     private static void appendLineWithLock(Path path, String line) throws IOException {

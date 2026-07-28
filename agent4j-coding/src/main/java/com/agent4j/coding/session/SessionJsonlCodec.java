@@ -95,6 +95,14 @@ public final class SessionJsonlCodec {
         return mapper.createObjectNode();
     }
 
+    public com.fasterxml.jackson.databind.node.ArrayNode createArrayNode() {
+        return mapper.createArrayNode();
+    }
+
+    public com.fasterxml.jackson.databind.node.TextNode textNode(String value) {
+        return com.fasterxml.jackson.databind.node.TextNode.valueOf(value);
+    }
+
     private static ObjectMapper defaultObjectMapper() {
         return new ObjectMapper()
                 .registerModule(new JavaTimeModule())
