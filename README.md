@@ -1,1 +1,18 @@
 # agent4j
+
+Java port of the PI coding agent harness.
+
+## Build
+
+```bash
+mvn test
+```
+
+## Port Scope
+
+See [ADR 0001](docs/adr/0001-pi-port-scope.md) and
+[PI compatibility](docs/pi-compatibility.md).
+
+## Implementation Plan
+
+See [implementation plan](docs/implementation-plan.md).

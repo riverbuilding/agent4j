@@ -1,0 +1,89 @@
+package com.agent4j.coding.session;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class SessionManagerTest {
+    @TempDir
+    Path tempDir;
+
+    private final Clock clock = Clock.fixed(Instant.parse("2026-07-28T10:00:00Z"), ZoneOffset.UTC);
+
+    @Test
+    void createsSessionAndAppendsEntriesWithActiveCursor() throws Exception {
+        Path sessionFile = tempDir.resolve("session.jsonl");
+        AtomicInteger ids = new AtomicInteger();
+        SessionManager manager = SessionManager.create(
+                sessionFile,
+                tempDir,
+                new SessionJsonlCodec(),
+                () -> "id%06d".formatted(ids.incrementAndGet()),
+                clock);
+
+        SessionEntry first = manager.append(SessionEntryType.MESSAGE, payload -> {
+            payload.set("message", payload.objectNode()
+                    .put("role", "user")
+                    .put("content", "hello"));
+        });
+        SessionEntry second = manager.append(SessionEntryType.MODEL_CHANGE, payload -> {
+            payload.put("provider", "openai");
+            payload.put("modelId", "gpt-5");
+        });
+
+        assertThat(first.parentId()).isNull();
+        assertThat(second.parentId()).isEqualTo(first.id());
+        assertThat(manager.activeEntryId()).isEqualTo(second.id());
+        assertThat(Files.readAllLines(sessionFile)).hasSize(3);
+
+        SessionManager reopened = SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock);
+        assertThat(reopened.activePath()).extracting(SessionEntry::id)
+                .containsExactly(first.id(), second.id());
+    }
+
+    @Test
+    void appendsNewEntryAtNavigatedBranchWithoutRewritingHistory() throws Exception {
+        Path sessionFile = tempDir.resolve("session.jsonl");
+        Files.writeString(sessionFile, """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"root0001","parentId":null,"timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"root"}}
+                {"type":"message","id":"left0001","parentId":"root0001","timestamp":"2026-07-28T10:00:02Z","message":{"role":"assistant","content":[{"type":"text","text":"left"}]}}
+                {"type":"message","id":"right001","parentId":"root0001","timestamp":"2026-07-28T10:00:03Z","message":{"role":"assistant","content":[{"type":"text","text":"right"}]}}
+                """);
+        SessionManager manager = SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "newleaf1",
+                clock);
+
+        manager.navigateTo("left0001");
+        SessionEntry newLeaf = manager.append(SessionEntryType.MESSAGE, payload -> {
+            payload.set("message", payload.objectNode()
+                    .put("role", "user")
+                    .put("content", "continue left"));
+        });
+
+        assertThat(newLeaf.parentId()).isEqualTo("left0001");
+        assertThat(manager.activePath()).extracting(SessionEntry::id)
+                .containsExactly("root0001", "left0001", "newleaf1");
+
+        List<String> lines = Files.readAllLines(sessionFile);
+        assertThat(lines).hasSize(5);
+        assertThat(lines.get(3)).contains("\"id\":\"right001\"");
+        assertThat(lines.get(4)).contains("\"id\":\"newleaf1\"");
+        assertThat(lines.get(4)).contains("\"parentId\":\"left0001\"");
+    }
+}
