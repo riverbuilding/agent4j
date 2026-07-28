@@ -67,34 +67,41 @@ Exit criteria:
 
 ## Phase 3: Tool Runtime
 
+Status: complete
+
 Goal: implement PI's built-in coding tools with deterministic tests.
 
 Tasks:
 
-- Add `Tool`, `ToolSpec`, `ToolCall`, and `ToolResult` core abstractions.
+- Add `Tool`, `ToolSpec`, `ToolCall`, and `ToolResult` core abstractions. Done.
+- Add tool registry and executor. Done.
 - Add operation interfaces:
-  - `FileSystemOps`
-  - `ProcessOps`
-  - `Clock`
-  - optional `PathPolicy`
+  - `FileSystemOps`. Done.
+  - `ProcessOps`. Done.
+  - `Clock`. Done through `ToolContext`.
+  - optional `PathPolicy`. Done.
 - Implement first parity tools:
-  - `read`
-  - `write`
-  - `edit`
-  - `bash`
+  - `read`. Done.
+  - `write`. Done.
+  - `edit`. Done.
+  - `bash`. Done.
 - Implement second parity tools:
-  - `ls`
-  - `grep`
-  - `find`
-- Add truncation behavior and output-size limits.
-- Add edit diff generation.
+  - `ls`. Done.
+  - `grep`. Done.
+  - `find`. Done.
+- Add truncation behavior and output-size limits. Done for first and second parity tools.
+- Add edit diff generation. Done.
+- Add repeated-match edit diagnostics and context snippets. Done.
+- Add local process integration coverage. Done.
+- Add binary file safeguards. Done.
+- Document tool result JSON contract. Done.
 - Add tests for path handling, missing files, binary files, large files,
   failed edits, command timeout, exit codes, and output truncation.
 
 Exit criteria:
 
-- Tools can run without a model.
-- Tool results have stable JSON shapes for session persistence and events.
+- Tools can run without a model. Done.
+- Tool results have stable JSON shapes for session persistence and events. Done.
 
 ## Phase 4: Agent Loop
 
@@ -286,12 +293,11 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Add first tool runtime abstractions from Phase 3: `Tool`, `ToolSpec`,
-   `ToolCall`, `ToolResult`, and operation interfaces.
-2. Decide and document exact resume semantics for multi-process same-file
+1. Decide and document exact resume semantics for multi-process same-file
    sessions, including stale snapshot handling.
-3. Add stronger validation for parent references and malformed typed payloads.
-4. Add remaining session helpers for compaction entries once compaction shape is
+2. Add stronger validation for parent references and malformed typed payloads.
+3. Add remaining session helpers for compaction entries once compaction shape is
    finalized.
+4. Start Phase 4: fake model stream interfaces and a tool-calling agent turn.
 5. Keep expanding fixtures with real PI session samples as they become
    available.

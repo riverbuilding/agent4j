@@ -16,3 +16,7 @@ See [ADR 0001](docs/adr/0001-pi-port-scope.md) and
 ## Implementation Plan
 
 See [implementation plan](docs/implementation-plan.md).
+
+## Tool Results
+
+See [tool result contract](docs/tool-result-contract.md).
