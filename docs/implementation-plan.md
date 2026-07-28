@@ -58,6 +58,7 @@ Tasks:
 - Add abort controller abstraction. Done.
 - Add usage and cost accumulator types. Done.
 - Add fake text-turn runtime for event contract tests. Done.
+- Add typed content blocks for assistant text, reasoning, and tool calls. Done.
 
 Exit criteria:
 
@@ -285,14 +286,12 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Finish the core message model by adding typed content blocks for assistant
-   text, tool calls, and reasoning deltas.
-2. Add first tool runtime abstractions from Phase 3: `Tool`, `ToolSpec`,
+1. Add first tool runtime abstractions from Phase 3: `Tool`, `ToolSpec`,
    `ToolCall`, `ToolResult`, and operation interfaces.
-3. Decide and document exact resume semantics for multi-process same-file
+2. Decide and document exact resume semantics for multi-process same-file
    sessions, including stale snapshot handling.
-4. Add stronger validation for parent references and malformed typed payloads.
-5. Add remaining session helpers for compaction entries once compaction shape is
+3. Add stronger validation for parent references and malformed typed payloads.
+4. Add remaining session helpers for compaction entries once compaction shape is
    finalized.
-6. Keep expanding fixtures with real PI session samples as they become
+5. Keep expanding fixtures with real PI session samples as they become
    available.

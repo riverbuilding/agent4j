@@ -39,6 +39,7 @@ class AgentEventBusTest {
                         "AgentSettled");
         assertThat(((AgentEvent.MessageCompleted) events.get(3)).message().content().get(0).get("text").asText())
                 .isEqualTo("hello");
+        assertThat(((AgentEvent.MessageCompleted) events.get(3)).message().textContent()).isEqualTo("hello");
     }
 
     @Test

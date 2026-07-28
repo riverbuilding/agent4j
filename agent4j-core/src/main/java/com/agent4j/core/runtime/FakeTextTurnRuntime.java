@@ -4,8 +4,8 @@ import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
+import com.agent4j.core.message.ContentBlocks;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.time.Clock;
@@ -47,17 +47,12 @@ public final class FakeTextTurnRuntime {
         eventBus.publish(new AgentEvent.MessageDelta(sessionId, now(), messageId, delta));
 
         signal.throwIfAborted();
-        ArrayNode content = mapper.createArrayNode();
-        ObjectNode textBlock = mapper.createObjectNode();
-        textBlock.put("type", "text");
-        textBlock.put("text", text);
-        content.add(textBlock);
         AgentMessage completed = new AgentMessage(
                 messageId,
                 null,
                 now(),
                 AgentMessageRole.ASSISTANT,
-                content,
+                ContentBlocks.toJsonArray(java.util.List.of(new com.agent4j.core.message.TextBlock(text, null))),
                 mapper.createObjectNode().put("turnId", turnId));
         eventBus.publish(new AgentEvent.MessageCompleted(sessionId, now(), completed));
         eventBus.publish(new AgentEvent.AgentSettled(sessionId, now(), turnId, Usage.zero()));
