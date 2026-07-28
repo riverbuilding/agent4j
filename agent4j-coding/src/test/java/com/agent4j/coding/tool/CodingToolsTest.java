@@ -52,13 +52,13 @@ class CodingToolsTest {
     }
 
     @Test
-    void readRejectsBinaryFiles() {
+    void readDecodesFilesContainingNulBytes() {
         files.writeBytesUnchecked(CWD.resolve("image.bin"), new byte[]{1, 2, 0, 3});
 
         ToolResult result = execute("read", args().put("path", "image.bin"));
 
-        assertThat(result.error()).isTrue();
-        assertThat(result.content().asText()).contains("binary file is not supported");
+        assertThat(result.error()).isFalse();
+        assertThat(result.content().get("content").asText()).isEqualTo("\u0001\u0002\u0000\u0003");
     }
 
     @Test
@@ -106,16 +106,16 @@ class CodingToolsTest {
     }
 
     @Test
-    void editRejectsBinaryFiles() {
+    void editDecodesFilesContainingNulBytes() {
         files.writeBytesUnchecked(CWD.resolve("image.bin"), new byte[]{1, 2, 0, 3});
 
         ToolResult result = execute("edit", args()
                 .put("path", "image.bin")
-                .put("oldText", "a")
+                .put("oldText", "\u0000")
                 .put("newText", "b"));
 
-        assertThat(result.error()).isTrue();
-        assertThat(result.content().asText()).contains("binary file is not supported");
+        assertThat(result.error()).isFalse();
+        assertThat(files.readStringUnchecked(CWD.resolve("image.bin"))).isEqualTo("\u0001\u0002b\u0003");
     }
 
     @Test
@@ -186,10 +186,10 @@ class CodingToolsTest {
         assertThat(result.content().get("matches")).hasSize(2);
         assertThat(result.content().get("matches").get(0).get("path").asText()).isEqualTo("README.md");
         assertThat(result.content().get("matches").get(0).get("line").asInt()).isEqualTo(1);
-        assertThat(result.content().get("matches").get(1).get("path").asText()).isEqualTo("src/Main.java");
-        assertThat(result.content().get("matches").get(1).get("line").asInt()).isEqualTo(2);
-        assertThat(result.content().get("truncated").asBoolean()).isFalse();
-        assertThat(result.content().get("totalMatches").asInt()).isEqualTo(2);
+        assertThat(result.content().get("matches").get(1).get("path").asText()).isEqualTo("image.bin");
+        assertThat(result.content().get("matches").get(1).get("line").asInt()).isEqualTo(1);
+        assertThat(result.content().get("truncated").asBoolean()).isTrue();
+        assertThat(result.content().get("totalMatches").asInt()).isEqualTo(3);
     }
 
     @Test

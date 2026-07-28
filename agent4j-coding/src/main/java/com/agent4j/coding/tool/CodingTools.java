@@ -168,10 +168,7 @@ public final class CodingTools {
         var matches = JSON.arrayNode();
         int totalMatches = 0;
         for (FileSystemEntry candidate : candidates) {
-            if (isBinary(fileSystemOps.readBytes(candidate.path()))) {
-                continue;
-            }
-            String content = fileSystemOps.readString(candidate.path());
+            String content = readTextFile(candidate.path());
             String[] lines = content.split("\\R", -1);
             for (int i = 0; i < lines.length; i++) {
                 if (compiled.matcher(lines[i]).find()) {
@@ -235,9 +232,6 @@ public final class CodingTools {
 
     private String readTextFile(Path path) throws Exception {
         byte[] bytes = fileSystemOps.readBytes(path);
-        if (isBinary(bytes)) {
-            throw new IllegalArgumentException("binary file is not supported: " + path);
-        }
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
@@ -270,16 +264,6 @@ public final class CodingTools {
             throw new IllegalArgumentException("argument must be textual: " + fieldName);
         }
         return value.asText();
-    }
-
-    private static boolean isBinary(byte[] bytes) {
-        int limit = Math.min(bytes.length, 8192);
-        for (int i = 0; i < limit; i++) {
-            if (bytes[i] == 0) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static Pattern compilePattern(String pattern) {
