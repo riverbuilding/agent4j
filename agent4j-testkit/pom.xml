@@ -11,4 +11,12 @@
 
     <artifactId>agent4j-testkit</artifactId>
     <name>agent4j-testkit</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.agent4j</groupId>
+            <artifactId>agent4j-ai</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
 </project>

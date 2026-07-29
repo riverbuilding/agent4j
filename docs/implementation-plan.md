@@ -12,6 +12,22 @@ new behavior.
 - Add provider SDKs, terminal UI, and extension bridges only after the core
   harness behavior is stable.
 - Treat session JSONL compatibility as the backbone of the port.
+- Pin module responsibilities to PI's package split:
+  - `agent4j-ai` mirrors PI `@earendil-works/pi-ai`: provider-neutral LLM
+    message/content types, model references, stream contracts, provider
+    adapters, usage, and request options.
+  - `agent4j-core` mirrors PI `@earendil-works/pi-agent-core`: agent loop,
+    eventing, queue semantics, tool orchestration, and conversion boundaries
+    from harness/custom messages to LLM messages.
+  - `agent4j-coding` mirrors PI `@earendil-works/pi-coding-agent`: coding
+    tools, session JSONL persistence, resource discovery, and coding-agent
+    custom message conversions.
+- Keep provider-neutral LLM content blocks in `agent4j-ai`; do not use raw
+  `JsonNode` as the long-term AI message contract except for unknown/provider
+  extension payloads.
+- Treat `agent4j-core` messages as the agent transcript: PI-compatible LLM
+  messages plus custom/session-only messages. Convert them to `agent4j-ai`
+  `AiMessage` values at the model boundary, like PI's `convertToLlm`.
 
 ## Phase 1: Session Foundation
 
@@ -41,8 +57,10 @@ Exit criteria:
 
 Status: in progress
 
-Goal: define the provider-neutral runtime surface used by CLI, RPC, tests, and
-future UI.
+Goal: define the agent transcript and event surface used by CLI, RPC, tests,
+and future UI. The transcript should follow PI's `AgentMessage = Message |
+CustomAgentMessages[...]` pattern, while LLM-native content block types live in
+`agent4j-ai`.
 
 Tasks:
 
@@ -58,7 +76,14 @@ Tasks:
 - Add abort controller abstraction. Done.
 - Add usage and cost accumulator types. Done.
 - Add fake text-turn runtime for event contract tests. Done.
-- Add typed content blocks for assistant text, reasoning, and tool calls. Done.
+- Add typed content blocks for assistant text, reasoning, and tool calls. Done,
+  but migrate these to the PI-aligned `agent4j-ai` content model or bridge them
+  explicitly before Phase 4 is considered stable.
+- Add a PI-style custom message extension model for session-only messages such
+  as bash execution, branch summary, compaction summary, and custom extension
+  messages.
+- Add an explicit `convertToLlm` boundary from agent transcript messages to
+  `agent4j-ai` messages.
 
 Exit criteria:
 
@@ -93,7 +118,8 @@ Tasks:
 - Add edit diff generation. Done.
 - Add repeated-match edit diagnostics and context snippets. Done.
 - Add local process integration coverage. Done.
-- Add binary file safeguards. Done.
+- Add binary file safeguards. Removed for PI parity; non-image files are decoded
+  as UTF-8 for now.
 - Document tool result JSON contract. Done.
 - Add tests for path handling, missing files, binary files, large files,
   failed edits, command timeout, exit codes, and output truncation.
@@ -105,19 +131,36 @@ Exit criteria:
 
 ## Phase 4: Agent Loop
 
+Status: started
+
 Goal: run a complete tool-calling agent turn against a fake streaming model.
 
 Tasks:
 
-- Add `agent4j-ai` streaming interfaces.
-- Add fake model client in `agent4j-testkit`.
+- Replace the initial raw-JSON `AiMessage` slice with PI-style `agent4j-ai`
+  message/content types:
+  - `AiTextContent`. Done.
+  - `AiThinkingContent`. Done.
+  - `AiImageContent`. Done.
+  - `AiToolCallContent`. Done.
+  - `AiUserMessage`. Done.
+  - `AiAssistantMessage`. Done.
+  - `AiToolResultMessage`. Done.
+  - `AiMessage`. Done.
+- Add `agent4j-ai` streaming interfaces. Started; revise them to stream
+  PI-style assistant message events:
+  - message start/done/error
+  - text start/delta/end. Started with delta.
+  - thinking start/delta/end. Started with delta.
+  - tool-call start/delta/end. Started with delta.
+- Add fake model client in `agent4j-testkit`. Started.
 - Implement agent turn loop:
-  - build context
-  - stream assistant deltas
-  - collect tool calls
-  - execute tools
-  - append tool results
-  - continue until terminal stop reason
+  - build context. Started.
+  - stream assistant deltas. Started.
+  - collect tool calls. Started.
+  - execute tools. Started.
+  - append tool results. Started.
+  - continue until terminal stop reason. Started.
 - Implement prompt, steer, and follow-up queue semantics.
 - Implement retry policy for retryable provider errors.
 - Implement abort behavior across model stream and tool execution.
@@ -125,6 +168,10 @@ Tasks:
 
 Exit criteria:
 
+- `agent4j-ai` exposes typed PI-style LLM messages and content blocks rather
+  than `JsonNode` content bags.
+- `agent4j-core` converts custom/session transcript messages to LLM-compatible
+  `agent4j-ai` messages at the model boundary.
 - Tests cover text-only turns, single-tool turns, multi-tool turns, tool errors,
   retries, aborts, steering, and follow-ups.
 
@@ -298,6 +345,7 @@ Exit criteria:
 2. Add stronger validation for parent references and malformed typed payloads.
 3. Add remaining session helpers for compaction entries once compaction shape is
    finalized.
-4. Start Phase 4: fake model stream interfaces and a tool-calling agent turn.
+4. Expand Phase 4 beyond the initial fake streaming/tool-call loop: queue
+   semantics, retry policy, abort coverage, and `SessionManager` persistence.
 5. Keep expanding fixtures with real PI session samples as they become
    available.
