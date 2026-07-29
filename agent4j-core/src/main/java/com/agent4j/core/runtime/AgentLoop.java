@@ -5,14 +5,10 @@ import com.agent4j.ai.AiModelClient;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiAssistantMessage;
-import com.agent4j.ai.AiContentBlock;
 import com.agent4j.ai.AiContentBlocks;
-import com.agent4j.ai.AiTextContent;
 import com.agent4j.ai.AiToolSpec;
-import com.agent4j.ai.AiToolResultMessage;
 import com.agent4j.ai.AiTurnRequest;
 import com.agent4j.ai.AiUsage;
-import com.agent4j.ai.AiUserMessage;
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.message.AgentMessage;
@@ -23,9 +19,7 @@ import com.agent4j.core.message.ToolResult;
 import com.agent4j.core.tool.ToolContext;
 import com.agent4j.core.tool.ToolExecutor;
 import com.agent4j.core.tool.ToolRegistry;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -39,12 +33,23 @@ public final class AgentLoop {
     private final ToolRegistry toolRegistry;
     private final ToolExecutor toolExecutor;
     private final AgentEventBus eventBus;
+    private final AgentMessageConverter messageConverter;
 
     public AgentLoop(AiModelClient modelClient, ToolRegistry toolRegistry, AgentEventBus eventBus) {
+        this(modelClient, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE);
+    }
+
+    public AgentLoop(
+            AiModelClient modelClient,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter
+    ) {
         this.modelClient = Objects.requireNonNull(modelClient, "modelClient");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
         this.toolExecutor = new ToolExecutor(toolRegistry);
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
+        this.messageConverter = Objects.requireNonNull(messageConverter, "messageConverter");
     }
 
     public AgentLoopResult runTurn(AgentLoopRequest request) throws Exception {
@@ -52,7 +57,8 @@ public final class AgentLoop {
         request.abortSignal().throwIfAborted();
         eventBus.publish(new AgentEvent.AgentStarted(request.sessionId(), now(request), request.turnId()));
 
-        List<AiMessage> modelMessages = new ArrayList<>(toAiMessages(request.messages()));
+        List<AiMessage> modelMessages = new ArrayList<>(messageConverter.convertToLlm(request.messages()));
+        List<AgentMessage> newMessages = new ArrayList<>();
         List<AgentMessage> assistantMessages = new ArrayList<>();
         List<ToolResult> toolResults = new ArrayList<>();
         Usage usage = Usage.zero();
@@ -60,15 +66,37 @@ public final class AgentLoop {
         try {
             for (int round = 0; round <= request.maxToolRounds(); round++) {
                 request.abortSignal().throwIfAborted();
+                eventBus.publish(new AgentEvent.TurnStarted(request.sessionId(), now(request), request.turnId()));
+                if (round == 0) {
+                    publishPromptMessageEvents(request);
+                }
                 RoundResult roundResult = runModelRound(request, modelMessages);
                 usage = usage.plus(roundResult.usage());
+                newMessages.add(roundResult.message());
                 assistantMessages.add(roundResult.message());
-                modelMessages.add(toAiMessage(roundResult.message()));
+                modelMessages.addAll(messageConverter.convertToLlm(List.of(roundResult.message())));
 
                 List<ToolCall> toolCalls = toolCalls(roundResult.message());
+                List<AgentMessage> roundToolResults = new ArrayList<>();
                 if (roundResult.stopReason() != AiStopReason.TOOL_USE || toolCalls.isEmpty()) {
-                    eventBus.publish(new AgentEvent.AgentSettled(request.sessionId(), now(request), request.turnId(), usage));
-                    return new AgentLoopResult(List.copyOf(assistantMessages), List.copyOf(toolResults), usage);
+                    eventBus.publish(new AgentEvent.TurnEnded(
+                            request.sessionId(),
+                            now(request),
+                            request.turnId(),
+                            roundResult.message(),
+                            roundToolResults,
+                            roundResult.usage()));
+                    eventBus.publish(new AgentEvent.AgentEnded(
+                            request.sessionId(),
+                            now(request),
+                            request.turnId(),
+                            newMessages,
+                            usage));
+                    return new AgentLoopResult(
+                            List.copyOf(newMessages),
+                            List.copyOf(assistantMessages),
+                            List.copyOf(toolResults),
+                            usage);
                 }
                 if (round == request.maxToolRounds()) {
                     throw new IllegalStateException("maximum tool rounds exceeded: " + request.maxToolRounds());
@@ -78,16 +106,39 @@ public final class AgentLoop {
                     request.abortSignal().throwIfAborted();
                     eventBus.publish(new AgentEvent.ToolExecutionStarted(request.sessionId(), now(request), toolCall));
                     ToolResult toolResult = toolExecutor.execute(toolCall, toolContext(request));
+                    AgentMessage toolResultMessage = toAgentMessage(toolResult, roundResult.message().id(), now(request));
                     toolResults.add(toolResult);
-                    eventBus.publish(new AgentEvent.ToolExecutionCompleted(request.sessionId(), now(request), toolResult));
-                    modelMessages.add(toAiMessage(toolResult));
+                    roundToolResults.add(toolResultMessage);
+                    eventBus.publish(new AgentEvent.ToolExecutionEnded(request.sessionId(), now(request), toolResult));
+                    eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), toolResultMessage));
+                    eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), toolResultMessage));
+                    newMessages.add(toolResultMessage);
+                    modelMessages.addAll(messageConverter.convertToLlm(List.of(toolResultMessage)));
                 }
+                eventBus.publish(new AgentEvent.TurnEnded(
+                        request.sessionId(),
+                        now(request),
+                        request.turnId(),
+                        roundResult.message(),
+                        roundToolResults,
+                        roundResult.usage()));
             }
             throw new IllegalStateException("agent loop ended without settling");
         } catch (AgentAbortException e) {
             eventBus.publish(new AgentEvent.AgentAborted(request.sessionId(), now(request), e.getMessage()));
             throw e;
         }
+    }
+
+    private void publishPromptMessageEvents(AgentLoopRequest request) {
+        request.messages().stream()
+                .filter(message -> Objects.equals(message.id(), request.parentMessageId()))
+                .filter(message -> message.role() == AgentMessageRole.USER)
+                .findFirst()
+                .ifPresent(message -> {
+                    eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), message));
+                    eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), message));
+                });
     }
 
     private RoundResult runModelRound(AgentLoopRequest request, List<AiMessage> modelMessages) throws Exception {
@@ -110,7 +161,7 @@ public final class AgentLoop {
                 AgentMessageRole.ASSISTANT,
                 AiContentBlocks.toJsonArray(completedMessage.content()),
                 JSON.objectNode());
-        eventBus.publish(new AgentEvent.MessageCompleted(request.sessionId(), now(request), message));
+        eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), message));
         return new RoundResult(message, completedMessage.stopReason(), toUsage(completedMessage.usage()));
     }
 
@@ -126,7 +177,7 @@ public final class AgentLoop {
                             AgentMessageRole.ASSISTANT,
                             JSON.arrayNode(),
                             JSON.objectNode())));
-            case AiStreamEvent.TextDelta delta -> eventBus.publish(new AgentEvent.MessageDelta(
+            case AiStreamEvent.TextDelta delta -> eventBus.publish(new AgentEvent.MessageUpdated(
                     request.sessionId(),
                     now(request),
                     delta.messageId(),
@@ -134,7 +185,7 @@ public final class AgentLoop {
                             .put("type", "text_delta")
                             .put("contentIndex", delta.contentIndex())
                             .put("delta", delta.delta())));
-            case AiStreamEvent.ThinkingDelta delta -> eventBus.publish(new AgentEvent.MessageDelta(
+            case AiStreamEvent.ThinkingDelta delta -> eventBus.publish(new AgentEvent.MessageUpdated(
                     request.sessionId(),
                     now(request),
                     delta.messageId(),
@@ -142,7 +193,7 @@ public final class AgentLoop {
                             .put("type", "thinking_delta")
                             .put("contentIndex", delta.contentIndex())
                             .put("delta", delta.delta())));
-            case AiStreamEvent.ToolCallDelta delta -> eventBus.publish(new AgentEvent.MessageDelta(
+            case AiStreamEvent.ToolCallDelta delta -> eventBus.publish(new AgentEvent.MessageUpdated(
                     request.sessionId(),
                     now(request),
                     delta.messageId(),
@@ -165,28 +216,17 @@ public final class AgentLoop {
         return new ToolContext(request.sessionId(), request.cwd(), request.clock(), request.abortSignal(), request.toolAttributes());
     }
 
-    private static List<AiMessage> toAiMessages(List<AgentMessage> messages) {
-        return messages.stream().map(AgentLoop::toAiMessage).toList();
-    }
-
-    private static AiMessage toAiMessage(AgentMessage message) {
-        List<AiContentBlock> content = AiContentBlocks.parse(message.content());
-        return switch (message.role()) {
-            case ASSISTANT -> new AiAssistantMessage(content, AiStopReason.STOP, AiUsage.zero());
-            case TOOL_RESULT -> new AiToolResultMessage("", "", content, false);
-            default -> new AiUserMessage(content);
-        };
-    }
-
-    private static AiMessage toAiMessage(ToolResult result) {
-        String text = result.content() == null || result.content().isNull()
-                ? ""
-                : result.content().isTextual() ? result.content().asText() : result.content().toString();
-        return new AiToolResultMessage(
-                result.toolCallId(),
-                result.toolName(),
-                List.of(new AiTextContent(text)),
-                result.error());
+    private static AgentMessage toAgentMessage(ToolResult result, String parentId, Instant timestamp) {
+        return new AgentMessage(
+                "tool-result-" + result.toolCallId(),
+                parentId,
+                timestamp,
+                AgentMessageRole.TOOL_RESULT,
+                result.content(),
+                JSON.objectNode()
+                        .put("toolCallId", result.toolCallId())
+                        .put("toolName", result.toolName())
+                        .put("error", result.error()));
     }
 
     private static List<ToolCall> toolCalls(AgentMessage message) {

@@ -33,13 +33,15 @@ class AgentEventBusTest {
         assertThat(events).extracting(event -> event.getClass().getSimpleName())
                 .containsExactly(
                         "AgentStarted",
+                        "TurnStarted",
                         "MessageStarted",
-                        "MessageDelta",
-                        "MessageCompleted",
-                        "AgentSettled");
-        assertThat(((AgentEvent.MessageCompleted) events.get(3)).message().content().get(0).get("text").asText())
+                        "MessageUpdated",
+                        "MessageEnded",
+                        "TurnEnded",
+                        "AgentEnded");
+        assertThat(((AgentEvent.MessageEnded) events.get(4)).message().content().get(0).get("text").asText())
                 .isEqualTo("hello");
-        assertThat(((AgentEvent.MessageCompleted) events.get(3)).message().textContent()).isEqualTo("hello");
+        assertThat(((AgentEvent.MessageEnded) events.get(4)).message().textContent()).isEqualTo("hello");
     }
 
     @Test
@@ -59,17 +61,18 @@ class AgentEventBusTest {
     @Test
     void serializesEventsWithStableTypeDiscriminator() throws Exception {
         ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        AgentEvent event = new AgentEvent.AgentSettled(
+        AgentEvent event = new AgentEvent.AgentEnded(
                 "session-1",
                 Instant.parse("2026-07-28T10:00:00Z"),
                 "turn-1",
+                List.of(),
                 com.agent4j.core.runtime.Usage.zero());
 
         String json = mapper.writeValueAsString(event);
         AgentEvent readBack = mapper.readValue(json, AgentEvent.class);
 
-        assertThat(json).contains("\"type\":\"agent_settled\"");
-        assertThat(readBack).isInstanceOf(AgentEvent.AgentSettled.class);
-        assertThat(((AgentEvent.AgentSettled) readBack).turnId()).isEqualTo("turn-1");
+        assertThat(json).contains("\"type\":\"agent_end\"");
+        assertThat(readBack).isInstanceOf(AgentEvent.AgentEnded.class);
+        assertThat(((AgentEvent.AgentEnded) readBack).turnId()).isEqualTo("turn-1");
     }
 }

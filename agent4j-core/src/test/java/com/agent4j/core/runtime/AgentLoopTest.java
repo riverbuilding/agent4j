@@ -1,6 +1,7 @@
 package com.agent4j.core.runtime;
 
 import com.agent4j.ai.AiAssistantMessage;
+import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiTextContent;
@@ -28,6 +29,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -54,11 +56,24 @@ class AgentLoopTest {
                 .runTurn(request(List.of(userMessage("user-1", "say hi")), 2));
 
         assertThat(result.assistantMessages()).hasSize(1);
+        assertThat(result.messages()).extracting(AgentMessage::id).containsExactly("assistant-1");
         assertThat(result.assistantMessages().getFirst().textContent()).isEqualTo("hello");
         assertThat(result.toolResults()).isEmpty();
         assertThat(result.usage()).isEqualTo(new Usage(3, 2, 1, 0));
         assertThat(events).extracting(event -> event.getClass().getSimpleName())
-                .containsExactly("AgentStarted", "MessageStarted", "MessageDelta", "MessageCompleted", "AgentSettled");
+                .containsExactly(
+                        "AgentStarted",
+                        "TurnStarted",
+                        "MessageStarted",
+                        "MessageEnded",
+                        "MessageStarted",
+                        "MessageUpdated",
+                        "MessageEnded",
+                        "TurnEnded",
+                        "AgentEnded");
+        assertThat(((AgentEvent.MessageStarted) events.get(2)).message().role()).isEqualTo(AgentMessageRole.USER);
+        assertThat(((AgentEvent.MessageEnded) events.get(3)).message().role()).isEqualTo(AgentMessageRole.USER);
+        assertThat(((AgentEvent.MessageStarted) events.get(4)).message().role()).isEqualTo(AgentMessageRole.ASSISTANT);
         assertThat(model.requests()).hasSize(1);
         assertThat(model.requests().getFirst().messages()).hasSize(1);
     }
@@ -96,6 +111,13 @@ class AgentLoopTest {
 
         assertThat(result.assistantMessages()).extracting(AgentMessage::id)
                 .containsExactly("assistant-1", "assistant-2");
+        assertThat(result.messages()).extracting(AgentMessage::id)
+                .containsExactly("assistant-1", "tool-result-tool-1", "assistant-2");
+        assertThat(result.messages()).extracting(AgentMessage::role)
+                .containsExactly(
+                        AgentMessageRole.ASSISTANT,
+                        AgentMessageRole.TOOL_RESULT,
+                        AgentMessageRole.ASSISTANT);
         assertThat(result.assistantMessages().getLast().textContent()).isEqualTo("done");
         assertThat(result.toolResults()).hasSize(1);
         assertThat(result.toolResults().getFirst().content().asText()).isEqualTo("hello");
@@ -103,17 +125,91 @@ class AgentLoopTest {
         assertThat(events).extracting(event -> event.getClass().getSimpleName())
                 .containsExactly(
                         "AgentStarted",
+                        "TurnStarted",
                         "MessageStarted",
-                        "MessageCompleted",
+                        "MessageEnded",
+                        "MessageStarted",
+                        "MessageEnded",
                         "ToolExecutionStarted",
-                        "ToolExecutionCompleted",
+                        "ToolExecutionEnded",
                         "MessageStarted",
-                        "MessageCompleted",
-                        "AgentSettled");
+                        "MessageEnded",
+                        "TurnEnded",
+                        "TurnStarted",
+                        "MessageStarted",
+                        "MessageEnded",
+                        "TurnEnded",
+                        "AgentEnded");
+        assertThat(((AgentEvent.MessageStarted) events.get(2)).message().role()).isEqualTo(AgentMessageRole.USER);
+        assertThat(((AgentEvent.MessageEnded) events.get(3)).message().role()).isEqualTo(AgentMessageRole.USER);
+        assertThat(((AgentEvent.MessageStarted) events.get(4)).message().role()).isEqualTo(AgentMessageRole.ASSISTANT);
+        assertThat(((AgentEvent.MessageStarted) events.get(8)).message().role()).isEqualTo(AgentMessageRole.TOOL_RESULT);
+        assertThat(((AgentEvent.MessageEnded) events.get(9)).message().role()).isEqualTo(AgentMessageRole.TOOL_RESULT);
+        AgentEvent.TurnEnded firstTurnEnd = (AgentEvent.TurnEnded) events.get(10);
+        assertThat(firstTurnEnd.message().id()).isEqualTo("assistant-1");
+        assertThat(firstTurnEnd.toolResults()).extracting(AgentMessage::role)
+                .containsExactly(AgentMessageRole.TOOL_RESULT);
+        assertThat(firstTurnEnd.toolResults().getFirst().id()).isEqualTo("tool-result-tool-1");
+        AgentEvent.TurnEnded secondTurnEnd = (AgentEvent.TurnEnded) events.get(14);
+        assertThat(secondTurnEnd.message().id()).isEqualTo("assistant-2");
+        assertThat(secondTurnEnd.toolResults()).isEmpty();
         assertThat(model.requests()).hasSize(2);
         assertThat(model.requests().get(1).messages().getLast().role()).isEqualTo("toolResult");
         assertThat(((com.agent4j.ai.AiToolResultMessage) model.requests().get(1).messages().getLast())
                 .content().getFirst()).isEqualTo(new AiTextContent("hello"));
+    }
+
+    @Test
+    void defaultConverterFiltersSessionOnlyMessagesBeforeModelRequest() throws Exception {
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(
+                new AiStreamEvent.MessageStarted("assistant-1"),
+                new AiStreamEvent.MessageCompleted(
+                        "assistant-1",
+                        new AiAssistantMessage(
+                                List.of(new AiTextContent("done")),
+                                AiStopReason.STOP,
+                                AiUsage.zero()))));
+
+        new AgentLoop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus())
+                .runTurn(request(List.of(
+                        customMessage("custom-1", AgentMessageRole.BASH_EXECUTION, "ls -la"),
+                        customMessage("custom-2", AgentMessageRole.CUSTOM, "ui only"),
+                        userMessage("user-1", "continue")), 1));
+
+        assertThat(model.requests()).hasSize(1);
+        assertThat(model.requests().getFirst().messages()).extracting(AiMessage::role)
+                .containsExactly("user");
+    }
+
+    @Test
+    void acceptsCustomConvertToLlmBoundaryForSessionMessages() throws Exception {
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(
+                new AiStreamEvent.MessageStarted("assistant-1"),
+                new AiStreamEvent.MessageCompleted(
+                        "assistant-1",
+                        new AiAssistantMessage(
+                                List.of(new AiTextContent("done")),
+                                AiStopReason.STOP,
+                                AiUsage.zero()))));
+        AgentMessageConverter converter = messages -> messages.stream()
+                .map(message -> switch (message.role()) {
+                    case BASH_EXECUTION -> Optional.<AiMessage>of(com.agent4j.ai.AiUserMessage.text("bash output: " + message.textContent()));
+                    case USER -> Optional.<AiMessage>of(new com.agent4j.ai.AiUserMessage(com.agent4j.ai.AiContentBlocks.parse(message.content())));
+                    default -> Optional.<AiMessage>empty();
+                })
+                .flatMap(Optional::stream)
+                .toList();
+
+        new AgentLoop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus(), converter)
+                .runTurn(request(List.of(
+                        customMessage("bash-1", AgentMessageRole.BASH_EXECUTION, "file list"),
+                        userMessage("user-1", "summarize")), 1));
+
+        assertThat(model.requests()).hasSize(1);
+        assertThat(model.requests().getFirst().messages()).extracting(AiMessage::role)
+                .containsExactly("user", "user");
+        assertThat(((com.agent4j.ai.AiUserMessage) model.requests().getFirst().messages().getFirst())
+                .content().getFirst()).isEqualTo(new AiTextContent("bash output: file list"));
     }
 
     private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds) {
@@ -135,6 +231,16 @@ class AgentLoopTest {
                 null,
                 Instant.now(clock),
                 AgentMessageRole.USER,
+                ContentBlocks.toJsonArray(List.of(new TextBlock(text, null))),
+                JSON.objectNode());
+    }
+
+    private AgentMessage customMessage(String id, AgentMessageRole role, String text) {
+        return new AgentMessage(
+                id,
+                null,
+                Instant.now(clock),
+                role,
                 ContentBlocks.toJsonArray(List.of(new TextBlock(text, null))),
                 JSON.objectNode());
     }

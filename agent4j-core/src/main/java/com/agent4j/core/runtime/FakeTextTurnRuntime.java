@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 public final class FakeTextTurnRuntime {
@@ -32,6 +33,7 @@ public final class FakeTextTurnRuntime {
 
         signal.throwIfAborted();
         eventBus.publish(new AgentEvent.AgentStarted(sessionId, now(), turnId));
+        eventBus.publish(new AgentEvent.TurnStarted(sessionId, now(), turnId));
 
         AgentMessage started = new AgentMessage(
                 messageId,
@@ -44,7 +46,7 @@ public final class FakeTextTurnRuntime {
 
         ObjectNode delta = mapper.createObjectNode();
         delta.put("text", text);
-        eventBus.publish(new AgentEvent.MessageDelta(sessionId, now(), messageId, delta));
+        eventBus.publish(new AgentEvent.MessageUpdated(sessionId, now(), messageId, delta));
 
         signal.throwIfAborted();
         AgentMessage completed = new AgentMessage(
@@ -52,10 +54,11 @@ public final class FakeTextTurnRuntime {
                 null,
                 now(),
                 AgentMessageRole.ASSISTANT,
-                ContentBlocks.toJsonArray(java.util.List.of(new com.agent4j.core.message.TextBlock(text, null))),
+                ContentBlocks.toJsonArray(List.of(new com.agent4j.core.message.TextBlock(text, null))),
                 mapper.createObjectNode().put("turnId", turnId));
-        eventBus.publish(new AgentEvent.MessageCompleted(sessionId, now(), completed));
-        eventBus.publish(new AgentEvent.AgentSettled(sessionId, now(), turnId, Usage.zero()));
+        eventBus.publish(new AgentEvent.MessageEnded(sessionId, now(), completed));
+        eventBus.publish(new AgentEvent.TurnEnded(sessionId, now(), turnId, completed, List.of(), Usage.zero()));
+        eventBus.publish(new AgentEvent.AgentEnded(sessionId, now(), turnId, List.of(completed), Usage.zero()));
         return completed;
     }
 

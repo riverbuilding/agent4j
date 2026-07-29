@@ -6,7 +6,14 @@ new behavior.
 
 ## Guiding Rules
 
-- Preserve PI-compatible external artifacts before matching PI internals.
+- Preserve PI-compatible external artifacts and stay as close as practical to
+  PI's internal implementation model. Internal parity is a design constraint,
+  not an optional cleanup pass.
+- Before marking a subsystem complete, compare it against the corresponding PI
+  package and document any intentional divergence with a reason.
+- Prefer PI naming, lifecycle boundaries, event sequencing, message shapes, and
+  conversion points unless Java type safety or platform constraints require a
+  different shape.
 - Keep each module independently understandable.
 - Prefer fake providers and deterministic operation interfaces in tests.
 - Add provider SDKs, terminal UI, and extension bridges only after the core
@@ -52,6 +59,9 @@ Exit criteria:
 - `agent4j-coding` can load existing PI session fixtures.
 - Writing and reading a session preserves all compatibility-critical fields.
 - Branch navigation tests cover sibling branches and retained history.
+- Session storage, tree navigation, and resume/fork helpers have been audited
+  against PI `SessionManager`/session-tree behavior, with any Java-specific
+  divergence documented.
 
 ## Phase 2: Core Message And Event Model
 
@@ -65,11 +75,13 @@ CustomAgentMessages[...]` pattern, while LLM-native content block types live in
 Tasks:
 
 - Add `agent4j-core` message model. Started.
+- Audit and align message roles, event names, and event order with PI
+  `@earendil-works/pi-agent-core` before extending the model further.
 - Add agent event types for:
   - message start/update/end
   - tool execution start/update/end
   - queue update
-  - agent start/end/settled
+  - agent start/end
   - retry start/end
   - compaction start/end
 - Add event bus and subscription lifecycle. Done.
@@ -83,21 +95,28 @@ Tasks:
   as bash execution, branch summary, compaction summary, and custom extension
   messages.
 - Add an explicit `convertToLlm` boundary from agent transcript messages to
-  `agent4j-ai` messages.
+  `agent4j-ai` messages. Done for the core boundary and default standard-role
+  converter; coding-specific custom/session converters still need concrete
+  message payload models.
 
 Exit criteria:
 
 - Fake runtime can emit a complete assistant text turn.
 - Events can be serialized for JSON/RPC mode without UI dependencies.
+- Event payloads and ordering are close to PI's `agent_start`, `turn_start`,
+  `message_start`, `message_update`, `message_end`, `tool_execution_*`,
+  `turn_end`, and `agent_end` semantics, with documented differences.
 
 ## Phase 3: Tool Runtime
 
-Status: complete
+Status: complete for external behavior; internal parity audit pending
 
 Goal: implement PI's built-in coding tools with deterministic tests.
 
 Tasks:
 
+- Audit tool definitions, argument names, descriptions, result content shapes,
+  preview/update behavior, and execution ordering against PI coding-agent tools.
 - Add `Tool`, `ToolSpec`, `ToolCall`, and `ToolResult` core abstractions. Done.
 - Add tool registry and executor. Done.
 - Add operation interfaces:
@@ -128,6 +147,8 @@ Exit criteria:
 
 - Tools can run without a model. Done.
 - Tool results have stable JSON shapes for session persistence and events. Done.
+- Any differences from PI's tool implementation behavior are documented in
+  `docs/tool-result-contract.md` or a dedicated parity note.
 
 ## Phase 4: Agent Loop
 
@@ -137,6 +158,10 @@ Goal: run a complete tool-calling agent turn against a fake streaming model.
 
 Tasks:
 
+- Keep the loop structure close to PI `agentLoop` / `runAgentLoop`: maintain an
+  agent transcript, transform it to LLM messages only at the model boundary,
+  execute tool calls, append tool-result messages in assistant source order, and
+  continue until PI-equivalent stop conditions are reached.
 - Replace the initial raw-JSON `AiMessage` slice with PI-style `agent4j-ai`
   message/content types:
   - `AiTextContent`. Done.
@@ -159,8 +184,14 @@ Tasks:
   - stream assistant deltas. Started.
   - collect tool calls. Started.
   - execute tools. Started.
-  - append tool results. Started.
+  - append tool-result transcript messages. Done for sequential fake model turns.
   - continue until terminal stop reason. Started.
+- Match PI turn event ordering: `agent_start`, `turn_start`, assistant message
+  stream/update events, tool execution events, tool-result message artifacts,
+  `turn_end`, queue drain, and `agent_end`. Started for text-only and
+  single-tool fake model turns.
+- Match PI tool execution mode semantics, including default parallel execution
+  where safe and ordered tool-result message emission.
 - Implement prompt, steer, and follow-up queue semantics.
 - Implement retry policy for retryable provider errors.
 - Implement abort behavior across model stream and tool execution.
@@ -171,9 +202,10 @@ Exit criteria:
 - `agent4j-ai` exposes typed PI-style LLM messages and content blocks rather
   than `JsonNode` content bags.
 - `agent4j-core` converts custom/session transcript messages to LLM-compatible
-  `agent4j-ai` messages at the model boundary.
+  `agent4j-ai` messages at the model boundary through an injectable converter.
 - Tests cover text-only turns, single-tool turns, multi-tool turns, tool errors,
   retries, aborts, steering, and follow-ups.
+- Tests assert PI-compatible event ordering and tool-result message ordering.
 
 ## Phase 5: Settings And Resource Discovery
 
@@ -181,6 +213,8 @@ Goal: reproduce PI's project/user configuration discovery.
 
 Tasks:
 
+- Mirror PI's resource-loader boundaries and precedence rules before adding
+  Java-specific configuration conveniences.
 - Implement agent directory resolution.
 - Implement global and project settings loading.
 - Implement settings merge rules.
@@ -199,6 +233,8 @@ Exit criteria:
 
 - Tests cover resource precedence and disabled context files.
 - System prompt builder can reproduce the expected ordered inputs.
+- Discovery order and merge behavior have parity tests based on PI fixtures or
+  documented PI behavior.
 
 ## Phase 6: Provider Adapters
 
@@ -206,6 +242,9 @@ Goal: connect the agent loop to real LLM providers through `agent4j-ai`.
 
 Tasks:
 
+- Mirror PI `@earendil-works/pi-ai` provider abstraction first: model metadata,
+  `Context`, `StreamOptions`, provider request hooks, timeout/retry options,
+  usage accounting, and provider-normalized stream events.
 - Implement model registry and model references.
 - Implement auth storage abstraction.
 - Add OpenAI adapter.
@@ -219,6 +258,8 @@ Exit criteria:
 
 - Provider adapters pass contract tests with recorded/fake HTTP streams.
 - Live tests are optional and skipped without credentials.
+- Adapter contracts map to PI provider semantics closely enough that a PI stream
+  fixture can be normalized into the same Java event sequence.
 
 ## Phase 7: Compaction
 
@@ -226,6 +267,9 @@ Goal: preserve PI-style context compaction and overflow recovery.
 
 Tasks:
 
+- Mirror PI compaction helper responsibilities: context serialization,
+  cut-point selection, retained tail handling, branch summarization, and
+  overflow retry shape.
 - Add token estimation abstraction.
 - Add context usage calculation.
 - Add manual compaction.
@@ -245,6 +289,8 @@ Goal: expose a stable Java embedding API equivalent to PI's SDK concepts.
 
 Tasks:
 
+- Mirror PI `AgentSession`, `AgentSessionRuntime`, and harness service
+  responsibilities before adding Java-only conveniences.
 - Add `AgentSession`.
 - Add `AgentSessionRuntime`.
 - Add runtime replacement for new, resume, fork, clone, and import.
@@ -262,6 +308,7 @@ Goal: provide process entrypoints before investing in terminal UI.
 
 Tasks:
 
+- Mirror PI CLI mode semantics and JSON/RPC payloads before adding new flags.
 - Add picocli argument parser.
 - Implement `--mode json`.
 - Implement `--print`.
@@ -286,6 +333,7 @@ Goal: support harness customization without embedding TypeScript first.
 
 Tasks:
 
+- Mirror PI extension lifecycle names and hook timing as the default Java SPI.
 - Define Java extension interfaces.
 - Add lifecycle hooks:
   - before agent start
@@ -307,6 +355,8 @@ Goal: add human-facing interactive mode after the runtime is stable.
 
 Tasks:
 
+- Mirror PI interaction model, command names, selectors, and queue controls
+  before choosing Java-specific terminal rendering details.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.
@@ -340,12 +390,14 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Decide and document exact resume semantics for multi-process same-file
+1. Keep `docs/adr/0002-pi-internal-parity.md` updated as subsystem parity
+   audits uncover intentional divergences or additional PI reference files.
+2. Decide and document exact resume semantics for multi-process same-file
    sessions, including stale snapshot handling.
-2. Add stronger validation for parent references and malformed typed payloads.
-3. Add remaining session helpers for compaction entries once compaction shape is
+3. Add stronger validation for parent references and malformed typed payloads.
+4. Add remaining session helpers for compaction entries once compaction shape is
    finalized.
-4. Expand Phase 4 beyond the initial fake streaming/tool-call loop: queue
+5. Expand Phase 4 beyond the initial fake streaming/tool-call loop: queue
    semantics, retry policy, abort coverage, and `SessionManager` persistence.
-5. Keep expanding fixtures with real PI session samples as they become
+6. Keep expanding fixtures with real PI session samples as they become
    available.
