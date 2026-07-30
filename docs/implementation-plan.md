@@ -198,6 +198,8 @@ Tasks:
   that run around tool execution and can publish tool updates.
 - Add PI-style blocked tool results. Started with hook-returned blocked
   `ToolResult` values that skip execution and preserve normal result emission.
+- Add PI-style terminate hints. Started with `ToolResult` metadata that ends
+  the loop after normal tool-result emission without another model request.
 - Implement prompt, steer, and follow-up queue semantics. Started with
   prompt `newMessages`, steering drain after completed turns, follow-up drain
   when the loop would otherwise stop, and one-at-a-time/all queue modes.

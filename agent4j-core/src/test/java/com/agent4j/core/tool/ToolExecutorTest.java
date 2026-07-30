@@ -145,6 +145,22 @@ class ToolExecutorTest {
         assertThat(result.metadata().path("blocked").asBoolean()).isTrue();
     }
 
+    @Test
+    void createsStableTerminatingToolResult() {
+        ToolResult result = ToolResult.terminate(
+                new ToolCall("call-1", "exit", JsonNodeFactory.instance.objectNode()),
+                TextNode.valueOf("finished"),
+                "task complete");
+
+        assertThat(result.toolCallId()).isEqualTo("call-1");
+        assertThat(result.toolName()).isEqualTo("exit");
+        assertThat(result.error()).isFalse();
+        assertThat(result.content().asText()).isEqualTo("finished");
+        assertThat(result.terminate()).isTrue();
+        assertThat(result.metadata().path("terminate").asBoolean()).isTrue();
+        assertThat(result.metadata().path("terminateReason").asText()).isEqualTo("task complete");
+    }
+
     private static ToolContext context() {
         return new ToolContext(
                 "session-1",

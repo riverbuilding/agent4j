@@ -143,7 +143,8 @@ public final class AgentLoop {
                     throw new IllegalStateException("maximum tool rounds exceeded: " + request.maxToolRounds());
                 }
 
-                for (ToolResult toolResult : executeToolCalls(request, toolCalls)) {
+                List<ToolResult> roundResults = executeToolCalls(request, toolCalls);
+                for (ToolResult toolResult : roundResults) {
                     AgentMessage toolResultMessage = toAgentMessage(toolResult, roundResult.message().id(), now(request));
                     toolResults.add(toolResult);
                     roundToolResults.add(toolResultMessage);
@@ -160,6 +161,19 @@ public final class AgentLoop {
                         roundResult.message(),
                         roundToolResults,
                         roundResult.usage()));
+                if (roundResults.stream().anyMatch(ToolResult::terminate)) {
+                    eventBus.publish(new AgentEvent.AgentEnded(
+                            request.sessionId(),
+                            now(request),
+                            request.turnId(),
+                            newMessages,
+                            usage));
+                    return new AgentLoopResult(
+                            List.copyOf(newMessages),
+                            List.copyOf(assistantMessages),
+                            List.copyOf(toolResults),
+                            usage);
+                }
                 pendingMessages.addAll(drainQueue(request, QueueKind.STEER, steeringQueue, request.steeringMode()));
             }
             throw new IllegalStateException("agent loop ended without settling");

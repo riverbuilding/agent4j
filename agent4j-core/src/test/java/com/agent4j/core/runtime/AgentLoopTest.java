@@ -457,6 +457,55 @@ class AgentLoopTest {
     }
 
     @Test
+    void terminatingToolResultEndsAgentWithoutFollowUpModelRound() throws Exception {
+        ToolCall toolCall = new ToolCall("tool-1", "finish", JSON.objectNode());
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiToolCallContent(toolCall.id(), toolCall.name(), toolCall.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))));
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("finish", "Finish", JSON.objectNode()), (call, context) ->
+                        ToolResult.terminate(call, JSON.textNode("finished"), "task complete"))
+                .build();
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(model, registry, bus)
+                .runTurn(request(List.of(userMessage("user-1", "finish")), 2));
+
+        assertThat(model.requests()).hasSize(1);
+        assertThat(result.messages()).extracting(AgentMessage::id)
+                .containsExactly("user-1", "assistant-1", "tool-result-tool-1");
+        assertThat(result.toolResults()).hasSize(1);
+        assertThat(result.toolResults().getFirst().terminate()).isTrue();
+        assertThat(result.toolResults().getFirst().metadata().path("terminateReason").asText()).isEqualTo("task complete");
+        assertThat(events).extracting(event -> event.getClass().getSimpleName())
+                .containsExactly(
+                        "AgentStarted",
+                        "TurnStarted",
+                        "MessageStarted",
+                        "MessageEnded",
+                        "MessageStarted",
+                        "MessageEnded",
+                        "ToolExecutionStarted",
+                        "ToolExecutionEnded",
+                        "MessageStarted",
+                        "MessageEnded",
+                        "TurnEnded",
+                        "AgentEnded");
+        AgentEvent.TurnEnded turnEnded = (AgentEvent.TurnEnded) events.get(10);
+        assertThat(turnEnded.message().id()).isEqualTo("assistant-1");
+        assertThat(turnEnded.toolResults()).extracting(AgentMessage::id)
+                .containsExactly("tool-result-tool-1");
+    }
+
+    @Test
     void runsMultipleToolsInParallelByDefaultButEmitsResultsInSourceOrder() throws Exception {
         ToolCall first = new ToolCall("tool-1", "first", JSON.objectNode());
         ToolCall second = new ToolCall("tool-2", "second", JSON.objectNode());

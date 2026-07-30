@@ -23,6 +23,10 @@ public record ToolResult(
         return metadata == null || metadata.isNull() ? Optional.empty() : Optional.of(metadata);
     }
 
+    public boolean terminate() {
+        return metadata != null && metadata.path("terminate").asBoolean(false);
+    }
+
     public static ToolResult blocked(ToolCall call, String reason) {
         Objects.requireNonNull(call, "call");
         String message = reason == null || reason.isBlank() ? "tool execution blocked" : reason;
@@ -30,5 +34,15 @@ public record ToolResult(
                 .put("message", message)
                 .put("blocked", true);
         return new ToolResult(call.id(), call.name(), true, TextNode.valueOf(message), metadata);
+    }
+
+    public static ToolResult terminate(ToolCall call, JsonNode content, String reason) {
+        Objects.requireNonNull(call, "call");
+        var metadata = JsonNodeFactory.instance.objectNode()
+                .put("terminate", true);
+        if (reason != null && !reason.isBlank()) {
+            metadata.put("terminateReason", reason);
+        }
+        return new ToolResult(call.id(), call.name(), false, content, metadata);
     }
 }

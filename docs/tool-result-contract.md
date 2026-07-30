@@ -39,6 +39,22 @@ results use:
 }
 ```
 
+Tools can request that the agent loop stop after their result is emitted by
+setting `metadata.terminate: true`. The loop still publishes normal
+`tool_execution_end`, tool-result message, `turn_end`, and `agent_end` events,
+but it does not issue another model request.
+
+```json
+{
+  "error": false,
+  "content": "finished",
+  "metadata": {
+    "terminate": true,
+    "terminateReason": "task complete"
+  }
+}
+```
+
 ## read
 
 Arguments:
