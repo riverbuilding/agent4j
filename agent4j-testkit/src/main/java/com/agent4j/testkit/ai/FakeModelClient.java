@@ -12,11 +12,16 @@ import java.util.Queue;
 import java.util.function.Consumer;
 
 public final class FakeModelClient implements AiModelClient {
-    private final Queue<List<AiStreamEvent>> turns = new ArrayDeque<>();
+    private final Queue<Object> turns = new ArrayDeque<>();
     private final List<AiTurnRequest> requests = new ArrayList<>();
 
     public FakeModelClient enqueue(List<AiStreamEvent> events) {
         turns.add(List.copyOf(Objects.requireNonNull(events, "events")));
+        return this;
+    }
+
+    public FakeModelClient enqueueFailure(RuntimeException failure) {
+        turns.add(Objects.requireNonNull(failure, "failure"));
         return this;
     }
 
@@ -27,10 +32,15 @@ public final class FakeModelClient implements AiModelClient {
     @Override
     public void stream(AiTurnRequest request, Consumer<AiStreamEvent> sink) {
         requests.add(request);
-        List<AiStreamEvent> events = turns.poll();
-        if (events == null) {
+        Object turn = turns.poll();
+        if (turn == null) {
             throw new IllegalStateException("no fake model turn enqueued");
         }
+        if (turn instanceof RuntimeException failure) {
+            throw failure;
+        }
+        @SuppressWarnings("unchecked")
+        List<AiStreamEvent> events = (List<AiStreamEvent>) turn;
         events.forEach(sink);
     }
 }

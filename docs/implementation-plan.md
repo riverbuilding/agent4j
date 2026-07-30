@@ -195,8 +195,10 @@ Tasks:
 - Implement prompt, steer, and follow-up queue semantics. Started with
   prompt `newMessages`, steering drain after completed turns, follow-up drain
   when the loop would otherwise stop, and one-at-a-time/all queue modes.
-- Implement retry policy for retryable provider errors.
-- Implement abort behavior across model stream and tool execution.
+- Implement retry policy for retryable provider errors. Started with bounded
+  model-round retry events and fake-provider coverage.
+- Implement abort behavior across model stream and tool execution. Started with
+  model-stream and tool-abort coverage; tool aborts now escape as agent aborts.
 - Persist messages through `SessionManager`.
 
 Exit criteria:

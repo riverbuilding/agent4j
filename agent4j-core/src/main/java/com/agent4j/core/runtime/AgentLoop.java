@@ -76,7 +76,7 @@ public final class AgentLoop {
                     publishAndAppendQueuedMessages(request, pendingMessages, newMessages, modelMessages);
                     pendingMessages.clear();
                 }
-                RoundResult roundResult = runModelRound(request, modelMessages);
+                RoundResult roundResult = runModelRoundWithRetries(request, modelMessages);
                 usage = usage.plus(roundResult.usage());
                 newMessages.add(roundResult.message());
                 assistantMessages.add(roundResult.message());
@@ -184,6 +184,34 @@ public final class AgentLoop {
         }
         eventBus.publish(new AgentEvent.QueueUpdated(request.sessionId(), now(request), queueKind, queue.size()));
         return drained;
+    }
+
+    private RoundResult runModelRoundWithRetries(AgentLoopRequest request, List<AiMessage> modelMessages) throws Exception {
+        int retryAttempt = 0;
+        while (true) {
+            try {
+                RoundResult result = runModelRound(request, modelMessages);
+                if (retryAttempt > 0) {
+                    eventBus.publish(new AgentEvent.RetryCompleted(request.sessionId(), now(request), retryAttempt, true));
+                }
+                return result;
+            } catch (AgentAbortException e) {
+                throw e;
+            } catch (Exception e) {
+                if (retryAttempt >= request.maxModelRetries()) {
+                    if (retryAttempt > 0) {
+                        eventBus.publish(new AgentEvent.RetryCompleted(request.sessionId(), now(request), retryAttempt, false));
+                    }
+                    throw e;
+                }
+                retryAttempt++;
+                eventBus.publish(new AgentEvent.RetryStarted(
+                        request.sessionId(),
+                        now(request),
+                        retryAttempt,
+                        e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+            }
+        }
     }
 
     private RoundResult runModelRound(AgentLoopRequest request, List<AiMessage> modelMessages) throws Exception {

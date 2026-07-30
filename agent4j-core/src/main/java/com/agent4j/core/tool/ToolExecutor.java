@@ -2,6 +2,7 @@ package com.agent4j.core.tool;
 
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
+import com.agent4j.core.runtime.AgentAbortException;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -26,6 +27,8 @@ public final class ToolExecutor {
         try {
             ToolResult result = registeredTool.tool().execute(call, context);
             return result == null ? error(call, "tool returned null result", null) : result;
+        } catch (AgentAbortException e) {
+            throw e;
         } catch (Exception e) {
             return error(call, e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(), e.getClass().getName());
         }

@@ -18,6 +18,7 @@ public record AgentLoopRequest(
         AbortSignal abortSignal,
         Map<String, Object> toolAttributes,
         int maxToolRounds,
+        int maxModelRetries,
         List<AgentMessage> promptMessages,
         List<AgentMessage> steeringMessages,
         List<AgentMessage> followUpMessages,
@@ -45,6 +46,7 @@ public record AgentLoopRequest(
                 abortSignal,
                 toolAttributes,
                 maxToolRounds,
+                0,
                 inferPromptMessages(parentMessageId, messages),
                 List.of(),
                 List.of(),
@@ -63,6 +65,9 @@ public record AgentLoopRequest(
         Objects.requireNonNull(followUpMode, "followUpMode");
         if (maxToolRounds < 0) {
             throw new IllegalArgumentException("maxToolRounds must be non-negative");
+        }
+        if (maxModelRetries < 0) {
+            throw new IllegalArgumentException("maxModelRetries must be non-negative");
         }
         messages = List.copyOf(messages);
         toolAttributes = toolAttributes == null ? Map.of() : Map.copyOf(toolAttributes);

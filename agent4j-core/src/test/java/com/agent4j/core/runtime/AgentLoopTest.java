@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentLoopTest {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
@@ -248,6 +249,111 @@ class AgentLoopTest {
     }
 
     @Test
+    void retriesModelRoundFailureWithinConfiguredLimit() throws Exception {
+        FakeModelClient model = new FakeModelClient()
+                .enqueueFailure(new IllegalStateException("temporary provider failure"))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("recovered")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(request(List.of(userMessage("user-1", "try")), 2, 1));
+
+        assertThat(result.assistantMessages().getFirst().textContent()).isEqualTo("recovered");
+        assertThat(model.requests()).hasSize(2);
+        assertThat(events).extracting(event -> event.getClass().getSimpleName())
+                .contains("RetryStarted", "RetryCompleted", "AgentEnded");
+        AgentEvent.RetryStarted started = events.stream()
+                .filter(AgentEvent.RetryStarted.class::isInstance)
+                .map(AgentEvent.RetryStarted.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(started.attempt()).isEqualTo(1);
+        assertThat(started.reason()).isEqualTo("temporary provider failure");
+        AgentEvent.RetryCompleted completed = events.stream()
+                .filter(AgentEvent.RetryCompleted.class::isInstance)
+                .map(AgentEvent.RetryCompleted.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(completed.attempt()).isEqualTo(1);
+        assertThat(completed.success()).isTrue();
+    }
+
+    @Test
+    void emitsAgentAbortedWhenModelStreamObservesAbortSignal() {
+        AbortController controller = new AbortController();
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(
+                new AiStreamEvent.MessageStarted("assistant-1"),
+                new AiStreamEvent.TextDelta("assistant-1", 0, "partial"),
+                new AiStreamEvent.TextDelta("assistant-1", 0, "ignored"),
+                new AiStreamEvent.MessageCompleted(
+                        "assistant-1",
+                        new AiAssistantMessage(
+                                List.of(new AiTextContent("ignored")),
+                                AiStopReason.STOP,
+                                AiUsage.zero()))));
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(event -> {
+            events.add(event);
+            if (event instanceof AgentEvent.MessageUpdated) {
+                controller.abort("stop model");
+            }
+        });
+
+        assertThatThrownBy(() -> new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(request(List.of(userMessage("user-1", "try")), 2, controller.signal())))
+                .isInstanceOf(AgentAbortException.class)
+                .hasMessage("stop model");
+        assertThat(events.getLast()).isInstanceOf(AgentEvent.AgentAborted.class);
+        assertThat(((AgentEvent.AgentAborted) events.getLast()).reason()).isEqualTo("stop model");
+    }
+
+    @Test
+    void emitsAgentAbortedWhenToolObservesAbortSignal() {
+        ToolCall toolCall = new ToolCall("tool-1", "abort", JSON.objectNode());
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiToolCallContent(toolCall.id(), toolCall.name(), toolCall.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))));
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("abort", "Abort", JSON.objectNode()), (call, context) -> {
+                    context.abortSignal().throwIfAborted();
+                    return new ToolResult(call.id(), call.name(), false, JSON.textNode("unreachable"), JSON.objectNode());
+                })
+                .build();
+        AbortController controller = new AbortController();
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(event -> {
+            events.add(event);
+            if (event instanceof AgentEvent.ToolExecutionStarted) {
+                controller.abort("stop tool");
+            }
+        });
+
+        assertThatThrownBy(() -> new AgentLoop(model, registry, bus)
+                .runTurn(request(List.of(userMessage("user-1", "abort")), 2, controller.signal())))
+                .isInstanceOf(AgentAbortException.class)
+                .hasMessage("stop tool");
+        assertThat(events.getLast()).isInstanceOf(AgentEvent.AgentAborted.class);
+        assertThat(((AgentEvent.AgentAborted) events.getLast()).reason()).isEqualTo("stop tool");
+    }
+
+    @Test
     void defaultConverterFiltersSessionOnlyMessagesBeforeModelRequest() throws Exception {
         FakeModelClient model = new FakeModelClient().enqueue(List.of(
                 new AiStreamEvent.MessageStarted("assistant-1"),
@@ -301,6 +407,10 @@ class AgentLoopTest {
     }
 
     private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds) {
+        return request(messages, maxToolRounds, new AbortController().signal());
+    }
+
+    private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds, int maxModelRetries) {
         return new AgentLoopRequest(
                 "session-1",
                 "turn-1",
@@ -309,6 +419,25 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
+                Map.of(),
+                maxToolRounds,
+                maxModelRetries,
+                List.of(messages.getLast()),
+                List.of(),
+                List.of(),
+                QueueMode.ONE_AT_A_TIME,
+                QueueMode.ONE_AT_A_TIME);
+    }
+
+    private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds, AbortSignal signal) {
+        return new AgentLoopRequest(
+                "session-1",
+                "turn-1",
+                messages.getLast().id(),
+                messages,
+                Path.of("/repo"),
+                clock,
+                signal,
                 Map.of(),
                 maxToolRounds);
     }
@@ -330,6 +459,7 @@ class AgentLoopTest {
                 new AbortController().signal(),
                 Map.of(),
                 maxToolRounds,
+                0,
                 promptMessages,
                 steeringMessages,
                 followUpMessages,
