@@ -1,6 +1,6 @@
 package com.agent4j.coding.message;
 
-import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.CustomAgentMessageView;
 
 import java.util.Objects;
 
@@ -10,10 +10,10 @@ public record CustomSessionMessage(String customType, String content) {
         content = content == null ? "" : content;
     }
 
-    public static CustomSessionMessage from(AgentMessage message) {
+    public static CustomSessionMessage from(CustomAgentMessageView message) {
         Objects.requireNonNull(message, "message");
-        String customType = CodingAgentMessages.textField(message, "customType");
-        return new CustomSessionMessage(customType, CodingAgentMessages.textContent(message));
+        String customType = message.customType().orElse(null);
+        return new CustomSessionMessage(customType, message.text());
     }
 
     public String toLlmText() {

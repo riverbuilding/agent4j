@@ -1,6 +1,6 @@
 package com.agent4j.coding.message;
 
-import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.CustomAgentMessageView;
 
 import java.util.Objects;
 
@@ -10,12 +10,12 @@ public record BashExecutionMessage(String command, Integer exitCode, String outp
         output = output == null ? "" : output;
     }
 
-    public static BashExecutionMessage from(AgentMessage message) {
+    public static BashExecutionMessage from(CustomAgentMessageView message) {
         Objects.requireNonNull(message, "message");
         return new BashExecutionMessage(
-                CodingAgentMessages.textField(message, "command"),
-                CodingAgentMessages.intField(message, "exitCode"),
-                CodingAgentMessages.textContent(message));
+                message.textField("command").orElse(null),
+                message.intField("exitCode").orElse(null),
+                message.text());
     }
 
     public String toLlmText() {

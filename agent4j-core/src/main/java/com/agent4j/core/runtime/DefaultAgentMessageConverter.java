@@ -9,6 +9,10 @@ import com.agent4j.ai.AiToolResultMessage;
 import com.agent4j.ai.AiUsage;
 import com.agent4j.ai.AiUserMessage;
 import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.AgentMessageView;
+import com.agent4j.core.message.AssistantAgentMessageView;
+import com.agent4j.core.message.ToolResultAgentMessageView;
+import com.agent4j.core.message.UserAgentMessageView;
 
 import java.util.List;
 import java.util.Objects;
@@ -30,27 +34,27 @@ public final class DefaultAgentMessageConverter implements AgentMessageConverter
     }
 
     private Optional<AiMessage> convertMessage(AgentMessage message) {
-        List<AiContentBlock> content = AiContentBlocks.parse(message.content());
-        return switch (message.role()) {
-            case USER -> Optional.of(new AiUserMessage(content));
-            case ASSISTANT -> Optional.of(new AiAssistantMessage(content, AiStopReason.STOP, AiUsage.zero()));
-            case TOOL_RESULT -> Optional.of(new AiToolResultMessage(
-                    textMetadata(message, "toolCallId"),
-                    textMetadata(message, "toolName"),
-                    content,
-                    booleanMetadata(message, "error")));
-            case BASH_EXECUTION, CUSTOM, BRANCH_SUMMARY, COMPACTION_SUMMARY, SYSTEM, UNKNOWN -> Optional.empty();
+        return convertView(message.view());
+    }
+
+    private Optional<AiMessage> convertView(AgentMessageView view) {
+        return switch (view) {
+            case UserAgentMessageView user -> Optional.of(new AiUserMessage(aiContent(user.envelope())));
+            case AssistantAgentMessageView assistant -> Optional.of(new AiAssistantMessage(
+                    aiContent(assistant.envelope()),
+                    AiStopReason.STOP,
+                    AiUsage.zero()));
+            case ToolResultAgentMessageView toolResult -> Optional.of(new AiToolResultMessage(
+                    toolResult.toolCallId(),
+                    toolResult.toolName(),
+                    aiContent(toolResult.envelope()),
+                    toolResult.error()));
+            case com.agent4j.core.message.CustomAgentMessageView ignored -> Optional.empty();
+            case com.agent4j.core.message.UnknownAgentMessageView ignored -> Optional.empty();
         };
     }
 
-    private static String textMetadata(AgentMessage message, String fieldName) {
-        return message.metadata() != null && message.metadata().has(fieldName)
-                ? message.metadata().get(fieldName).asText("")
-                : "";
-    }
-
-    private static boolean booleanMetadata(AgentMessage message, String fieldName) {
-        return message.metadata() != null && message.metadata().has(fieldName)
-                && message.metadata().get(fieldName).asBoolean(false);
+    private static List<AiContentBlock> aiContent(AgentMessage message) {
+        return AiContentBlocks.parse(message.content());
     }
 }

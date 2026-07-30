@@ -13,9 +13,10 @@ import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
+import com.agent4j.core.message.AssistantAgentMessageView;
 import com.agent4j.core.message.ToolCall;
-import com.agent4j.core.message.ToolCallBlock;
 import com.agent4j.core.message.ToolResult;
+import com.agent4j.core.message.ToolResultAgentMessageView;
 import com.agent4j.core.tool.ToolContext;
 import com.agent4j.core.tool.ToolExecutor;
 import com.agent4j.core.tool.ToolExecutionHook;
@@ -145,7 +146,10 @@ public final class AgentLoop {
 
                 List<ToolResult> roundResults = executeToolCalls(request, toolCalls);
                 for (ToolResult toolResult : roundResults) {
-                    AgentMessage toolResultMessage = toAgentMessage(toolResult, roundResult.message().id(), now(request));
+                    AgentMessage toolResultMessage = ToolResultAgentMessageView.toEnvelope(
+                            toolResult,
+                            roundResult.message().id(),
+                            now(request));
                     toolResults.add(toolResult);
                     roundToolResults.add(toolResultMessage);
                     eventBus.publish(new AgentEvent.ToolExecutionEnded(request.sessionId(), now(request), toolResult));
@@ -456,25 +460,10 @@ public final class AgentLoop {
                         update)));
     }
 
-    private static AgentMessage toAgentMessage(ToolResult result, String parentId, Instant timestamp) {
-        return new AgentMessage(
-                "tool-result-" + result.toolCallId(),
-                parentId,
-                timestamp,
-                AgentMessageRole.TOOL_RESULT,
-                result.content(),
-                JSON.objectNode()
-                        .put("toolCallId", result.toolCallId())
-                        .put("toolName", result.toolName())
-                        .put("error", result.error()));
-    }
-
     private static List<ToolCall> toolCalls(AgentMessage message) {
-        return message.contentBlocks().stream()
-                .filter(ToolCallBlock.class::isInstance)
-                .map(ToolCallBlock.class::cast)
-                .map(ToolCallBlock::toolCall)
-                .toList();
+        return message.view() instanceof AssistantAgentMessageView assistant
+                ? assistant.toolCalls()
+                : List.of();
     }
 
     private static Usage toUsage(AiUsage usage) {

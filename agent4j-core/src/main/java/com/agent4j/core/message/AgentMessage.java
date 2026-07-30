@@ -43,6 +43,16 @@ public record AgentMessage(
                 .reduce("", String::concat);
     }
 
+    public AgentMessageView view() {
+        return switch (role) {
+            case USER -> new UserAgentMessageView(this);
+            case ASSISTANT -> new AssistantAgentMessageView(this);
+            case TOOL_RESULT -> new ToolResultAgentMessageView(this);
+            case BASH_EXECUTION, CUSTOM, BRANCH_SUMMARY, COMPACTION_SUMMARY, SYSTEM -> new CustomAgentMessageView(this);
+            case UNKNOWN -> new UnknownAgentMessageView(this);
+        };
+    }
+
     public static AgentMessage assistantText(
             String id,
             String parentId,

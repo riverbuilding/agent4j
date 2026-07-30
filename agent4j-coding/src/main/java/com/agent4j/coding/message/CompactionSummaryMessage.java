@@ -1,6 +1,6 @@
 package com.agent4j.coding.message;
 
-import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.CustomAgentMessageView;
 
 import java.util.Objects;
 
@@ -9,9 +9,9 @@ public record CompactionSummaryMessage(String summary) {
         summary = summary == null ? "" : summary;
     }
 
-    public static CompactionSummaryMessage from(AgentMessage message) {
+    public static CompactionSummaryMessage from(CustomAgentMessageView message) {
         Objects.requireNonNull(message, "message");
-        return new CompactionSummaryMessage(CodingAgentMessages.textContent(message));
+        return new CompactionSummaryMessage(message.text());
     }
 
     public String toLlmText() {

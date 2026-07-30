@@ -104,12 +104,15 @@ Tasks:
 
 ### AgentMessage Migration Plan
 
+Status: complete for this migration pass; retain the envelope as the durable
+model and use typed views as the internal PI-compatible bridge.
+
 Target shape:
 
-- `AgentMessage` remains the durable transcript envelope during migration:
+- `AgentMessage` remains the durable transcript envelope:
   `id`, `parentId`, `timestamp`, role discriminator, content, metadata, and
   unknown/session fields needed for JSONL compatibility.
-- Add PI-style typed transcript views over the envelope instead of raw role
+- Use PI-style typed transcript views over the envelope instead of raw role
   switches at call sites:
   - standard message views: user, assistant, tool result
   - custom/session views: bash execution, branch summary, compaction summary,
@@ -121,29 +124,40 @@ Target shape:
 
 Migration steps:
 
-1. Add typed view API on top of the current envelope.
-   Examples: `AgentMessageView`, `StandardAgentMessageView`,
-   `ToolResultAgentMessageView`, `CustomAgentMessageView`, or equivalent Java
-   sealed interfaces/records. These views must preserve access to the original
-   envelope for unknown-field round-tripping.
+1. Add typed view API on top of the current envelope. Done with
+   `AgentMessageView` and user/assistant/tool-result/custom/unknown view
+   records. These views preserve access to the original envelope for
+   unknown-field round-tripping.
 2. Move role-specific parsing helpers from scattered code into the view layer.
-   `contentBlocks()`, tool-call extraction, tool-result metadata, and
-   custom/session payload extraction should have one owner.
-3. Update `DefaultAgentMessageConverter` and
-   `CodingAgentMessageConverter` to consume typed views instead of switching
-   directly on raw `AgentMessageRole`.
+   Done for assistant tool-call extraction, tool-result metadata and envelope
+   creation, custom/session payload extraction, and prompt-message inference.
+   New role-specific parsing should continue to live in views instead of raw
+   role switches at call sites.
+3. Update `DefaultAgentMessageConverter` and `CodingAgentMessageConverter` to
+   consume typed views instead of switching directly on raw `AgentMessageRole`.
+   Done: both converters enter through `AgentMessage.view()` and only delegate
+   to the standard converter at the LLM boundary.
 4. Update `AgentLoop` internals to use typed views for assistant tool-call
    extraction and tool-result message creation, while continuing to return and
-   persist `AgentMessage` envelopes.
-5. Add parity tests:
+   persist `AgentMessage` envelopes. Done: `AgentLoop` uses the assistant view
+   for tool calls and the tool-result view factory for generated tool-result
+   transcript envelopes.
+5. Add parity tests. Done for this pass:
    - standard and custom message roles produce the expected typed view
-   - unknown fields survive parse, convert, append, and reload flows
+   - future metadata fields survive tool-result envelope creation and session
+     append/reload flows
+   - active PI-shaped session message paths can rebuild `AgentMessage`
+     envelopes for resume/replay without losing message metadata
    - custom/session-only messages are filtered or converted only at
      `convertToLlm`
-   - tool-call and tool-result ordering remains unchanged
-6. After call sites use views, decide whether to promote the view hierarchy into
-   the primary Java transcript model. If promoted, keep a dedicated JSONL mapper
-   so session persistence still round-trips PI artifacts exactly.
+   - standard user/assistant/tool-result messages still convert at the default
+     LLM boundary
+   - tool-call and tool-result ordering remains covered by AgentLoop tests
+6. Decide whether to promote the view hierarchy into the primary Java
+   transcript model. Decision: do not promote now. Keep `AgentMessage` as the
+   durable JSONL-compatible envelope and use the view hierarchy as the internal
+   typed bridge. Revisit only after PI fixture round-trip coverage proves that a
+   promoted hierarchy can preserve compatibility-critical unknown fields.
 
 Constraints:
 

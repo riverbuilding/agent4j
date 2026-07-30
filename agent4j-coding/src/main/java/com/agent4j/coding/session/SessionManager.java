@@ -1,6 +1,9 @@
 package com.agent4j.coding.session;
 
 import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.AgentMessageRole;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedWriter;
@@ -23,6 +26,7 @@ import java.util.function.Consumer;
 
 public final class SessionManager {
     private static final int CURRENT_SESSION_VERSION = 3;
+    private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
 
     private final Path sessionFile;
     private final SessionJsonlCodec codec;
@@ -240,6 +244,13 @@ public final class SessionManager {
         return documentTree().activePathTo(activeEntryId);
     }
 
+    public List<AgentMessage> activeAgentMessages() {
+        return activePath().stream()
+                .map(SessionManager::toAgentMessage)
+                .flatMap(java.util.Optional::stream)
+                .toList();
+    }
+
     public Path sessionFile() {
         return sessionFile;
     }
@@ -321,6 +332,30 @@ public final class SessionManager {
             }
         }
         return message;
+    }
+
+    private static java.util.Optional<AgentMessage> toAgentMessage(SessionEntry entry) {
+        return entry.message().map(message -> {
+            ObjectNode metadata = JSON.objectNode();
+            JsonNode payload = message.payload();
+            if (payload != null && payload.isObject()) {
+                payload.fields().forEachRemaining(field -> {
+                    if (!field.getKey().equals("role") && !field.getKey().equals("content")) {
+                        metadata.set(field.getKey(), field.getValue());
+                    }
+                });
+                if (!metadata.has("error") && metadata.has("isError")) {
+                    metadata.set("error", metadata.get("isError"));
+                }
+            }
+            return new AgentMessage(
+                    entry.id(),
+                    entry.parentId(),
+                    entry.timestamp(),
+                    AgentMessageRole.fromWireName(payload != null ? payload.path("role").asText(null) : null),
+                    message.content(),
+                    metadata);
+        });
     }
 
     private SessionEntry derivedHeader() throws IOException {

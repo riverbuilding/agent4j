@@ -1,6 +1,6 @@
 package com.agent4j.coding.message;
 
-import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.CustomAgentMessageView;
 
 import java.util.Objects;
 
@@ -9,9 +9,9 @@ public record BranchSummaryMessage(String summary) {
         summary = summary == null ? "" : summary;
     }
 
-    public static BranchSummaryMessage from(AgentMessage message) {
+    public static BranchSummaryMessage from(CustomAgentMessageView message) {
         Objects.requireNonNull(message, "message");
-        return new BranchSummaryMessage(CodingAgentMessages.textContent(message));
+        return new BranchSummaryMessage(message.text());
     }
 
     public String toLlmText() {

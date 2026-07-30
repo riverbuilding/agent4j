@@ -1,6 +1,7 @@
 package com.agent4j.core.runtime;
 
 import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.UserAgentMessageView;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -121,7 +122,7 @@ public record AgentLoopRequest(
         }
         return messages.stream()
                 .filter(message -> parentMessageId.equals(message.id()))
-                .filter(message -> message.role() == com.agent4j.core.message.AgentMessageRole.USER)
+                .filter(message -> message.view() instanceof UserAgentMessageView)
                 .findFirst()
                 .map(List::of)
                 .orElseGet(List::of);

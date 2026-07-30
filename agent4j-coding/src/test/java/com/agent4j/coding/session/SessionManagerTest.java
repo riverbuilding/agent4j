@@ -121,7 +121,9 @@ class SessionManagerTest {
                 JSON.objectNode()
                         .put("toolCallId", "tool-1")
                         .put("toolName", "read")
-                        .put("error", false));
+                        .put("error", false)
+                        .put("blocked", false)
+                        .put("futureField", "kept"));
         AgentMessage assistantFinal = agentMessage("assistant-2", AgentMessageRole.ASSISTANT, "summary", JSON.objectNode());
 
         List<SessionEntry> appended = manager.appendAgentMessages(List.of(user, assistantToolCall, toolResult, assistantFinal));
@@ -139,6 +141,8 @@ class SessionManagerTest {
         assertThat(appended.get(2).message().orElseThrow().payload().get("toolCallId").asText()).isEqualTo("tool-1");
         assertThat(appended.get(2).message().orElseThrow().payload().get("toolName").asText()).isEqualTo("read");
         assertThat(appended.get(2).message().orElseThrow().payload().get("isError").asBoolean()).isFalse();
+        assertThat(appended.get(2).message().orElseThrow().payload().get("blocked").asBoolean()).isFalse();
+        assertThat(appended.get(2).message().orElseThrow().payload().get("futureField").asText()).isEqualTo("kept");
         assertThat(appended.get(2).message().orElseThrow().content().asText()).isEqualTo("README content");
 
         SessionManager reopened = SessionManager.open(
@@ -148,6 +152,28 @@ class SessionManagerTest {
                 clock);
         assertThat(reopened.activePath()).extracting(SessionEntry::id)
                 .containsExactly("user-1", "assistant-1", "tool-result-tool-1", "assistant-2");
+        SessionMessage reloadedToolResult = reopened.document().entries().get(2).message().orElseThrow();
+        assertThat(reloadedToolResult.payload().get("toolCallId").asText()).isEqualTo("tool-1");
+        assertThat(reloadedToolResult.payload().get("toolName").asText()).isEqualTo("read");
+        assertThat(reloadedToolResult.payload().get("isError").asBoolean()).isFalse();
+        assertThat(reloadedToolResult.payload().get("blocked").asBoolean()).isFalse();
+        assertThat(reloadedToolResult.payload().get("futureField").asText()).isEqualTo("kept");
+
+        List<AgentMessage> activeAgentMessages = reopened.activeAgentMessages();
+        assertThat(activeAgentMessages).extracting(AgentMessage::id)
+                .containsExactly("user-1", "assistant-1", "tool-result-tool-1", "assistant-2");
+        assertThat(activeAgentMessages).extracting(AgentMessage::role)
+                .containsExactly(
+                        AgentMessageRole.USER,
+                        AgentMessageRole.ASSISTANT,
+                        AgentMessageRole.TOOL_RESULT,
+                        AgentMessageRole.ASSISTANT);
+        assertThat(activeAgentMessages.get(2).content().asText()).isEqualTo("README content");
+        assertThat(activeAgentMessages.get(2).metadata().path("toolCallId").asText()).isEqualTo("tool-1");
+        assertThat(activeAgentMessages.get(2).metadata().path("toolName").asText()).isEqualTo("read");
+        assertThat(activeAgentMessages.get(2).metadata().path("error").asBoolean()).isFalse();
+        assertThat(activeAgentMessages.get(2).metadata().path("isError").asBoolean()).isFalse();
+        assertThat(activeAgentMessages.get(2).metadata().path("futureField").asText()).isEqualTo("kept");
     }
 
     @Test
