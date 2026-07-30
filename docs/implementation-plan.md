@@ -35,6 +35,9 @@ new behavior.
 - Treat `agent4j-core` messages as the agent transcript: PI-compatible LLM
   messages plus custom/session-only messages. Convert them to `agent4j-ai`
   `AiMessage` values at the model boundary, like PI's `convertToLlm`.
+- Migrate the transcript model toward PI's `AgentMessage = Message |
+  CustomAgentMessages[...]` union, while preserving PI session JSONL round-trip
+  compatibility through explicit envelope/typed-view boundaries.
 
 ## Phase 1: Session Foundation
 
@@ -98,6 +101,56 @@ Tasks:
 - Add an explicit `convertToLlm` boundary from agent transcript messages to
   `agent4j-ai` messages. Done for the core boundary and default standard-role
   converter; started for coding-specific custom/session converters.
+
+### AgentMessage Migration Plan
+
+Target shape:
+
+- `AgentMessage` remains the durable transcript envelope during migration:
+  `id`, `parentId`, `timestamp`, role discriminator, content, metadata, and
+  unknown/session fields needed for JSONL compatibility.
+- Add PI-style typed transcript views over the envelope instead of raw role
+  switches at call sites:
+  - standard message views: user, assistant, tool result
+  - custom/session views: bash execution, branch summary, compaction summary,
+    custom extension message
+  - unknown view for forward-compatible payloads
+- Keep `agent4j-ai` as the provider-neutral LLM message/content model.
+  `agent4j-core` transcript views convert to `agent4j-ai` only through
+  `AgentMessageConverter`, matching PI's `convertToLlm` boundary.
+
+Migration steps:
+
+1. Add typed view API on top of the current envelope.
+   Examples: `AgentMessageView`, `StandardAgentMessageView`,
+   `ToolResultAgentMessageView`, `CustomAgentMessageView`, or equivalent Java
+   sealed interfaces/records. These views must preserve access to the original
+   envelope for unknown-field round-tripping.
+2. Move role-specific parsing helpers from scattered code into the view layer.
+   `contentBlocks()`, tool-call extraction, tool-result metadata, and
+   custom/session payload extraction should have one owner.
+3. Update `DefaultAgentMessageConverter` and
+   `CodingAgentMessageConverter` to consume typed views instead of switching
+   directly on raw `AgentMessageRole`.
+4. Update `AgentLoop` internals to use typed views for assistant tool-call
+   extraction and tool-result message creation, while continuing to return and
+   persist `AgentMessage` envelopes.
+5. Add parity tests:
+   - standard and custom message roles produce the expected typed view
+   - unknown fields survive parse, convert, append, and reload flows
+   - custom/session-only messages are filtered or converted only at
+     `convertToLlm`
+   - tool-call and tool-result ordering remains unchanged
+6. After call sites use views, decide whether to promote the view hierarchy into
+   the primary Java transcript model. If promoted, keep a dedicated JSONL mapper
+   so session persistence still round-trips PI artifacts exactly.
+
+Constraints:
+
+- Do not move LLM-native content blocks out of `agent4j-ai`.
+- Do not make SessionManager depend on provider-specific AI messages.
+- Do not remove raw payload preservation until PI fixture round-trip tests prove
+  no compatibility-critical fields are lost.
 
 Exit criteria:
 
