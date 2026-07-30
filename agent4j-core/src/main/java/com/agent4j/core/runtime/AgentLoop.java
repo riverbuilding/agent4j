@@ -250,6 +250,20 @@ public final class AgentLoop {
                             AgentMessageRole.ASSISTANT,
                             JSON.arrayNode(),
                             JSON.objectNode())));
+            case AiStreamEvent.MessageErrored errored -> eventBus.publish(new AgentEvent.MessageUpdated(
+                    request.sessionId(),
+                    now(request),
+                    errored.messageId(),
+                    JSON.objectNode()
+                            .put("type", "message_error")
+                            .put("error", errored.error())));
+            case AiStreamEvent.TextStarted started -> eventBus.publish(new AgentEvent.MessageUpdated(
+                    request.sessionId(),
+                    now(request),
+                    started.messageId(),
+                    JSON.objectNode()
+                            .put("type", "text_start")
+                            .put("contentIndex", started.contentIndex())));
             case AiStreamEvent.TextDelta delta -> eventBus.publish(new AgentEvent.MessageUpdated(
                     request.sessionId(),
                     now(request),
@@ -258,6 +272,20 @@ public final class AgentLoop {
                             .put("type", "text_delta")
                             .put("contentIndex", delta.contentIndex())
                             .put("delta", delta.delta())));
+            case AiStreamEvent.TextEnded ended -> eventBus.publish(new AgentEvent.MessageUpdated(
+                    request.sessionId(),
+                    now(request),
+                    ended.messageId(),
+                    JSON.objectNode()
+                            .put("type", "text_end")
+                            .put("contentIndex", ended.contentIndex())));
+            case AiStreamEvent.ThinkingStarted started -> eventBus.publish(new AgentEvent.MessageUpdated(
+                    request.sessionId(),
+                    now(request),
+                    started.messageId(),
+                    JSON.objectNode()
+                            .put("type", "thinking_start")
+                            .put("contentIndex", started.contentIndex())));
             case AiStreamEvent.ThinkingDelta delta -> eventBus.publish(new AgentEvent.MessageUpdated(
                     request.sessionId(),
                     now(request),
@@ -266,6 +294,22 @@ public final class AgentLoop {
                             .put("type", "thinking_delta")
                             .put("contentIndex", delta.contentIndex())
                             .put("delta", delta.delta())));
+            case AiStreamEvent.ThinkingEnded ended -> eventBus.publish(new AgentEvent.MessageUpdated(
+                    request.sessionId(),
+                    now(request),
+                    ended.messageId(),
+                    JSON.objectNode()
+                            .put("type", "thinking_end")
+                            .put("contentIndex", ended.contentIndex())));
+            case AiStreamEvent.ToolCallStarted started -> eventBus.publish(new AgentEvent.MessageUpdated(
+                    request.sessionId(),
+                    now(request),
+                    started.messageId(),
+                    JSON.objectNode()
+                            .put("type", "toolcall_start")
+                            .put("contentIndex", started.contentIndex())
+                            .put("toolCallId", started.toolCallId())
+                            .put("toolName", started.toolName())));
             case AiStreamEvent.ToolCallDelta delta -> eventBus.publish(new AgentEvent.MessageUpdated(
                     request.sessionId(),
                     now(request),
@@ -274,6 +318,14 @@ public final class AgentLoop {
                             .put("type", "toolcall_delta")
                             .put("contentIndex", delta.contentIndex())
                             .set("delta", delta.delta())));
+            case AiStreamEvent.ToolCallEnded ended -> eventBus.publish(new AgentEvent.MessageUpdated(
+                    request.sessionId(),
+                    now(request),
+                    ended.messageId(),
+                    JSON.objectNode()
+                            .put("type", "toolcall_end")
+                            .put("contentIndex", ended.contentIndex())
+                            .put("toolCallId", ended.toolCallId())));
             case AiStreamEvent.MessageCompleted ignored -> {
             }
         }

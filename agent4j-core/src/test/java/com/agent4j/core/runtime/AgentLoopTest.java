@@ -5,6 +5,7 @@ import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiTextContent;
+import com.agent4j.ai.AiThinkingContent;
 import com.agent4j.ai.AiToolCallContent;
 import com.agent4j.ai.AiUsage;
 import com.agent4j.core.event.AgentEvent;
@@ -77,6 +78,58 @@ class AgentLoopTest {
         assertThat(((AgentEvent.MessageStarted) events.get(4)).message().role()).isEqualTo(AgentMessageRole.ASSISTANT);
         assertThat(model.requests()).hasSize(1);
         assertThat(model.requests().getFirst().messages()).hasSize(1);
+    }
+
+    @Test
+    void publishesPiStyleAssistantStreamFragmentsAsMessageUpdates() throws Exception {
+        ToolCall toolCall = new ToolCall("tool-1", "echo", JSON.objectNode().put("text", "hello"));
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(
+                new AiStreamEvent.MessageStarted("assistant-1"),
+                new AiStreamEvent.TextStarted("assistant-1", 0),
+                new AiStreamEvent.TextDelta("assistant-1", 0, "hello"),
+                new AiStreamEvent.TextEnded("assistant-1", 0),
+                new AiStreamEvent.ThinkingStarted("assistant-1", 1),
+                new AiStreamEvent.ThinkingDelta("assistant-1", 1, "checking"),
+                new AiStreamEvent.ThinkingEnded("assistant-1", 1),
+                new AiStreamEvent.ToolCallStarted("assistant-1", 2, toolCall.id(), toolCall.name()),
+                new AiStreamEvent.ToolCallDelta("assistant-1", 2, JSON.objectNode().put("text", "hello")),
+                new AiStreamEvent.ToolCallEnded("assistant-1", 2, toolCall.id()),
+                new AiStreamEvent.MessageCompleted(
+                        "assistant-1",
+                        new AiAssistantMessage(
+                                List.of(new AiTextContent("hello"), new AiThinkingContent("checking")),
+                                AiStopReason.STOP,
+                                AiUsage.zero()))));
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(request(List.of(userMessage("user-1", "stream")), 2));
+
+        assertThat(result.assistantMessages()).extracting(AgentMessage::id).containsExactly("assistant-1");
+        assertThat(events.stream()
+                .filter(AgentEvent.MessageUpdated.class::isInstance)
+                .map(AgentEvent.MessageUpdated.class::cast)
+                .map(update -> update.delta().get("type").asText()))
+                .containsExactly(
+                        "text_start",
+                        "text_delta",
+                        "text_end",
+                        "thinking_start",
+                        "thinking_delta",
+                        "thinking_end",
+                        "toolcall_start",
+                        "toolcall_delta",
+                        "toolcall_end");
+        AgentEvent.MessageUpdated toolStart = events.stream()
+                .filter(AgentEvent.MessageUpdated.class::isInstance)
+                .map(AgentEvent.MessageUpdated.class::cast)
+                .filter(update -> update.delta().path("type").asText().equals("toolcall_start"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(toolStart.delta().path("toolCallId").asText()).isEqualTo("tool-1");
+        assertThat(toolStart.delta().path("toolName").asText()).isEqualTo("echo");
     }
 
     @Test
@@ -159,6 +212,61 @@ class AgentLoopTest {
         assertThat(model.requests().get(1).messages().getLast().role()).isEqualTo("toolResult");
         assertThat(((com.agent4j.ai.AiToolResultMessage) model.requests().get(1).messages().getLast())
                 .content().getFirst()).isEqualTo(new AiTextContent("hello"));
+    }
+
+    @Test
+    void emitsMultiToolResultsInAssistantSourceOrder() throws Exception {
+        ToolCall first = new ToolCall("tool-1", "echo", JSON.objectNode().put("text", "first"));
+        ToolCall second = new ToolCall("tool-2", "echo", JSON.objectNode().put("text", "second"));
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(
+                                                new AiToolCallContent(first.id(), first.name(), first.arguments()),
+                                                new AiToolCallContent(second.id(), second.name(), second.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("echo", "Echo text", JSON.objectNode().put("type", "object")), (call, context) ->
+                        new ToolResult(call.id(), call.name(), false, call.arguments().get("text"), JSON.objectNode()))
+                .build();
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(model, registry, bus)
+                .runTurn(request(List.of(userMessage("user-1", "echo twice")), 2));
+
+        assertThat(result.messages()).extracting(AgentMessage::id)
+                .containsExactly(
+                        "user-1",
+                        "assistant-1",
+                        "tool-result-tool-1",
+                        "tool-result-tool-2",
+                        "assistant-2");
+        assertThat(result.toolResults()).extracting(ToolResult::toolCallId)
+                .containsExactly("tool-1", "tool-2");
+        AgentEvent.TurnEnded firstTurnEnd = events.stream()
+                .filter(AgentEvent.TurnEnded.class::isInstance)
+                .map(AgentEvent.TurnEnded.class::cast)
+                .filter(event -> event.message().id().equals("assistant-1"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(firstTurnEnd.toolResults()).extracting(AgentMessage::id)
+                .containsExactly("tool-result-tool-1", "tool-result-tool-2");
+        assertThat(model.requests().get(1).messages()).extracting(AiMessage::role)
+                .containsExactly("user", "assistant", "toolResult", "toolResult");
     }
 
     @Test

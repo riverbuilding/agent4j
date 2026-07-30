@@ -172,12 +172,9 @@ Tasks:
   - `AiAssistantMessage`. Done.
   - `AiToolResultMessage`. Done.
   - `AiMessage`. Done.
-- Add `agent4j-ai` streaming interfaces. Started; revise them to stream
-  PI-style assistant message events:
-  - message start/done/error
-  - text start/delta/end. Started with delta.
-  - thinking start/delta/end. Started with delta.
-  - tool-call start/delta/end. Started with delta.
+- Add `agent4j-ai` streaming interfaces. Started; revised to stream PI-style
+  assistant message lifecycle events for message start/done/error and
+  text/thinking/tool-call start/delta/end fragments.
 - Add fake model client in `agent4j-testkit`. Started.
 - Implement agent turn loop:
   - build context. Started.
@@ -191,7 +188,8 @@ Tasks:
   `turn_end`, queue drain, and `agent_end`. Started for text-only and
   single-tool fake model turns.
 - Match PI tool execution mode semantics, including default parallel execution
-  where safe and ordered tool-result message emission.
+  where safe and ordered tool-result message emission. Started with ordered
+  multi-tool result emission coverage; parallel execution mode is still pending.
 - Implement prompt, steer, and follow-up queue semantics. Started with
   prompt `newMessages`, steering drain after completed turns, follow-up drain
   when the loop would otherwise stop, and one-at-a-time/all queue modes.
