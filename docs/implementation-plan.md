@@ -199,7 +199,8 @@ Tasks:
   model-round retry events and fake-provider coverage.
 - Implement abort behavior across model stream and tool execution. Started with
   model-stream and tool-abort coverage; tool aborts now escape as agent aborts.
-- Persist messages through `SessionManager`.
+- Persist messages through `SessionManager`. Done for Phase 4 `AgentMessage`
+  outputs via PI-shaped message entries and active-path parent chaining.
 
 Exit criteria:
 

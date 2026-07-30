@@ -1,5 +1,6 @@
 package com.agent4j.coding.session;
 
+import com.agent4j.core.message.AgentMessage;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedWriter;
@@ -144,6 +145,24 @@ public final class SessionManager {
         return entry;
     }
 
+    public SessionEntry appendAgentMessage(AgentMessage agentMessage) throws IOException {
+        Objects.requireNonNull(agentMessage, "agentMessage");
+        return appendPreservingEntryFields(
+                SessionEntryType.MESSAGE,
+                agentMessage.id(),
+                agentMessage.timestamp(),
+                payload -> payload.set("message", toSessionMessage(agentMessage)));
+    }
+
+    public List<SessionEntry> appendAgentMessages(List<AgentMessage> agentMessages) throws IOException {
+        Objects.requireNonNull(agentMessages, "agentMessages");
+        List<SessionEntry> appended = new ArrayList<>(agentMessages.size());
+        for (AgentMessage agentMessage : agentMessages) {
+            appended.add(appendAgentMessage(agentMessage));
+        }
+        return List.copyOf(appended);
+    }
+
     public SessionEntry appendMessage(SessionMessageRole role, com.fasterxml.jackson.databind.JsonNode content)
             throws IOException {
         Objects.requireNonNull(role, "role");
@@ -251,6 +270,57 @@ public final class SessionManager {
 
     private SessionTree documentTree() {
         return SessionTree.from(document());
+    }
+
+    private SessionEntry appendPreservingEntryFields(
+            SessionEntryType type,
+            String id,
+            Instant timestamp,
+            Consumer<ObjectNode> payloadCustomizer
+    ) throws IOException {
+        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(timestamp, "timestamp");
+        Objects.requireNonNull(payloadCustomizer, "payloadCustomizer");
+        if (type == SessionEntryType.SESSION || type == SessionEntryType.UNKNOWN) {
+            throw new IllegalArgumentException("cannot append entry type: " + type);
+        }
+
+        ObjectNode payload = codec.createObjectNode();
+        payload.put("type", type.wireName());
+        payload.put("id", id);
+        if (activeEntryId == null) {
+            payload.putNull("parentId");
+        } else {
+            payload.put("parentId", activeEntryId);
+        }
+        payload.put("timestamp", timestamp.toString());
+        payloadCustomizer.accept(payload);
+
+        SessionEntry entry = codec.parseLine(codec.writeJson(payload), entries.size() + 2);
+        appendLineWithLock(sessionFile, codec.writeLine(entry));
+        entries.add(entry);
+        activeEntryId = entry.id();
+        return entry;
+    }
+
+    private ObjectNode toSessionMessage(AgentMessage agentMessage) {
+        ObjectNode message = codec.createObjectNode();
+        message.put("role", agentMessage.role().wireName());
+        if (agentMessage.content() != null && !agentMessage.content().isNull()) {
+            message.set("content", agentMessage.content());
+        }
+        if (agentMessage.metadata() != null && agentMessage.metadata().isObject()) {
+            agentMessage.metadata().fields().forEachRemaining(field -> {
+                if (!message.has(field.getKey())) {
+                    message.set(field.getKey(), field.getValue());
+                }
+            });
+            if (agentMessage.metadata().has("error") && !message.has("isError")) {
+                message.set("isError", agentMessage.metadata().get("error"));
+            }
+        }
+        return message;
     }
 
     private SessionEntry derivedHeader() throws IOException {

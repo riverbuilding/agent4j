@@ -1,5 +1,12 @@
 package com.agent4j.coding.session;
 
+import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.AgentMessageRole;
+import com.agent4j.core.message.ContentBlocks;
+import com.agent4j.core.message.TextBlock;
+import com.agent4j.core.message.ToolCall;
+import com.agent4j.core.message.ToolCallBlock;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,6 +21,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SessionManagerTest {
+    private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
+
     @TempDir
     Path tempDir;
 
@@ -82,6 +91,63 @@ class SessionManagerTest {
         assertThat(custom.customEntry().orElseThrow().optionalCustomType()).contains("vendor");
         assertThat(manager.activePath()).extracting(SessionEntry::id)
                 .containsExactly("id000001", "id000002", "id000003", "id000004", "id000005", "id000006", "id000007");
+    }
+
+    @Test
+    void appendsAgentLoopMessagesAsPiMessageEntries() throws Exception {
+        Path sessionFile = tempDir.resolve("loop-messages.jsonl");
+        AtomicInteger ids = new AtomicInteger();
+        SessionManager manager = SessionManager.create(
+                sessionFile,
+                tempDir,
+                new SessionJsonlCodec(),
+                () -> "unused%06d".formatted(ids.incrementAndGet()),
+                clock);
+        ToolCall toolCall = new ToolCall("tool-1", "read", JSON.objectNode().put("path", "README.md"));
+        AgentMessage user = agentMessage("user-1", AgentMessageRole.USER, "read README", JSON.objectNode());
+        AgentMessage assistantToolCall = new AgentMessage(
+                "assistant-1",
+                "user-1",
+                Instant.parse("2026-07-28T10:00:01Z"),
+                AgentMessageRole.ASSISTANT,
+                ContentBlocks.toJsonArray(List.of(new ToolCallBlock(toolCall, null))),
+                JSON.objectNode());
+        AgentMessage toolResult = new AgentMessage(
+                "tool-result-tool-1",
+                "assistant-1",
+                Instant.parse("2026-07-28T10:00:02Z"),
+                AgentMessageRole.TOOL_RESULT,
+                JSON.textNode("README content"),
+                JSON.objectNode()
+                        .put("toolCallId", "tool-1")
+                        .put("toolName", "read")
+                        .put("error", false));
+        AgentMessage assistantFinal = agentMessage("assistant-2", AgentMessageRole.ASSISTANT, "summary", JSON.objectNode());
+
+        List<SessionEntry> appended = manager.appendAgentMessages(List.of(user, assistantToolCall, toolResult, assistantFinal));
+
+        assertThat(appended).extracting(SessionEntry::id)
+                .containsExactly("user-1", "assistant-1", "tool-result-tool-1", "assistant-2");
+        assertThat(appended).extracting(SessionEntry::parentId)
+                .containsExactly(null, "user-1", "assistant-1", "tool-result-tool-1");
+        assertThat(appended).extracting(entry -> entry.message().orElseThrow().role())
+                .containsExactly(
+                        SessionMessageRole.USER,
+                        SessionMessageRole.ASSISTANT,
+                        SessionMessageRole.TOOL_RESULT,
+                        SessionMessageRole.ASSISTANT);
+        assertThat(appended.get(2).message().orElseThrow().payload().get("toolCallId").asText()).isEqualTo("tool-1");
+        assertThat(appended.get(2).message().orElseThrow().payload().get("toolName").asText()).isEqualTo("read");
+        assertThat(appended.get(2).message().orElseThrow().payload().get("isError").asBoolean()).isFalse();
+        assertThat(appended.get(2).message().orElseThrow().content().asText()).isEqualTo("README content");
+
+        SessionManager reopened = SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock);
+        assertThat(reopened.activePath()).extracting(SessionEntry::id)
+                .containsExactly("user-1", "assistant-1", "tool-result-tool-1", "assistant-2");
     }
 
     @Test
@@ -183,5 +249,15 @@ class SessionManagerTest {
 
         assertThat(Files.readString(targetFile)).isEqualTo(Files.readString(sourceFile));
         assertThat(imported.activeEntryId()).isEqualTo("root0001");
+    }
+
+    private AgentMessage agentMessage(String id, AgentMessageRole role, String text, com.fasterxml.jackson.databind.JsonNode metadata) {
+        return new AgentMessage(
+                id,
+                null,
+                Instant.parse("2026-07-28T10:00:00Z"),
+                role,
+                ContentBlocks.toJsonArray(List.of(new TextBlock(text, null))),
+                metadata);
     }
 }
