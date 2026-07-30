@@ -655,6 +655,57 @@ class AgentLoopTest {
     }
 
     @Test
+    void drainsAllSteeringMessagesWhenQueueModeAllIsRequested() throws Exception {
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("first")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("second")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+        AgentMessage prompt = userMessage("user-1", "start");
+        AgentMessage firstSteering = userMessage("steer-1", "first steer");
+        AgentMessage secondSteering = userMessage("steer-2", "second steer");
+
+        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(request(
+                        List.of(prompt),
+                        3,
+                        List.of(prompt),
+                        List.of(firstSteering, secondSteering),
+                        List.of(),
+                        QueueMode.ALL,
+                        QueueMode.ONE_AT_A_TIME));
+
+        assertThat(result.messages()).extracting(AgentMessage::id)
+                .containsExactly("user-1", "assistant-1", "steer-1", "steer-2", "assistant-2");
+        assertThat(model.requests()).hasSize(2);
+        assertThat(model.requests().get(1).messages()).extracting(AiMessage::role)
+                .containsExactly("user", "assistant", "user", "user");
+        assertThat(events.stream()
+                .filter(AgentEvent.QueueUpdated.class::isInstance)
+                .map(AgentEvent.QueueUpdated.class::cast))
+                .singleElement()
+                .satisfies(queueUpdated -> {
+                    assertThat(queueUpdated.queueKind()).isEqualTo(QueueKind.STEER);
+                    assertThat(queueUpdated.size()).isZero();
+                });
+    }
+
+    @Test
     void injectsFollowUpMessagesOnlyAfterAgentWouldOtherwiseStop() throws Exception {
         FakeModelClient model = new FakeModelClient()
                 .enqueue(List.of(
@@ -732,6 +783,33 @@ class AgentLoopTest {
                 .orElseThrow();
         assertThat(completed.attempt()).isEqualTo(1);
         assertThat(completed.success()).isTrue();
+    }
+
+    @Test
+    void emitsFailedRetryCompletionWhenRetryLimitIsExhausted() {
+        FakeModelClient model = new FakeModelClient()
+                .enqueueFailure(new IllegalStateException("first provider failure"))
+                .enqueueFailure(new IllegalStateException("second provider failure"));
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        assertThatThrownBy(() -> new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(request(List.of(userMessage("user-1", "try")), 2, 1)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("second provider failure");
+
+        assertThat(model.requests()).hasSize(2);
+        assertThat(events).extracting(event -> event.getClass().getSimpleName())
+                .containsSubsequence("RetryStarted", "RetryCompleted");
+        assertThat(events).noneMatch(AgentEvent.AgentEnded.class::isInstance);
+        AgentEvent.RetryCompleted completed = events.stream()
+                .filter(AgentEvent.RetryCompleted.class::isInstance)
+                .map(AgentEvent.RetryCompleted.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(completed.attempt()).isEqualTo(1);
+        assertThat(completed.success()).isFalse();
     }
 
     @Test
@@ -916,6 +994,25 @@ class AgentLoopTest {
             List<AgentMessage> steeringMessages,
             List<AgentMessage> followUpMessages
     ) {
+        return request(
+                messages,
+                maxToolRounds,
+                promptMessages,
+                steeringMessages,
+                followUpMessages,
+                QueueMode.ONE_AT_A_TIME,
+                QueueMode.ONE_AT_A_TIME);
+    }
+
+    private AgentLoopRequest request(
+            List<AgentMessage> messages,
+            int maxToolRounds,
+            List<AgentMessage> promptMessages,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode
+    ) {
         return new AgentLoopRequest(
                 "session-1",
                 "turn-1",
@@ -930,8 +1027,8 @@ class AgentLoopTest {
                 promptMessages,
                 steeringMessages,
                 followUpMessages,
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                steeringMode,
+                followUpMode);
     }
 
     private AgentMessage userMessage(String id, String text) {

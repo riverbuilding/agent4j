@@ -219,7 +219,7 @@ Exit criteria:
 
 ## Phase 4: Agent Loop
 
-Status: started
+Status: complete for fake-runtime parity
 
 Goal: run a complete tool-calling agent turn against a fake streaming model.
 
@@ -239,43 +239,45 @@ Tasks:
   - `AiAssistantMessage`. Done.
   - `AiToolResultMessage`. Done.
   - `AiMessage`. Done.
-- Add `agent4j-ai` streaming interfaces. Started; revised to stream PI-style
+- Add `agent4j-ai` streaming interfaces. Done for Phase 4; streams PI-style
   assistant message lifecycle events for message start/done/error and
   text/thinking/tool-call start/delta/end fragments.
-- Add fake model client in `agent4j-testkit`. Started.
+- Add fake model client in `agent4j-testkit`. Done.
 - Implement agent turn loop:
-  - build context. Started.
-  - stream assistant deltas. Started.
-  - collect tool calls. Started.
-  - execute tools. Started.
+  - build context. Done.
+  - stream assistant deltas. Done.
+  - collect tool calls. Done.
+  - execute tools. Done.
   - append tool-result transcript messages. Done with source-ordered sequential
     and parallel fake model turns.
-  - continue until terminal stop reason. Started.
+  - continue until terminal stop reason. Done.
 - Match PI turn event ordering: `agent_start`, `turn_start`, assistant message
   stream/update events, tool execution events, tool-result message artifacts,
-  `turn_end`, queue drain, and `agent_end`. Started for text-only and
-  single-tool fake model turns.
+  `turn_end`, queue drain, and `agent_end`. Done for text-only, single-tool,
+  multi-tool, queue, retry, abort, and terminate fake model turns.
 - Match PI tool execution mode semantics, including default parallel execution
-  where safe and ordered tool-result message emission. Started with configurable
+  where safe and ordered tool-result message emission. Done with configurable
   sequential/parallel execution, default parallel execution, and ordered
   multi-tool result emission coverage.
-- Add PI-style tool execution update callbacks. Started with `ToolContext`
+- Add PI-style tool execution update callbacks. Done with `ToolContext`
   update publishing and `tool_execution_update` event coverage.
-- Add PI-style before/after tool execution hooks. Started with loop-level hooks
+- Add PI-style before/after tool execution hooks. Done with loop-level hooks
   that run around tool execution and can publish tool updates.
-- Add PI-style blocked tool results. Started with hook-returned blocked
+- Add PI-style blocked tool results. Done with hook-returned blocked
   `ToolResult` values that skip execution and preserve normal result emission.
-- Add PI-style terminate hints. Started with `ToolResult` metadata that ends
+- Add PI-style terminate hints. Done with `ToolResult` metadata that ends
   the loop after normal tool-result emission without another model request.
-- Implement prompt, steer, and follow-up queue semantics. Started with
+- Implement prompt, steer, and follow-up queue semantics. Done with
   prompt `newMessages`, steering drain after completed turns, follow-up drain
   when the loop would otherwise stop, and one-at-a-time/all queue modes.
-- Implement retry policy for retryable provider errors. Started with bounded
-  model-round retry events and fake-provider coverage.
-- Implement abort behavior across model stream and tool execution. Started with
+- Implement retry policy for retryable provider errors. Done with bounded
+  model-round retry events plus success and exhaustion coverage.
+- Implement abort behavior across model stream and tool execution. Done with
   model-stream and tool-abort coverage; tool aborts now escape as agent aborts.
 - Persist messages through `SessionManager`. Done for Phase 4 `AgentMessage`
   outputs via PI-shaped message entries and active-path parent chaining.
+- Add event JSON/RPC serialization coverage. Done for queue, retry, tool
+  execution update/end, turn end, agent end, and abort event payloads.
 
 Exit criteria:
 
@@ -477,7 +479,7 @@ Exit criteria:
 3. Add stronger validation for parent references and malformed typed payloads.
 4. Add remaining session helpers for compaction entries once compaction shape is
    finalized.
-5. Expand Phase 4 beyond the initial fake streaming/tool-call loop: queue
-   semantics, retry policy, abort coverage, and `SessionManager` persistence.
+5. Start Phase 5 resource/settings discovery, beginning with PI resource-loader
+   reference mapping and precedence tests.
 6. Keep expanding fixtures with real PI session samples as they become
    available.
