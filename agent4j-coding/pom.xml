@@ -19,6 +19,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.agent4j</groupId>
+            <artifactId>agent4j-ai</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>

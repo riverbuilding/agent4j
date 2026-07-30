@@ -93,11 +93,11 @@ Tasks:
   explicitly before Phase 4 is considered stable.
 - Add a PI-style custom message extension model for session-only messages such
   as bash execution, branch summary, compaction summary, and custom extension
-  messages.
+  messages. Started in `agent4j-coding` with typed wrappers and LLM conversion
+  text for coding-agent session-only roles.
 - Add an explicit `convertToLlm` boundary from agent transcript messages to
   `agent4j-ai` messages. Done for the core boundary and default standard-role
-  converter; coding-specific custom/session converters still need concrete
-  message payload models.
+  converter; started for coding-specific custom/session converters.
 
 Exit criteria:
 
