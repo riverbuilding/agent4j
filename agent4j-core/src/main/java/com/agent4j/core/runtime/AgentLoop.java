@@ -18,6 +18,7 @@ import com.agent4j.core.message.ToolCallBlock;
 import com.agent4j.core.message.ToolResult;
 import com.agent4j.core.tool.ToolContext;
 import com.agent4j.core.tool.ToolExecutor;
+import com.agent4j.core.tool.ToolExecutionHook;
 import com.agent4j.core.tool.ToolRegistry;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 
@@ -38,6 +39,7 @@ public final class AgentLoop {
     private final ToolExecutor toolExecutor;
     private final AgentEventBus eventBus;
     private final AgentMessageConverter messageConverter;
+    private final List<ToolExecutionHook> toolExecutionHooks;
 
     public AgentLoop(AiModelClient modelClient, ToolRegistry toolRegistry, AgentEventBus eventBus) {
         this(modelClient, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE);
@@ -49,11 +51,31 @@ public final class AgentLoop {
             AgentEventBus eventBus,
             AgentMessageConverter messageConverter
     ) {
+        this(modelClient, toolRegistry, eventBus, messageConverter, List.of());
+    }
+
+    public AgentLoop(
+            AiModelClient modelClient,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter,
+            List<ToolExecutionHook> toolExecutionHooks
+    ) {
         this.modelClient = Objects.requireNonNull(modelClient, "modelClient");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
         this.toolExecutor = new ToolExecutor(toolRegistry);
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.messageConverter = Objects.requireNonNull(messageConverter, "messageConverter");
+        this.toolExecutionHooks = toolExecutionHooks == null ? List.of() : List.copyOf(toolExecutionHooks);
+    }
+
+    public AgentLoop(
+            AiModelClient modelClient,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            List<ToolExecutionHook> toolExecutionHooks
+    ) {
+        this(modelClient, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE, toolExecutionHooks);
     }
 
     public AgentLoopResult runTurn(AgentLoopRequest request) throws Exception {
@@ -152,7 +174,7 @@ public final class AgentLoop {
             for (ToolCall toolCall : toolCalls) {
                 request.abortSignal().throwIfAborted();
                 eventBus.publish(new AgentEvent.ToolExecutionStarted(request.sessionId(), now(request), toolCall));
-                results.add(toolExecutor.execute(toolCall, toolContext(request, toolCall)));
+                results.add(executeToolCall(request, toolCall));
             }
             return results;
         }
@@ -164,7 +186,7 @@ public final class AgentLoop {
         try {
             List<Future<ToolResult>> futures = new ArrayList<>();
             for (ToolCall toolCall : toolCalls) {
-                futures.add(executorService.submit(() -> toolExecutor.execute(toolCall, toolContext(request, toolCall))));
+                futures.add(executorService.submit(() -> executeToolCall(request, toolCall)));
             }
             List<ToolResult> results = new ArrayList<>();
             for (Future<ToolResult> future : futures) {
@@ -175,6 +197,20 @@ public final class AgentLoop {
         } finally {
             executorService.shutdownNow();
         }
+    }
+
+    private ToolResult executeToolCall(AgentLoopRequest request, ToolCall toolCall) throws Exception {
+        ToolContext context = toolContext(request, toolCall);
+        for (ToolExecutionHook hook : toolExecutionHooks) {
+            request.abortSignal().throwIfAborted();
+            hook.beforeToolExecution(toolCall, context);
+        }
+        ToolResult result = toolExecutor.execute(toolCall, context);
+        for (ToolExecutionHook hook : toolExecutionHooks) {
+            request.abortSignal().throwIfAborted();
+            hook.afterToolExecution(toolCall, context, result);
+        }
+        return result;
     }
 
     private static ToolResult awaitToolResult(Future<ToolResult> future) throws Exception {

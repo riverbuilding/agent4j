@@ -17,6 +17,8 @@ import com.agent4j.core.message.TextBlock;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
 import com.agent4j.core.tool.InMemoryToolRegistry;
+import com.agent4j.core.tool.ToolContext;
+import com.agent4j.core.tool.ToolExecutionHook;
 import com.agent4j.core.tool.ToolRegistry;
 import com.agent4j.core.tool.ToolSpec;
 import com.agent4j.testkit.ai.FakeModelClient;
@@ -317,6 +319,69 @@ class AgentLoopTest {
                 .orElseThrow();
         assertThat(update.toolCallId()).isEqualTo("tool-1");
         assertThat(update.delta().path("status").asText()).isEqualTo("running");
+    }
+
+    @Test
+    void runsBeforeAndAfterToolHooksAroundToolExecution() throws Exception {
+        ToolCall toolCall = new ToolCall("tool-1", "hooked", JSON.objectNode());
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiToolCallContent(toolCall.id(), toolCall.name(), toolCall.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        List<String> observations = new ArrayList<>();
+        ToolExecutionHook hook = new ToolExecutionHook() {
+            @Override
+            public void beforeToolExecution(ToolCall toolCall, ToolContext context) {
+                observations.add("before:" + toolCall.id());
+                context.publishUpdate(JSON.objectNode().put("hook", "before"));
+            }
+
+            @Override
+            public void afterToolExecution(ToolCall toolCall, ToolContext context, ToolResult result) {
+                observations.add("after:" + result.toolCallId() + ":" + result.content().asText());
+                context.publishUpdate(JSON.objectNode().put("hook", "after"));
+            }
+        };
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("hooked", "Hooked", JSON.objectNode()), (call, context) -> {
+                    observations.add("execute:" + call.id());
+                    context.publishUpdate(JSON.objectNode().put("tool", "running"));
+                    return new ToolResult(call.id(), call.name(), false, JSON.textNode("ok"), JSON.objectNode());
+                })
+                .build();
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        new AgentLoop(model, registry, bus, List.of(hook))
+                .runTurn(request(List.of(userMessage("user-1", "run hooked")), 2));
+
+        assertThat(observations).containsExactly("before:tool-1", "execute:tool-1", "after:tool-1:ok");
+        assertThat(events).extracting(event -> event.getClass().getSimpleName())
+                .containsSubsequence(
+                        "ToolExecutionStarted",
+                        "ToolExecutionUpdated",
+                        "ToolExecutionUpdated",
+                        "ToolExecutionUpdated",
+                        "ToolExecutionEnded");
+        assertThat(events.stream()
+                .filter(AgentEvent.ToolExecutionUpdated.class::isInstance)
+                .map(AgentEvent.ToolExecutionUpdated.class::cast)
+                .map(update -> update.delta().fieldNames().next()))
+                .containsExactly("hook", "tool", "hook");
     }
 
     @Test

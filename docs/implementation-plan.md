@@ -194,6 +194,8 @@ Tasks:
   multi-tool result emission coverage.
 - Add PI-style tool execution update callbacks. Started with `ToolContext`
   update publishing and `tool_execution_update` event coverage.
+- Add PI-style before/after tool execution hooks. Started with loop-level hooks
+  that run around tool execution and can publish tool updates.
 - Implement prompt, steer, and follow-up queue semantics. Started with
   prompt `newMessages`, steering drain after completed turns, follow-up drain
   when the loop would otherwise stop, and one-at-a-time/all queue modes.
