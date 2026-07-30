@@ -181,15 +181,17 @@ Tasks:
   - stream assistant deltas. Started.
   - collect tool calls. Started.
   - execute tools. Started.
-  - append tool-result transcript messages. Done for sequential fake model turns.
+  - append tool-result transcript messages. Done with source-ordered sequential
+    and parallel fake model turns.
   - continue until terminal stop reason. Started.
 - Match PI turn event ordering: `agent_start`, `turn_start`, assistant message
   stream/update events, tool execution events, tool-result message artifacts,
   `turn_end`, queue drain, and `agent_end`. Started for text-only and
   single-tool fake model turns.
 - Match PI tool execution mode semantics, including default parallel execution
-  where safe and ordered tool-result message emission. Started with ordered
-  multi-tool result emission coverage; parallel execution mode is still pending.
+  where safe and ordered tool-result message emission. Started with configurable
+  sequential/parallel execution, default parallel execution, and ordered
+  multi-tool result emission coverage.
 - Implement prompt, steer, and follow-up queue semantics. Started with
   prompt `newMessages`, steering drain after completed turns, follow-up drain
   when the loop would otherwise stop, and one-at-a-time/all queue modes.

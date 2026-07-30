@@ -31,6 +31,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -267,6 +270,109 @@ class AgentLoopTest {
                 .containsExactly("tool-result-tool-1", "tool-result-tool-2");
         assertThat(model.requests().get(1).messages()).extracting(AiMessage::role)
                 .containsExactly("user", "assistant", "toolResult", "toolResult");
+    }
+
+    @Test
+    void runsMultipleToolsInParallelByDefaultButEmitsResultsInSourceOrder() throws Exception {
+        ToolCall first = new ToolCall("tool-1", "first", JSON.objectNode());
+        ToolCall second = new ToolCall("tool-2", "second", JSON.objectNode());
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(
+                                                new AiToolCallContent(first.id(), first.name(), first.arguments()),
+                                                new AiToolCallContent(second.id(), second.name(), second.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        CountDownLatch secondToolEntered = new CountDownLatch(1);
+        AtomicBoolean firstObservedSecondTool = new AtomicBoolean(false);
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("first", "First", JSON.objectNode()), (call, context) -> {
+                    firstObservedSecondTool.set(secondToolEntered.await(1, TimeUnit.SECONDS));
+                    return new ToolResult(call.id(), call.name(), false, JSON.textNode("first"), JSON.objectNode());
+                })
+                .register(new ToolSpec("second", "Second", JSON.objectNode()), (call, context) -> {
+                    secondToolEntered.countDown();
+                    return new ToolResult(call.id(), call.name(), false, JSON.textNode("second"), JSON.objectNode());
+                })
+                .build();
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(model, registry, bus)
+                .runTurn(request(List.of(userMessage("user-1", "run both")), 2));
+
+        assertThat(firstObservedSecondTool).isTrue();
+        assertThat(result.messages()).extracting(AgentMessage::id)
+                .containsExactly(
+                        "user-1",
+                        "assistant-1",
+                        "tool-result-tool-1",
+                        "tool-result-tool-2",
+                        "assistant-2");
+        assertThat(result.toolResults()).extracting(ToolResult::toolCallId)
+                .containsExactly("tool-1", "tool-2");
+        assertThat(events).extracting(event -> event.getClass().getSimpleName())
+                .containsSubsequence(
+                        "ToolExecutionStarted",
+                        "ToolExecutionStarted",
+                        "ToolExecutionEnded",
+                        "MessageStarted",
+                        "MessageEnded",
+                        "ToolExecutionEnded",
+                        "MessageStarted",
+                        "MessageEnded");
+    }
+
+    @Test
+    void canRunMultipleToolsSequentiallyWhenRequested() throws Exception {
+        ToolCall first = new ToolCall("tool-1", "record", JSON.objectNode().put("value", "first"));
+        ToolCall second = new ToolCall("tool-2", "record", JSON.objectNode().put("value", "second"));
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(
+                                                new AiToolCallContent(first.id(), first.name(), first.arguments()),
+                                                new AiToolCallContent(second.id(), second.name(), second.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        List<String> executionOrder = new ArrayList<>();
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("record", "Record", JSON.objectNode()), (call, context) -> {
+                    executionOrder.add(call.arguments().path("value").asText());
+                    return new ToolResult(call.id(), call.name(), false, JSON.textNode(call.arguments().path("value").asText()), JSON.objectNode());
+                })
+                .build();
+
+        AgentLoopResult result = new AgentLoop(model, registry, new AgentEventBus())
+                .runTurn(request(List.of(userMessage("user-1", "run both")), 2, ToolExecutionMode.SEQUENTIAL));
+
+        assertThat(executionOrder).containsExactly("first", "second");
+        assertThat(result.toolResults()).extracting(ToolResult::toolCallId)
+                .containsExactly("tool-1", "tool-2");
     }
 
     @Test
@@ -530,6 +636,26 @@ class AgentLoopTest {
                 Map.of(),
                 maxToolRounds,
                 maxModelRetries,
+                List.of(messages.getLast()),
+                List.of(),
+                List.of(),
+                QueueMode.ONE_AT_A_TIME,
+                QueueMode.ONE_AT_A_TIME);
+    }
+
+    private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds, ToolExecutionMode toolExecutionMode) {
+        return new AgentLoopRequest(
+                "session-1",
+                "turn-1",
+                messages.getLast().id(),
+                messages,
+                Path.of("/repo"),
+                clock,
+                new AbortController().signal(),
+                Map.of(),
+                maxToolRounds,
+                0,
+                toolExecutionMode,
                 List.of(messages.getLast()),
                 List.of(),
                 List.of(),

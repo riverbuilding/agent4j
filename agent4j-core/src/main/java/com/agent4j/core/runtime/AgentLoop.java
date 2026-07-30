@@ -25,6 +25,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public final class AgentLoop {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
@@ -116,10 +120,7 @@ public final class AgentLoop {
                     throw new IllegalStateException("maximum tool rounds exceeded: " + request.maxToolRounds());
                 }
 
-                for (ToolCall toolCall : toolCalls) {
-                    request.abortSignal().throwIfAborted();
-                    eventBus.publish(new AgentEvent.ToolExecutionStarted(request.sessionId(), now(request), toolCall));
-                    ToolResult toolResult = toolExecutor.execute(toolCall, toolContext(request));
+                for (ToolResult toolResult : executeToolCalls(request, toolCalls)) {
                     AgentMessage toolResultMessage = toAgentMessage(toolResult, roundResult.message().id(), now(request));
                     toolResults.add(toolResult);
                     roundToolResults.add(toolResultMessage);
@@ -142,6 +143,55 @@ public final class AgentLoop {
         } catch (AgentAbortException e) {
             eventBus.publish(new AgentEvent.AgentAborted(request.sessionId(), now(request), e.getMessage()));
             throw e;
+        }
+    }
+
+    private List<ToolResult> executeToolCalls(AgentLoopRequest request, List<ToolCall> toolCalls) throws Exception {
+        if (request.toolExecutionMode() == ToolExecutionMode.SEQUENTIAL || toolCalls.size() <= 1) {
+            List<ToolResult> results = new ArrayList<>();
+            for (ToolCall toolCall : toolCalls) {
+                request.abortSignal().throwIfAborted();
+                eventBus.publish(new AgentEvent.ToolExecutionStarted(request.sessionId(), now(request), toolCall));
+                results.add(toolExecutor.execute(toolCall, toolContext(request)));
+            }
+            return results;
+        }
+        for (ToolCall toolCall : toolCalls) {
+            request.abortSignal().throwIfAborted();
+            eventBus.publish(new AgentEvent.ToolExecutionStarted(request.sessionId(), now(request), toolCall));
+        }
+        ExecutorService executorService = Executors.newFixedThreadPool(toolCalls.size());
+        try {
+            List<Future<ToolResult>> futures = new ArrayList<>();
+            for (ToolCall toolCall : toolCalls) {
+                futures.add(executorService.submit(() -> toolExecutor.execute(toolCall, toolContext(request))));
+            }
+            List<ToolResult> results = new ArrayList<>();
+            for (Future<ToolResult> future : futures) {
+                request.abortSignal().throwIfAborted();
+                results.add(awaitToolResult(future));
+            }
+            return results;
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    private static ToolResult awaitToolResult(Future<ToolResult> future) throws Exception {
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception exception) {
+                throw exception;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException(cause);
         }
     }
 

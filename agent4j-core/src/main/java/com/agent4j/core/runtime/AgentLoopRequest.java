@@ -19,6 +19,7 @@ public record AgentLoopRequest(
         Map<String, Object> toolAttributes,
         int maxToolRounds,
         int maxModelRetries,
+        ToolExecutionMode toolExecutionMode,
         List<AgentMessage> promptMessages,
         List<AgentMessage> steeringMessages,
         List<AgentMessage> followUpMessages,
@@ -47,11 +48,48 @@ public record AgentLoopRequest(
                 toolAttributes,
                 maxToolRounds,
                 0,
+                ToolExecutionMode.PARALLEL,
                 inferPromptMessages(parentMessageId, messages),
                 List.of(),
                 List.of(),
                 QueueMode.ONE_AT_A_TIME,
                 QueueMode.ONE_AT_A_TIME);
+    }
+
+    public AgentLoopRequest(
+            String sessionId,
+            String turnId,
+            String parentMessageId,
+            List<AgentMessage> messages,
+            Path cwd,
+            Clock clock,
+            AbortSignal abortSignal,
+            Map<String, Object> toolAttributes,
+            int maxToolRounds,
+            int maxModelRetries,
+            List<AgentMessage> promptMessages,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode
+    ) {
+        this(
+                sessionId,
+                turnId,
+                parentMessageId,
+                messages,
+                cwd,
+                clock,
+                abortSignal,
+                toolAttributes,
+                maxToolRounds,
+                maxModelRetries,
+                ToolExecutionMode.PARALLEL,
+                promptMessages,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode);
     }
 
     public AgentLoopRequest {
@@ -61,6 +99,7 @@ public record AgentLoopRequest(
         Objects.requireNonNull(cwd, "cwd");
         Objects.requireNonNull(clock, "clock");
         Objects.requireNonNull(abortSignal, "abortSignal");
+        Objects.requireNonNull(toolExecutionMode, "toolExecutionMode");
         Objects.requireNonNull(steeringMode, "steeringMode");
         Objects.requireNonNull(followUpMode, "followUpMode");
         if (maxToolRounds < 0) {
