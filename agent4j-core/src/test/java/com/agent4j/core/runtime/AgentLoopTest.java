@@ -344,9 +344,10 @@ class AgentLoopTest {
         List<String> observations = new ArrayList<>();
         ToolExecutionHook hook = new ToolExecutionHook() {
             @Override
-            public void beforeToolExecution(ToolCall toolCall, ToolContext context) {
+            public Optional<ToolResult> beforeToolExecution(ToolCall toolCall, ToolContext context) {
                 observations.add("before:" + toolCall.id());
                 context.publishUpdate(JSON.objectNode().put("hook", "before"));
+                return Optional.empty();
             }
 
             @Override
@@ -382,6 +383,77 @@ class AgentLoopTest {
                 .map(AgentEvent.ToolExecutionUpdated.class::cast)
                 .map(update -> update.delta().fieldNames().next()))
                 .containsExactly("hook", "tool", "hook");
+    }
+
+    @Test
+    void hookCanBlockToolExecutionWithStableResult() throws Exception {
+        ToolCall toolCall = new ToolCall("tool-1", "blocked", JSON.objectNode());
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiToolCallContent(toolCall.id(), toolCall.name(), toolCall.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        AtomicBoolean executed = new AtomicBoolean(false);
+        List<ToolResult> afterResults = new ArrayList<>();
+        ToolExecutionHook hook = new ToolExecutionHook() {
+            @Override
+            public Optional<ToolResult> beforeToolExecution(ToolCall toolCall, ToolContext context) {
+                context.publishUpdate(JSON.objectNode().put("status", "blocked"));
+                return Optional.of(ToolResult.blocked(toolCall, "blocked by policy"));
+            }
+
+            @Override
+            public void afterToolExecution(ToolCall toolCall, ToolContext context, ToolResult result) {
+                afterResults.add(result);
+            }
+        };
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("blocked", "Should not run", JSON.objectNode()), (call, context) -> {
+                    executed.set(true);
+                    return new ToolResult(call.id(), call.name(), false, JSON.textNode("unreachable"), JSON.objectNode());
+                })
+                .build();
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(model, registry, bus, List.of(hook))
+                .runTurn(request(List.of(userMessage("user-1", "run blocked")), 2));
+
+        assertThat(executed).isFalse();
+        assertThat(afterResults).hasSize(1);
+        assertThat(afterResults.getFirst().error()).isTrue();
+        assertThat(afterResults.getFirst().metadata().path("blocked").asBoolean()).isTrue();
+        assertThat(result.toolResults()).hasSize(1);
+        assertThat(result.toolResults().getFirst().content().asText()).isEqualTo("blocked by policy");
+        assertThat(result.toolResults().getFirst().metadata().path("blocked").asBoolean()).isTrue();
+        assertThat(result.messages()).extracting(AgentMessage::id)
+                .containsExactly("user-1", "assistant-1", "tool-result-tool-1", "assistant-2");
+        assertThat(events).extracting(event -> event.getClass().getSimpleName())
+                .containsSubsequence(
+                        "ToolExecutionStarted",
+                        "ToolExecutionUpdated",
+                        "ToolExecutionEnded",
+                        "MessageStarted",
+                        "MessageEnded");
+        AgentEvent.ToolExecutionEnded ended = events.stream()
+                .filter(AgentEvent.ToolExecutionEnded.class::isInstance)
+                .map(AgentEvent.ToolExecutionEnded.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(ended.result().metadata().path("blocked").asBoolean()).isTrue();
     }
 
     @Test

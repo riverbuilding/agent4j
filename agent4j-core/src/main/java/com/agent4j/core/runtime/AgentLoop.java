@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -201,11 +202,15 @@ public final class AgentLoop {
 
     private ToolResult executeToolCall(AgentLoopRequest request, ToolCall toolCall) throws Exception {
         ToolContext context = toolContext(request, toolCall);
+        Optional<ToolResult> blockedResult = Optional.empty();
         for (ToolExecutionHook hook : toolExecutionHooks) {
             request.abortSignal().throwIfAborted();
-            hook.beforeToolExecution(toolCall, context);
+            blockedResult = hook.beforeToolExecution(toolCall, context);
+            if (blockedResult.isPresent()) {
+                break;
+            }
         }
-        ToolResult result = toolExecutor.execute(toolCall, context);
+        ToolResult result = blockedResult.orElseGet(() -> toolExecutor.execute(toolCall, context));
         for (ToolExecutionHook hook : toolExecutionHooks) {
             request.abortSignal().throwIfAborted();
             hook.afterToolExecution(toolCall, context, result);

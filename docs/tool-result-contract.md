@@ -25,6 +25,20 @@ Thrown tool exceptions are converted by `ToolExecutor` into:
 
 Tool-handled validation errors use the same shape without `exceptionClass`.
 
+Tool execution hooks can block a tool call before the tool runs. Blocked
+results use:
+
+```json
+{
+  "error": true,
+  "content": "blocked by policy",
+  "metadata": {
+    "message": "blocked by policy",
+    "blocked": true
+  }
+}
+```
+
 ## read
 
 Arguments:
@@ -172,4 +186,3 @@ Success content:
   "totalEntries": 1
 }
 ```
-

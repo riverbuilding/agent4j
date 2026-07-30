@@ -196,6 +196,8 @@ Tasks:
   update publishing and `tool_execution_update` event coverage.
 - Add PI-style before/after tool execution hooks. Started with loop-level hooks
   that run around tool execution and can publish tool updates.
+- Add PI-style blocked tool results. Started with hook-returned blocked
+  `ToolResult` values that skip execution and preserve normal result emission.
 - Implement prompt, steer, and follow-up queue semantics. Started with
   prompt `newMessages`, steering drain after completed turns, follow-up drain
   when the loop would otherwise stop, and one-at-a-time/all queue modes.

@@ -131,6 +131,20 @@ class ToolExecutorTest {
         assertThat(updates.getFirst().path("status").asText()).isEqualTo("running");
     }
 
+    @Test
+    void createsStableBlockedToolResult() {
+        ToolResult result = ToolResult.blocked(
+                new ToolCall("call-1", "write", JsonNodeFactory.instance.objectNode()),
+                "blocked by policy");
+
+        assertThat(result.toolCallId()).isEqualTo("call-1");
+        assertThat(result.toolName()).isEqualTo("write");
+        assertThat(result.error()).isTrue();
+        assertThat(result.content().asText()).isEqualTo("blocked by policy");
+        assertThat(result.metadata().path("message").asText()).isEqualTo("blocked by policy");
+        assertThat(result.metadata().path("blocked").asBoolean()).isTrue();
+    }
+
     private static ToolContext context() {
         return new ToolContext(
                 "session-1",
