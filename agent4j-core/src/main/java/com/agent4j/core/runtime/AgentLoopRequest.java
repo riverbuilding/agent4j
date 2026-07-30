@@ -17,8 +17,41 @@ public record AgentLoopRequest(
         Clock clock,
         AbortSignal abortSignal,
         Map<String, Object> toolAttributes,
-        int maxToolRounds
+        int maxToolRounds,
+        List<AgentMessage> promptMessages,
+        List<AgentMessage> steeringMessages,
+        List<AgentMessage> followUpMessages,
+        QueueMode steeringMode,
+        QueueMode followUpMode
 ) {
+    public AgentLoopRequest(
+            String sessionId,
+            String turnId,
+            String parentMessageId,
+            List<AgentMessage> messages,
+            Path cwd,
+            Clock clock,
+            AbortSignal abortSignal,
+            Map<String, Object> toolAttributes,
+            int maxToolRounds
+    ) {
+        this(
+                sessionId,
+                turnId,
+                parentMessageId,
+                messages,
+                cwd,
+                clock,
+                abortSignal,
+                toolAttributes,
+                maxToolRounds,
+                inferPromptMessages(parentMessageId, messages),
+                List.of(),
+                List.of(),
+                QueueMode.ONE_AT_A_TIME,
+                QueueMode.ONE_AT_A_TIME);
+    }
+
     public AgentLoopRequest {
         Objects.requireNonNull(sessionId, "sessionId");
         Objects.requireNonNull(turnId, "turnId");
@@ -26,10 +59,27 @@ public record AgentLoopRequest(
         Objects.requireNonNull(cwd, "cwd");
         Objects.requireNonNull(clock, "clock");
         Objects.requireNonNull(abortSignal, "abortSignal");
+        Objects.requireNonNull(steeringMode, "steeringMode");
+        Objects.requireNonNull(followUpMode, "followUpMode");
         if (maxToolRounds < 0) {
             throw new IllegalArgumentException("maxToolRounds must be non-negative");
         }
         messages = List.copyOf(messages);
         toolAttributes = toolAttributes == null ? Map.of() : Map.copyOf(toolAttributes);
+        promptMessages = promptMessages == null ? List.of() : List.copyOf(promptMessages);
+        steeringMessages = steeringMessages == null ? List.of() : List.copyOf(steeringMessages);
+        followUpMessages = followUpMessages == null ? List.of() : List.copyOf(followUpMessages);
+    }
+
+    private static List<AgentMessage> inferPromptMessages(String parentMessageId, List<AgentMessage> messages) {
+        if (messages == null || parentMessageId == null) {
+            return List.of();
+        }
+        return messages.stream()
+                .filter(message -> parentMessageId.equals(message.id()))
+                .filter(message -> message.role() == com.agent4j.core.message.AgentMessageRole.USER)
+                .findFirst()
+                .map(List::of)
+                .orElseGet(List::of);
     }
 }

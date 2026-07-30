@@ -192,7 +192,9 @@ Tasks:
   single-tool fake model turns.
 - Match PI tool execution mode semantics, including default parallel execution
   where safe and ordered tool-result message emission.
-- Implement prompt, steer, and follow-up queue semantics.
+- Implement prompt, steer, and follow-up queue semantics. Started with
+  prompt `newMessages`, steering drain after completed turns, follow-up drain
+  when the loop would otherwise stop, and one-at-a-time/all queue modes.
 - Implement retry policy for retryable provider errors.
 - Implement abort behavior across model stream and tool execution.
 - Persist messages through `SessionManager`.

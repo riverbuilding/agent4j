@@ -57,10 +57,13 @@ public final class AgentLoop {
         request.abortSignal().throwIfAborted();
         eventBus.publish(new AgentEvent.AgentStarted(request.sessionId(), now(request), request.turnId()));
 
-        List<AiMessage> modelMessages = new ArrayList<>(messageConverter.convertToLlm(request.messages()));
-        List<AgentMessage> newMessages = new ArrayList<>();
         List<AgentMessage> assistantMessages = new ArrayList<>();
+        List<AiMessage> modelMessages = new ArrayList<>(messageConverter.convertToLlm(request.messages()));
+        List<AgentMessage> newMessages = new ArrayList<>(request.promptMessages());
         List<ToolResult> toolResults = new ArrayList<>();
+        List<AgentMessage> steeringQueue = new ArrayList<>(request.steeringMessages());
+        List<AgentMessage> followUpQueue = new ArrayList<>(request.followUpMessages());
+        List<AgentMessage> pendingMessages = new ArrayList<>();
         Usage usage = Usage.zero();
 
         try {
@@ -69,6 +72,9 @@ public final class AgentLoop {
                 eventBus.publish(new AgentEvent.TurnStarted(request.sessionId(), now(request), request.turnId()));
                 if (round == 0) {
                     publishPromptMessageEvents(request);
+                } else if (!pendingMessages.isEmpty()) {
+                    publishAndAppendQueuedMessages(request, pendingMessages, newMessages, modelMessages);
+                    pendingMessages.clear();
                 }
                 RoundResult roundResult = runModelRound(request, modelMessages);
                 usage = usage.plus(roundResult.usage());
@@ -86,6 +92,14 @@ public final class AgentLoop {
                             roundResult.message(),
                             roundToolResults,
                             roundResult.usage()));
+                    pendingMessages.addAll(drainQueue(request, QueueKind.STEER, steeringQueue, request.steeringMode()));
+                    if (!pendingMessages.isEmpty()) {
+                        continue;
+                    }
+                    pendingMessages.addAll(drainQueue(request, QueueKind.FOLLOW_UP, followUpQueue, request.followUpMode()));
+                    if (!pendingMessages.isEmpty()) {
+                        continue;
+                    }
                     eventBus.publish(new AgentEvent.AgentEnded(
                             request.sessionId(),
                             now(request),
@@ -122,6 +136,7 @@ public final class AgentLoop {
                         roundResult.message(),
                         roundToolResults,
                         roundResult.usage()));
+                pendingMessages.addAll(drainQueue(request, QueueKind.STEER, steeringQueue, request.steeringMode()));
             }
             throw new IllegalStateException("agent loop ended without settling");
         } catch (AgentAbortException e) {
@@ -131,14 +146,44 @@ public final class AgentLoop {
     }
 
     private void publishPromptMessageEvents(AgentLoopRequest request) {
-        request.messages().stream()
-                .filter(message -> Objects.equals(message.id(), request.parentMessageId()))
-                .filter(message -> message.role() == AgentMessageRole.USER)
-                .findFirst()
-                .ifPresent(message -> {
-                    eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), message));
-                    eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), message));
-                });
+        for (AgentMessage message : request.promptMessages()) {
+            eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), message));
+            eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), message));
+        }
+    }
+
+    private void publishAndAppendQueuedMessages(
+            AgentLoopRequest request,
+            List<AgentMessage> messages,
+            List<AgentMessage> newMessages,
+            List<AiMessage> modelMessages
+    ) {
+        for (AgentMessage message : messages) {
+            eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), message));
+            eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), message));
+            newMessages.add(message);
+        }
+        modelMessages.addAll(messageConverter.convertToLlm(messages));
+    }
+
+    private List<AgentMessage> drainQueue(
+            AgentLoopRequest request,
+            QueueKind queueKind,
+            List<AgentMessage> queue,
+            QueueMode mode
+    ) {
+        if (queue.isEmpty()) {
+            return List.of();
+        }
+        List<AgentMessage> drained;
+        if (mode == QueueMode.ALL) {
+            drained = List.copyOf(queue);
+            queue.clear();
+        } else {
+            drained = List.of(queue.removeFirst());
+        }
+        eventBus.publish(new AgentEvent.QueueUpdated(request.sessionId(), now(request), queueKind, queue.size()));
+        return drained;
     }
 
     private RoundResult runModelRound(AgentLoopRequest request, List<AiMessage> modelMessages) throws Exception {
