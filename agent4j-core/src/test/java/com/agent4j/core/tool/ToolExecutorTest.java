@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -110,6 +112,23 @@ class ToolExecutorTest {
                 context))
                 .isInstanceOf(AgentAbortException.class)
                 .hasMessage("stop");
+    }
+
+    @Test
+    void toolContextPublishesUpdatesThroughSink() {
+        List<JsonNode> updates = new ArrayList<>();
+        ToolContext context = new ToolContext(
+                "session-1",
+                Path.of("/repo"),
+                Clock.systemUTC(),
+                new AbortController().signal(),
+                Map.of(),
+                updates::add);
+
+        context.publishUpdate(JsonNodeFactory.instance.objectNode().put("status", "running"));
+
+        assertThat(updates).hasSize(1);
+        assertThat(updates.getFirst().path("status").asText()).isEqualTo("running");
     }
 
     private static ToolContext context() {

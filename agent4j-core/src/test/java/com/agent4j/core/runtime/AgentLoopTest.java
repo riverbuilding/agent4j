@@ -273,6 +273,53 @@ class AgentLoopTest {
     }
 
     @Test
+    void publishesToolExecutionUpdatesFromToolContext() throws Exception {
+        ToolCall toolCall = new ToolCall("tool-1", "progress", JSON.objectNode());
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiToolCallContent(toolCall.id(), toolCall.name(), toolCall.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("progress", "Publishes progress", JSON.objectNode()), (call, context) -> {
+                    context.publishUpdate(JSON.objectNode().put("status", "running"));
+                    return new ToolResult(call.id(), call.name(), false, JSON.textNode("ok"), JSON.objectNode());
+                })
+                .build();
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        new AgentLoop(model, registry, bus)
+                .runTurn(request(List.of(userMessage("user-1", "run progress")), 2));
+
+        assertThat(events).extracting(event -> event.getClass().getSimpleName())
+                .containsSubsequence(
+                        "ToolExecutionStarted",
+                        "ToolExecutionUpdated",
+                        "ToolExecutionEnded");
+        AgentEvent.ToolExecutionUpdated update = events.stream()
+                .filter(AgentEvent.ToolExecutionUpdated.class::isInstance)
+                .map(AgentEvent.ToolExecutionUpdated.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(update.toolCallId()).isEqualTo("tool-1");
+        assertThat(update.delta().path("status").asText()).isEqualTo("running");
+    }
+
+    @Test
     void runsMultipleToolsInParallelByDefaultButEmitsResultsInSourceOrder() throws Exception {
         ToolCall first = new ToolCall("tool-1", "first", JSON.objectNode());
         ToolCall second = new ToolCall("tool-2", "second", JSON.objectNode());

@@ -192,6 +192,8 @@ Tasks:
   where safe and ordered tool-result message emission. Started with configurable
   sequential/parallel execution, default parallel execution, and ordered
   multi-tool result emission coverage.
+- Add PI-style tool execution update callbacks. Started with `ToolContext`
+  update publishing and `tool_execution_update` event coverage.
 - Implement prompt, steer, and follow-up queue semantics. Started with
   prompt `newMessages`, steering drain after completed turns, follow-up drain
   when the loop would otherwise stop, and one-at-a-time/all queue modes.

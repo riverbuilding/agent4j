@@ -152,7 +152,7 @@ public final class AgentLoop {
             for (ToolCall toolCall : toolCalls) {
                 request.abortSignal().throwIfAborted();
                 eventBus.publish(new AgentEvent.ToolExecutionStarted(request.sessionId(), now(request), toolCall));
-                results.add(toolExecutor.execute(toolCall, toolContext(request)));
+                results.add(toolExecutor.execute(toolCall, toolContext(request, toolCall)));
             }
             return results;
         }
@@ -164,7 +164,7 @@ public final class AgentLoop {
         try {
             List<Future<ToolResult>> futures = new ArrayList<>();
             for (ToolCall toolCall : toolCalls) {
-                futures.add(executorService.submit(() -> toolExecutor.execute(toolCall, toolContext(request))));
+                futures.add(executorService.submit(() -> toolExecutor.execute(toolCall, toolContext(request, toolCall))));
             }
             List<ToolResult> results = new ArrayList<>();
             for (Future<ToolResult> future : futures) {
@@ -387,8 +387,18 @@ public final class AgentLoop {
                 .toList();
     }
 
-    private ToolContext toolContext(AgentLoopRequest request) {
-        return new ToolContext(request.sessionId(), request.cwd(), request.clock(), request.abortSignal(), request.toolAttributes());
+    private ToolContext toolContext(AgentLoopRequest request, ToolCall toolCall) {
+        return new ToolContext(
+                request.sessionId(),
+                request.cwd(),
+                request.clock(),
+                request.abortSignal(),
+                request.toolAttributes(),
+                update -> eventBus.publish(new AgentEvent.ToolExecutionUpdated(
+                        request.sessionId(),
+                        now(request),
+                        toolCall.id(),
+                        update)));
     }
 
     private static AgentMessage toAgentMessage(ToolResult result, String parentId, Instant timestamp) {
