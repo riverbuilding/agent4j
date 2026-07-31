@@ -398,9 +398,15 @@ Tasks:
   serialization, SSE line parsing, text/tool-use/thinking/usage normalization,
   auth/header/timeout handling, and fake-transport contract tests. Live tests
   remain optional and skipped until credentials are introduced.
-- Normalize streaming events into the core event model.
-- Normalize tool calls and tool results.
-- Normalize usage reporting.
+- Normalize streaming events into the core event model. Done for the current
+  loop with both legacy `AiModelClient` and PI-style `AiProvider` entry points.
+- Normalize tool calls and tool results. Done in `AgentLoop`: provider-normalized
+  `AiToolCallContent` becomes core `ToolCall`, executed `ToolResult` envelopes
+  are appended to the transcript, and follow-up provider requests receive
+  `AiToolResultMessage`.
+- Normalize usage reporting. Done by carrying provider `AiUsage` into per-turn
+  `AgentEvent.TurnEnded` usage and aggregate `AgentLoopResult`/`AgentEnded`
+  usage.
 - Add timeout and retry configuration.
 
 Exit criteria:

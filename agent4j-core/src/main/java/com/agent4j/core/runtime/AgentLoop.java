@@ -1,9 +1,16 @@
 package com.agent4j.core.runtime;
 
+import com.agent4j.ai.AiAbortSignal;
 import com.agent4j.ai.AiMessage;
+import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelClient;
+import com.agent4j.ai.AiProvider;
+import com.agent4j.ai.AiProviderContext;
+import com.agent4j.ai.AiProviderRequest;
+import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
+import com.agent4j.ai.AiStreamOptions;
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlocks;
 import com.agent4j.ai.AiSystemMessage;
@@ -27,17 +34,19 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 
 public final class AgentLoop {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
 
-    private final AiModelClient modelClient;
+    private final ModelRoundStreamer modelStreamer;
     private final ToolRegistry toolRegistry;
     private final ToolExecutor toolExecutor;
     private final AgentEventBus eventBus;
@@ -64,7 +73,57 @@ public final class AgentLoop {
             AgentMessageConverter messageConverter,
             List<ToolExecutionHook> toolExecutionHooks
     ) {
-        this.modelClient = Objects.requireNonNull(modelClient, "modelClient");
+        this(
+                adaptModelClient(modelClient),
+                toolRegistry,
+                eventBus,
+                messageConverter,
+                toolExecutionHooks);
+    }
+
+    public AgentLoop(
+            AiProvider provider,
+            AiModel model,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus
+    ) {
+        this(provider, model, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE);
+    }
+
+    public AgentLoop(
+            AiProvider provider,
+            AiModel model,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter
+    ) {
+        this(provider, model, toolRegistry, eventBus, messageConverter, List.of());
+    }
+
+    public AgentLoop(
+            AiProvider provider,
+            AiModel model,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter,
+            List<ToolExecutionHook> toolExecutionHooks
+    ) {
+        this(
+                adaptProvider(provider, model),
+                toolRegistry,
+                eventBus,
+                messageConverter,
+                toolExecutionHooks);
+    }
+
+    private AgentLoop(
+            ModelRoundStreamer modelStreamer,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter,
+            List<ToolExecutionHook> toolExecutionHooks
+    ) {
+        this.modelStreamer = Objects.requireNonNull(modelStreamer, "modelStreamer");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
         this.toolExecutor = new ToolExecutor(toolRegistry);
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
@@ -326,7 +385,7 @@ public final class AgentLoop {
 
     private RoundResult runModelRound(AgentLoopRequest request, List<AiMessage> modelMessages) throws Exception {
         List<AiStreamEvent> events = new ArrayList<>();
-        modelClient.stream(new AiTurnRequest(modelMessages, toolSpecs()), event -> {
+        modelStreamer.stream(request, new AiTurnRequest(modelMessages, toolSpecs()), event -> {
             request.abortSignal().throwIfAborted();
             events.add(event);
             publishModelEvent(request, event);
@@ -485,5 +544,61 @@ public final class AgentLoop {
     }
 
     private record RoundResult(AgentMessage message, AiStopReason stopReason, Usage usage) {
+    }
+
+    @FunctionalInterface
+    private interface ModelRoundStreamer {
+        void stream(AgentLoopRequest request, AiTurnRequest turnRequest, Consumer<AiStreamEvent> sink) throws Exception;
+    }
+
+    private static ModelRoundStreamer adaptModelClient(AiModelClient modelClient) {
+        Objects.requireNonNull(modelClient, "modelClient");
+        return (request, turnRequest, sink) -> modelClient.stream(turnRequest, sink);
+    }
+
+    private static ModelRoundStreamer adaptProvider(AiProvider provider, AiModel model) {
+        Objects.requireNonNull(provider, "provider");
+        Objects.requireNonNull(model, "model");
+        return (request, turnRequest, sink) -> provider.stream(
+                new AiProviderRequest(model, turnRequest, providerContext(request), streamOptions(request)),
+                sink);
+    }
+
+    private static AiProviderContext providerContext(AgentLoopRequest request) {
+        return new AiProviderContext(
+                Optional.of(request.sessionId()),
+                Optional.of(request.turnId()),
+                Optional.of(request.cwd()),
+                AiResolvedAuth.none(),
+                Map.of(),
+                providerAttributes(request));
+    }
+
+    private static Map<String, Object> providerAttributes(AgentLoopRequest request) {
+        if (request.parentMessageId() == null || request.parentMessageId().isBlank()) {
+            return Map.of("maxToolRounds", request.maxToolRounds());
+        }
+        return Map.of(
+                "parentMessageId", request.parentMessageId(),
+                "maxToolRounds", request.maxToolRounds());
+    }
+
+    private static AiStreamOptions streamOptions(AgentLoopRequest request) {
+        return new AiStreamOptions(
+                new AiAbortSignal() {
+                    @Override
+                    public boolean aborted() {
+                        return request.abortSignal().aborted();
+                    }
+
+                    @Override
+                    public void throwIfAborted() {
+                        request.abortSignal().throwIfAborted();
+                    }
+                },
+                Optional.empty(),
+                request.maxModelRetries(),
+                Map.of(),
+                Map.of());
     }
 }
