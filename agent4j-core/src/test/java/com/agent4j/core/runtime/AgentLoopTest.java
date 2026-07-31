@@ -86,6 +86,39 @@ class AgentLoopTest {
     }
 
     @Test
+    void prependsSystemPromptToModelRequestWithoutPersistingItInTranscript() throws Exception {
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(
+                new AiStreamEvent.MessageStarted("assistant-1"),
+                new AiStreamEvent.MessageCompleted(
+                        "assistant-1",
+                        new AiAssistantMessage(
+                                List.of(new AiTextContent("hello")),
+                                AiStopReason.STOP,
+                                AiUsage.zero()))));
+
+        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus())
+                .runTurn(new AgentLoopRequest(
+                        "session-1",
+                        "turn-1",
+                        "user-1",
+                        List.of(userMessage("user-1", "say hi")),
+                        Path.of("/repo"),
+                        clock,
+                        new AbortController().signal(),
+                        Map.of(),
+                        "Use concise answers.",
+                        1));
+
+        assertThat(model.requests()).hasSize(1);
+        assertThat(model.requests().getFirst().messages()).extracting(AiMessage::role)
+                .containsExactly("system", "user");
+        assertThat(((com.agent4j.ai.AiSystemMessage) model.requests().getFirst().messages().getFirst()).content())
+                .isEqualTo("Use concise answers.");
+        assertThat(result.messages()).extracting(AgentMessage::role)
+                .containsExactly(AgentMessageRole.USER, AgentMessageRole.ASSISTANT);
+    }
+
+    @Test
     void publishesPiStyleAssistantStreamFragmentsAsMessageUpdates() throws Exception {
         ToolCall toolCall = new ToolCall("tool-1", "echo", JSON.objectNode().put("text", "hello"));
         FakeModelClient model = new FakeModelClient().enqueue(List.of(
@@ -964,6 +997,7 @@ class AgentLoopTest {
                 clock,
                 new AbortController().signal(),
                 Map.of(),
+                null,
                 maxToolRounds,
                 0,
                 toolExecutionMode,

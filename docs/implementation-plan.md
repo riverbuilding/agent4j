@@ -291,32 +291,81 @@ Exit criteria:
 
 ## Phase 5: Settings And Resource Discovery
 
+Status: complete for resource-loader boundary
+
 Goal: reproduce PI's project/user configuration discovery.
 
 Tasks:
 
 - Mirror PI's resource-loader boundaries and precedence rules before adding
-  Java-specific configuration conveniences.
-- Implement agent directory resolution.
-- Implement global and project settings loading.
-- Implement settings merge rules.
+  Java-specific configuration conveniences. Done with `ResourceLoader`,
+  `ResourceDiscoveryOptions`, and typed resource file records.
+- Implement agent directory resolution. Started with global `~/.pi/agent` and
+  current-project `.pi` directories.
+- Implement global and project settings loading. Started with
+  `~/.pi/agent/settings.json` and `.pi/settings.json`.
+- Implement settings merge rules. Started with global-then-project precedence,
+  nested object merge, array/scalar replacement, typed accessors, and
+  unknown-field preservation.
 - Implement context file loading:
-  - global `AGENTS.md`
-  - parent directory `AGENTS.md`
-  - project `AGENTS.md`
-  - `CLAUDE.md`
-  - `SYSTEM.md`
-  - `APPEND_SYSTEM.md`
-- Implement prompt template loading.
-- Implement skill metadata loading and prompt formatting.
-- Stub theme discovery for later UI use.
+  - global `AGENTS.md`. Done for `~/.pi/agent/AGENTS.md`.
+  - parent directory `AGENTS.md`. Done by walking ancestors from cwd.
+  - project/current directory `AGENTS.md`. Done for cwd.
+  - `CLAUDE.md`. Done as fallback when `AGENTS.md` is absent in the same
+    directory.
+  - `SYSTEM.md`. Started with global/project replacement precedence.
+  - `APPEND_SYSTEM.md`. Started with global then project append order.
+- Implement prompt template loading. Started with global
+  `~/.pi/agent/prompts/*.md`, project `.pi/prompts/*.md`, settings `prompts`
+  paths relative to their settings file, direct-directory loading, simple glob
+  includes/excludes, template-name dedupe, frontmatter `description` and
+  `argument-hint`, and a prompt-template disable flag.
+- Implement skill metadata loading and prompt formatting. Started with
+  metadata loading for `.pi/skills`, `.agents/skills`, `~/.pi/agent/skills`,
+  `~/.agents/skills`, and settings `skills` paths. Skill discovery parses
+  required `name`/`description`, optional `license`, `compatibility`,
+  `allowed-tools`, and `disable-model-invocation`, keeps first skill on name
+  collisions, reports diagnostics, and supports a skill-discovery disable flag.
+  Started system prompt formatting with a `SystemPromptBuilder` that assembles
+  selected `SYSTEM.md`, ordered `APPEND_SYSTEM.md`, context files, and
+  model-visible skill metadata while hiding `disable-model-invocation` skills.
+  Started system prompt transport with `AiSystemMessage` and optional
+  `AgentLoopRequest.systemPrompt`, so assembled prompts can be sent to the
+  model without being persisted as transcript messages. Started coding-agent
+  request preparation with `CodingAgentLoopRequestFactory`, which discovers
+  resources, assembles the system prompt, preserves the original loop request
+  fields, and returns discovery metadata for diagnostics. Full `AgentSession`
+  wiring and fixture-based exact text parity are still pending.
+- Implement theme discovery. Done for global `~/.pi/agent/themes/*.json`,
+  project `.pi/themes/*.json`, settings `themes` paths, CLI-supplied theme
+  paths, theme-name override behavior, and `--no-themes` style disabling.
+- Implement package resource loading. Done for local package directories from
+  settings `packages`, package `pi.prompts`/`pi.skills`/`pi.themes` manifest
+  entries, conventional `prompts`/`skills`/`themes` directories, package
+  resource filters, package disabling, and diagnostics for unsupported
+  non-local package sources. npm/git install/update/reconcile behavior remains
+  a later CLI/package-management responsibility.
+- Implement project trust/resource gating. Done with explicit
+  `ProjectTrustPolicy` enforcement: untrusted discovery skips protected
+  project settings, `.pi` prompt/system/skill/theme resources, and project
+  `.agents/skills`, while still loading context files. Interactive prompting
+  and `trust.json` persistence remain later CLI/runtime responsibilities.
 
 Exit criteria:
 
-- Tests cover resource precedence and disabled context files.
-- System prompt builder can reproduce the expected ordered inputs.
+- Tests cover resource precedence and disabled context files. Started for
+  context files, system/append prompt files, settings precedence, nested
+  settings merge, malformed settings, prompt template discovery/metadata, and
+  skill discovery/metadata/diagnostics. Done for the Phase 5 resource-loader
+  boundary, including themes, package resources, unsupported package
+  diagnostics, project trust gating, and resource disable flags.
+- System prompt builder can reproduce the expected ordered inputs. Started with
+  tests for selected system prompt, append order, context ordering/escaping, and
+  hidden skills. `AgentLoop` tests now cover system-prompt transport into the
+  model request, and coding runtime tests cover resource-backed request
+  preparation.
 - Discovery order and merge behavior have parity tests based on PI fixtures or
-  documented PI behavior.
+  documented PI behavior. Done against documented PI behavior for this phase.
 
 ## Phase 6: Provider Adapters
 

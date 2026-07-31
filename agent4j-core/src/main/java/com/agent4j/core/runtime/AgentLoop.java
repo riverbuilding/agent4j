@@ -6,6 +6,7 @@ import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlocks;
+import com.agent4j.ai.AiSystemMessage;
 import com.agent4j.ai.AiToolSpec;
 import com.agent4j.ai.AiTurnRequest;
 import com.agent4j.ai.AiUsage;
@@ -86,7 +87,7 @@ public final class AgentLoop {
         eventBus.publish(new AgentEvent.AgentStarted(request.sessionId(), now(request), request.turnId()));
 
         List<AgentMessage> assistantMessages = new ArrayList<>();
-        List<AiMessage> modelMessages = new ArrayList<>(messageConverter.convertToLlm(request.messages()));
+        List<AiMessage> modelMessages = initialModelMessages(request);
         List<AgentMessage> newMessages = new ArrayList<>(request.promptMessages());
         List<ToolResult> toolResults = new ArrayList<>();
         List<AgentMessage> steeringQueue = new ArrayList<>(request.steeringMessages());
@@ -345,6 +346,15 @@ public final class AgentLoop {
                 JSON.objectNode());
         eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), message));
         return new RoundResult(message, completedMessage.stopReason(), toUsage(completedMessage.usage()));
+    }
+
+    private List<AiMessage> initialModelMessages(AgentLoopRequest request) {
+        List<AiMessage> modelMessages = new ArrayList<>();
+        if (request.systemPrompt() != null) {
+            modelMessages.add(new AiSystemMessage(request.systemPrompt()));
+        }
+        modelMessages.addAll(messageConverter.convertToLlm(request.messages()));
+        return modelMessages;
     }
 
     private void publishModelEvent(AgentLoopRequest request, AiStreamEvent event) {

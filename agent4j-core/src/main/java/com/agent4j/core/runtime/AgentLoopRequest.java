@@ -18,6 +18,7 @@ public record AgentLoopRequest(
         Clock clock,
         AbortSignal abortSignal,
         Map<String, Object> toolAttributes,
+        String systemPrompt,
         int maxToolRounds,
         int maxModelRetries,
         ToolExecutionMode toolExecutionMode,
@@ -47,6 +48,39 @@ public record AgentLoopRequest(
                 clock,
                 abortSignal,
                 toolAttributes,
+                null,
+                maxToolRounds,
+                0,
+                ToolExecutionMode.PARALLEL,
+                inferPromptMessages(parentMessageId, messages),
+                List.of(),
+                List.of(),
+                QueueMode.ONE_AT_A_TIME,
+                QueueMode.ONE_AT_A_TIME);
+    }
+
+    public AgentLoopRequest(
+            String sessionId,
+            String turnId,
+            String parentMessageId,
+            List<AgentMessage> messages,
+            Path cwd,
+            Clock clock,
+            AbortSignal abortSignal,
+            Map<String, Object> toolAttributes,
+            String systemPrompt,
+            int maxToolRounds
+    ) {
+        this(
+                sessionId,
+                turnId,
+                parentMessageId,
+                messages,
+                cwd,
+                clock,
+                abortSignal,
+                toolAttributes,
+                systemPrompt,
                 maxToolRounds,
                 0,
                 ToolExecutionMode.PARALLEL,
@@ -83,6 +117,45 @@ public record AgentLoopRequest(
                 clock,
                 abortSignal,
                 toolAttributes,
+                null,
+                maxToolRounds,
+                maxModelRetries,
+                ToolExecutionMode.PARALLEL,
+                promptMessages,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode);
+    }
+
+    public AgentLoopRequest(
+            String sessionId,
+            String turnId,
+            String parentMessageId,
+            List<AgentMessage> messages,
+            Path cwd,
+            Clock clock,
+            AbortSignal abortSignal,
+            Map<String, Object> toolAttributes,
+            String systemPrompt,
+            int maxToolRounds,
+            int maxModelRetries,
+            List<AgentMessage> promptMessages,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode
+    ) {
+        this(
+                sessionId,
+                turnId,
+                parentMessageId,
+                messages,
+                cwd,
+                clock,
+                abortSignal,
+                toolAttributes,
+                systemPrompt,
                 maxToolRounds,
                 maxModelRetries,
                 ToolExecutionMode.PARALLEL,
@@ -111,6 +184,7 @@ public record AgentLoopRequest(
         }
         messages = List.copyOf(messages);
         toolAttributes = toolAttributes == null ? Map.of() : Map.copyOf(toolAttributes);
+        systemPrompt = systemPrompt == null || systemPrompt.isBlank() ? null : systemPrompt;
         promptMessages = promptMessages == null ? List.of() : List.copyOf(promptMessages);
         steeringMessages = steeringMessages == null ? List.of() : List.copyOf(steeringMessages);
         followUpMessages = followUpMessages == null ? List.of() : List.copyOf(followUpMessages);
