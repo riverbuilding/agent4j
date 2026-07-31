@@ -1,0 +1,40 @@
+{
+  "provider": {
+    "id": "recorded-openai",
+    "name": "Recorded OpenAI",
+    "api": "openai-responses"
+  },
+  "model": {
+    "id": "gpt-recorded",
+    "name": "GPT Recorded",
+    "api": "openai-responses",
+    "input": ["text", "image"],
+    "reasoning": true,
+    "contextWindow": 272000,
+    "maxTokens": 16384
+  },
+  "events": [
+    { "type": "message_start", "messageId": "assistant-1" },
+    { "type": "text_start", "messageId": "assistant-1", "contentIndex": 0 },
+    { "type": "text_delta", "messageId": "assistant-1", "contentIndex": 0, "delta": "Reading" },
+    { "type": "text_end", "messageId": "assistant-1", "contentIndex": 0 },
+    { "type": "toolcall_start", "messageId": "assistant-1", "contentIndex": 1, "toolCallId": "call-1", "toolName": "read" },
+    { "type": "toolcall_delta", "messageId": "assistant-1", "contentIndex": 1, "delta": { "path": "README.md" } },
+    { "type": "toolcall_end", "messageId": "assistant-1", "contentIndex": 1, "toolCallId": "call-1" },
+    {
+      "type": "message_done",
+      "messageId": "assistant-1",
+      "stopReason": "TOOL_USE",
+      "usage": {
+        "input": 100,
+        "output": 12,
+        "cacheRead": 8,
+        "reasoning": 3
+      },
+      "content": [
+        { "type": "text", "text": "Reading" },
+        { "type": "toolCall", "id": "call-1", "name": "read", "arguments": { "path": "README.md" } }
+      ]
+    }
+  ]
+}

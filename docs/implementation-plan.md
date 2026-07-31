@@ -369,17 +369,35 @@ Exit criteria:
 
 ## Phase 6: Provider Adapters
 
+Status: started
+
 Goal: connect the agent loop to real LLM providers through `agent4j-ai`.
 
 Tasks:
 
 - Mirror PI `@earendil-works/pi-ai` provider abstraction first: model metadata,
   `Context`, `StreamOptions`, provider request hooks, timeout/retry options,
-  usage accounting, and provider-normalized stream events.
+  usage accounting, and provider-normalized stream events. Done for the first
+  abstraction slice with `AiProvider`, `AiProviderRequest`, `AiProviderContext`,
+  `AiStreamOptions`, `AiProviderRequestHook`, PI-style model metadata, model
+  references, API/input/thinking enums, cost metadata, compatibility metadata,
+  and normalized streaming through existing `AiStreamEvent`.
 - Implement model registry and model references.
 - Implement auth storage abstraction.
-- Add OpenAI adapter.
-- Add Anthropic adapter.
+- Add fake/recorded provider contract tests. Done with reusable
+  `agent4j-testkit` fake provider, recorded provider fixture replay, normalized
+  stream contract assertions, and a JSON fixture that covers text, tool calls,
+  terminal message state, and usage.
+- Add OpenAI adapter. Started with `OpenAiResponsesProvider`, Java `HttpClient`
+  transport, injectable test transport, Responses API request serialization,
+  SSE line parsing, text/function-call/usage normalization, auth/header/timeout
+  handling, and fake-transport contract tests. Live tests remain optional and
+  skipped until credentials are introduced.
+- Add Anthropic adapter. Started with `AnthropicMessagesProvider`, Java
+  `HttpClient` transport, injectable test transport, Messages API request
+  serialization, SSE line parsing, text/tool-use/thinking/usage normalization,
+  auth/header/timeout handling, and fake-transport contract tests. Live tests
+  remain optional and skipped until credentials are introduced.
 - Normalize streaming events into the core event model.
 - Normalize tool calls and tool results.
 - Normalize usage reporting.
