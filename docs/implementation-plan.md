@@ -456,6 +456,20 @@ Tasks:
 - Add `AgentSession`.
 - Add `AgentSessionRuntime`.
 - Add runtime replacement for new, resume, fork, clone, and import.
+- Add login/auth runtime API before CLI ownership:
+  - provider-neutral `LoginService`/`AuthSession` API
+  - ChatGPT/Codex subscription login flow, including browser OAuth and device
+    code modes, so ChatGPT Plus/Pro/Team/Enterprise-style subscription access is
+    a first-class runtime capability rather than a CLI-only concern
+  - API-key login flow for OpenAI/Anthropic-compatible providers as the
+    usage-based alternative to subscription login
+  - access-token login flow for Codex/OpenAI-compatible automation and testing
+  - local user credential store abstraction with explicit non-project-secret
+    storage boundary
+  - auth status/logout APIs that can expose provider auth mode and plan metadata
+    when the provider makes it available
+  - tests with fake OAuth server/transport and in-memory credential store; fake
+    provider login is test infrastructure only, not the product target
 - Add extension binding placeholders.
 - Add API docs and examples.
 
@@ -463,6 +477,10 @@ Exit criteria:
 
 - Minimal Java example can create a session, subscribe to events, and prompt
   against a fake model.
+- Login API supports real ChatGPT/Codex subscription login shape, including
+  browser OAuth, device code, status, logout, persisted user credentials, and
+  resolved auth for provider-backed runtime creation. Fake-provider auth covers
+  the same contract in deterministic tests.
 
 ## Phase 9: CLI Modes
 
@@ -483,6 +501,8 @@ Tasks:
   - fork
   - name
 - Add model and tool selection flags.
+- Add `login`, `logout`, and auth-status commands as thin CLI wrappers over the
+  Phase 8 login/auth API.
 
 Exit criteria:
 
