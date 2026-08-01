@@ -369,7 +369,7 @@ Exit criteria:
 
 ## Phase 6: Provider Adapters
 
-Status: started
+Status: complete
 
 Goal: connect the agent loop to real LLM providers through `agent4j-ai`.
 
@@ -382,8 +382,12 @@ Tasks:
   `AiStreamOptions`, `AiProviderRequestHook`, PI-style model metadata, model
   references, API/input/thinking enums, cost metadata, compatibility metadata,
   and normalized streaming through existing `AiStreamEvent`.
-- Implement model registry and model references.
-- Implement auth storage abstraction.
+- Implement model registry and model references. Done with `AiProviderRegistry`,
+  `AiProviderSelection`, explicit/default `AiModelReference` resolution, and
+  coding settings-backed provider/model selection.
+- Implement auth storage abstraction. Done with `AiAuthStore`,
+  `InMemoryAiAuthStore`, `EnvironmentAiAuthStore`, settings-backed auth
+  resolution, and provider-backed `AgentLoop` auth injection.
 - Add fake/recorded provider contract tests. Done with reusable
   `agent4j-testkit` fake provider, recorded provider fixture replay, normalized
   stream contract assertions, and a JSON fixture that covers text, tool calls,

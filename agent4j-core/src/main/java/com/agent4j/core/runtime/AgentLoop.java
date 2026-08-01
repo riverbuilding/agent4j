@@ -7,6 +7,7 @@ import com.agent4j.ai.AiModelClient;
 import com.agent4j.ai.AiProvider;
 import com.agent4j.ai.AiProviderContext;
 import com.agent4j.ai.AiProviderRequest;
+import com.agent4j.ai.AiProviderSelection;
 import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
@@ -91,6 +92,31 @@ public final class AgentLoop {
     }
 
     public AgentLoop(
+            AiProviderSelection selection,
+            AiResolvedAuth auth,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus
+    ) {
+        this(selection, auth, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE);
+    }
+
+    public AgentLoop(
+            AiProviderSelection selection,
+            AiResolvedAuth auth,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter
+    ) {
+        this(
+                selection.provider(),
+                selection.model(),
+                auth,
+                toolRegistry,
+                eventBus,
+                messageConverter);
+    }
+
+    public AgentLoop(
             AiProvider provider,
             AiModel model,
             ToolRegistry toolRegistry,
@@ -108,8 +134,41 @@ public final class AgentLoop {
             AgentMessageConverter messageConverter,
             List<ToolExecutionHook> toolExecutionHooks
     ) {
+        this(provider, model, AiResolvedAuth.none(), toolRegistry, eventBus, messageConverter, toolExecutionHooks);
+    }
+
+    public AgentLoop(
+            AiProvider provider,
+            AiModel model,
+            AiResolvedAuth auth,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus
+    ) {
+        this(provider, model, auth, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE);
+    }
+
+    public AgentLoop(
+            AiProvider provider,
+            AiModel model,
+            AiResolvedAuth auth,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter
+    ) {
+        this(provider, model, auth, toolRegistry, eventBus, messageConverter, List.of());
+    }
+
+    public AgentLoop(
+            AiProvider provider,
+            AiModel model,
+            AiResolvedAuth auth,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter,
+            List<ToolExecutionHook> toolExecutionHooks
+    ) {
         this(
-                adaptProvider(provider, model),
+                adaptProvider(provider, model, auth),
                 toolRegistry,
                 eventBus,
                 messageConverter,
@@ -556,20 +615,21 @@ public final class AgentLoop {
         return (request, turnRequest, sink) -> modelClient.stream(turnRequest, sink);
     }
 
-    private static ModelRoundStreamer adaptProvider(AiProvider provider, AiModel model) {
+    private static ModelRoundStreamer adaptProvider(AiProvider provider, AiModel model, AiResolvedAuth auth) {
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(model, "model");
+        Objects.requireNonNull(auth, "auth");
         return (request, turnRequest, sink) -> provider.stream(
-                new AiProviderRequest(model, turnRequest, providerContext(request), streamOptions(request)),
+                new AiProviderRequest(model, turnRequest, providerContext(request, auth), streamOptions(request)),
                 sink);
     }
 
-    private static AiProviderContext providerContext(AgentLoopRequest request) {
+    private static AiProviderContext providerContext(AgentLoopRequest request, AiResolvedAuth auth) {
         return new AiProviderContext(
                 Optional.of(request.sessionId()),
                 Optional.of(request.turnId()),
                 Optional.of(request.cwd()),
-                AiResolvedAuth.none(),
+                auth,
                 Map.of(),
                 providerAttributes(request));
     }

@@ -5,6 +5,7 @@ import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProviderApi;
+import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiTextContent;
@@ -340,6 +341,36 @@ class AgentLoopTest {
                 .map(AgentEvent.TurnEnded.class::cast)
                 .map(AgentEvent.TurnEnded::usage))
                 .containsExactly(new Usage(5, 1, 2, 0), new Usage(4, 2, 0, 1));
+    }
+
+    @Test
+    void providerBackedLoopCarriesResolvedAuthIntoProviderContext() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("fake-provider", "fake-model"), "Fake Model");
+        FakeProvider provider = new FakeProvider(
+                "fake-provider",
+                "Fake Provider",
+                AiProviderApi.CUSTOM,
+                List.of(model))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        AiResolvedAuth auth = new AiResolvedAuth(
+                Optional.of("sk-test"),
+                Map.of("X-Test", "yes"),
+                Optional.of("https://provider.test"),
+                Optional.of("test"),
+                Map.of());
+
+        new AgentLoop(provider, model, auth, InMemoryToolRegistry.builder().build(), new AgentEventBus())
+                .runTurn(request(List.of(userMessage("user-1", "hello")), 1));
+
+        assertThat(provider.requests()).hasSize(1);
+        assertThat(provider.requests().getFirst().context().auth()).isEqualTo(auth);
     }
 
     @Test

@@ -88,6 +88,55 @@ class AiProviderAbstractionTest {
                 .containsExactly("MessageStarted", "TextStarted", "TextDelta", "TextEnded", "MessageCompleted");
     }
 
+    @Test
+    void providerRegistryResolvesDefaultAndExplicitProviderModels() {
+        AiModel first = new AiModel(new AiModelReference("fake", "first"), "First");
+        AiModel second = new AiModel(new AiModelReference("other", "second"), "Second");
+        AiProviderRegistry registry = AiProviderRegistry.builder()
+                .add(new FakeProvider(List.of(first)))
+                .add(new OtherFakeProvider(List.of(second)))
+                .defaultModel(second.reference())
+                .build();
+
+        assertThat(registry.requireDefault().model()).isEqualTo(second);
+        assertThat(registry.require(new AiModelReference("fake", "first")).model()).isEqualTo(first);
+        assertThat(registry.provider("other")).isPresent();
+        assertThatThrownBy(() -> AiProviderRegistry.builder()
+                .add(new FakeProvider(List.of(first)))
+                .add(new FakeProvider(List.of(first)))
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("duplicate provider");
+        assertThatThrownBy(() -> registry.require(new AiModelReference("missing", "model")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknown provider/model");
+    }
+
+    @Test
+    void authStoresResolveInMemoryAndEnvironmentAuth() {
+        AiResolvedAuth configured = new AiResolvedAuth(
+                Optional.of("sk-test"),
+                Map.of("X-Test", "yes"),
+                Optional.of("https://example.test"),
+                Optional.of("test"),
+                Map.of());
+        AiAuthStore memory = InMemoryAiAuthStore.builder()
+                .put("openai", configured)
+                .build();
+        AiAuthStore environment = new EnvironmentAiAuthStore(Map.of(
+                "ANTHROPIC_API_KEY", "sk-ant-test",
+                "ANTHROPIC_BASE_URL", "https://anthropic.test"));
+
+        assertThat(memory.resolve("openai")).contains(configured);
+        assertThat(memory.resolve("anthropic")).isEmpty();
+        assertThat(environment.resolve("anthropic")).hasValueSatisfying(auth -> {
+            assertThat(auth.apiKey()).contains("sk-ant-test");
+            assertThat(auth.baseUrl()).contains("https://anthropic.test");
+            assertThat(auth.source()).contains("environment");
+        });
+        assertThat(environment.resolve("openai")).isEmpty();
+    }
+
     private record FakeProvider(List<AiModel> models) implements AiProvider {
         private FakeProvider {
             models = List.copyOf(models);
@@ -121,6 +170,32 @@ class AiProviderAbstractionTest {
                             List.of(new AiTextContent("ok")),
                             AiStopReason.STOP,
                             AiUsage.zero())));
+        }
+    }
+
+    private record OtherFakeProvider(List<AiModel> models) implements AiProvider {
+        private OtherFakeProvider {
+            models = List.copyOf(models);
+        }
+
+        @Override
+        public String id() {
+            return "other";
+        }
+
+        @Override
+        public String name() {
+            return "Other Fake";
+        }
+
+        @Override
+        public AiProviderApi api() {
+            return AiProviderApi.CUSTOM;
+        }
+
+        @Override
+        public void stream(AiProviderRequest request, java.util.function.Consumer<AiStreamEvent> sink) {
+            throw new UnsupportedOperationException();
         }
     }
 }
