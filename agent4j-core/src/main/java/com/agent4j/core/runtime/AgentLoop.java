@@ -596,7 +596,7 @@ public final class AgentLoop {
                         request.abortSignal().throwIfAborted();
                     }
                 },
-                Optional.empty(),
+                request.modelTimeout(),
                 request.maxModelRetries(),
                 Map.of(),
                 Map.of());

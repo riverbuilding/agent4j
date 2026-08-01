@@ -5,9 +5,11 @@ import com.agent4j.core.message.UserAgentMessageView;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public record AgentLoopRequest(
         String sessionId,
@@ -21,6 +23,7 @@ public record AgentLoopRequest(
         String systemPrompt,
         int maxToolRounds,
         int maxModelRetries,
+        Optional<Duration> modelTimeout,
         ToolExecutionMode toolExecutionMode,
         List<AgentMessage> promptMessages,
         List<AgentMessage> steeringMessages,
@@ -51,6 +54,7 @@ public record AgentLoopRequest(
                 null,
                 maxToolRounds,
                 0,
+                Optional.empty(),
                 ToolExecutionMode.PARALLEL,
                 inferPromptMessages(parentMessageId, messages),
                 List.of(),
@@ -83,6 +87,7 @@ public record AgentLoopRequest(
                 systemPrompt,
                 maxToolRounds,
                 0,
+                Optional.empty(),
                 ToolExecutionMode.PARALLEL,
                 inferPromptMessages(parentMessageId, messages),
                 List.of(),
@@ -120,6 +125,46 @@ public record AgentLoopRequest(
                 null,
                 maxToolRounds,
                 maxModelRetries,
+                Optional.empty(),
+                ToolExecutionMode.PARALLEL,
+                promptMessages,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode);
+    }
+
+    public AgentLoopRequest(
+            String sessionId,
+            String turnId,
+            String parentMessageId,
+            List<AgentMessage> messages,
+            Path cwd,
+            Clock clock,
+            AbortSignal abortSignal,
+            Map<String, Object> toolAttributes,
+            int maxToolRounds,
+            int maxModelRetries,
+            Optional<Duration> modelTimeout,
+            List<AgentMessage> promptMessages,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode
+    ) {
+        this(
+                sessionId,
+                turnId,
+                parentMessageId,
+                messages,
+                cwd,
+                clock,
+                abortSignal,
+                toolAttributes,
+                null,
+                maxToolRounds,
+                maxModelRetries,
+                modelTimeout,
                 ToolExecutionMode.PARALLEL,
                 promptMessages,
                 steeringMessages,
@@ -158,6 +203,47 @@ public record AgentLoopRequest(
                 systemPrompt,
                 maxToolRounds,
                 maxModelRetries,
+                Optional.empty(),
+                ToolExecutionMode.PARALLEL,
+                promptMessages,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode);
+    }
+
+    public AgentLoopRequest(
+            String sessionId,
+            String turnId,
+            String parentMessageId,
+            List<AgentMessage> messages,
+            Path cwd,
+            Clock clock,
+            AbortSignal abortSignal,
+            Map<String, Object> toolAttributes,
+            String systemPrompt,
+            int maxToolRounds,
+            int maxModelRetries,
+            Optional<Duration> modelTimeout,
+            List<AgentMessage> promptMessages,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode
+    ) {
+        this(
+                sessionId,
+                turnId,
+                parentMessageId,
+                messages,
+                cwd,
+                clock,
+                abortSignal,
+                toolAttributes,
+                systemPrompt,
+                maxToolRounds,
+                maxModelRetries,
+                modelTimeout,
                 ToolExecutionMode.PARALLEL,
                 promptMessages,
                 steeringMessages,
@@ -173,6 +259,7 @@ public record AgentLoopRequest(
         Objects.requireNonNull(cwd, "cwd");
         Objects.requireNonNull(clock, "clock");
         Objects.requireNonNull(abortSignal, "abortSignal");
+        Objects.requireNonNull(modelTimeout, "modelTimeout");
         Objects.requireNonNull(toolExecutionMode, "toolExecutionMode");
         Objects.requireNonNull(steeringMode, "steeringMode");
         Objects.requireNonNull(followUpMode, "followUpMode");
@@ -182,6 +269,11 @@ public record AgentLoopRequest(
         if (maxModelRetries < 0) {
             throw new IllegalArgumentException("maxModelRetries must be non-negative");
         }
+        modelTimeout.ifPresent(timeout -> {
+            if (timeout.isZero() || timeout.isNegative()) {
+                throw new IllegalArgumentException("modelTimeout must be positive");
+            }
+        });
         messages = List.copyOf(messages);
         toolAttributes = toolAttributes == null ? Map.of() : Map.copyOf(toolAttributes);
         systemPrompt = systemPrompt == null || systemPrompt.isBlank() ? null : systemPrompt;

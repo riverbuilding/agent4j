@@ -1,14 +1,18 @@
 package com.agent4j.coding.runtime;
 
+import com.agent4j.coding.resource.AgentSettings;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
 import com.agent4j.coding.resource.SystemPromptBuilder;
 import com.agent4j.core.runtime.AgentLoopRequest;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class CodingAgentLoopRequestFactory {
     private final ResourceLoader resourceLoader;
@@ -32,10 +36,14 @@ public final class CodingAgentLoopRequestFactory {
         Objects.requireNonNull(options, "options");
         ResourceDiscovery discovery = resourceLoader.discover(options);
         String systemPrompt = systemPromptBuilder.build(discovery);
-        return new PreparedAgentLoopRequest(withSystemPrompt(request, systemPrompt), discovery);
+        return new PreparedAgentLoopRequest(withSystemPromptAndSettings(request, systemPrompt, discovery.settings()), discovery);
     }
 
-    private static AgentLoopRequest withSystemPrompt(AgentLoopRequest request, String systemPrompt) {
+    private static AgentLoopRequest withSystemPromptAndSettings(
+            AgentLoopRequest request,
+            String systemPrompt,
+            AgentSettings settings
+    ) {
         return new AgentLoopRequest(
                 request.sessionId(),
                 request.turnId(),
@@ -47,12 +55,30 @@ public final class CodingAgentLoopRequestFactory {
                 request.toolAttributes(),
                 systemPrompt,
                 request.maxToolRounds(),
-                request.maxModelRetries(),
+                maxModelRetries(request, settings),
+                modelTimeout(request, settings),
                 request.toolExecutionMode(),
                 request.promptMessages(),
                 request.steeringMessages(),
                 request.followUpMessages(),
                 request.steeringMode(),
                 request.followUpMode());
+    }
+
+    private static int maxModelRetries(AgentLoopRequest request, AgentSettings settings) {
+        if (request.maxModelRetries() > 0) {
+            return request.maxModelRetries();
+        }
+        JsonNode value = settings.values().at("/retry/maxRetries");
+        return value.canConvertToInt() && value.asInt() >= 0 ? value.asInt() : request.maxModelRetries();
+    }
+
+    private static Optional<Duration> modelTimeout(AgentLoopRequest request, AgentSettings settings) {
+        if (request.modelTimeout().isPresent()) {
+            return request.modelTimeout();
+        }
+        return settings.intField("httpIdleTimeoutMs")
+                .filter(value -> value > 0)
+                .map(Duration::ofMillis);
     }
 }

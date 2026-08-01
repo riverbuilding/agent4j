@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -302,6 +303,7 @@ class AgentLoopTest {
                 null,
                 2,
                 3,
+                Optional.of(Duration.ofSeconds(30)),
                 ToolExecutionMode.PARALLEL,
                 List.of(prompt),
                 List.of(),
@@ -317,6 +319,7 @@ class AgentLoopTest {
         assertThat(provider.requests().getFirst().context().sessionId()).contains("session-1");
         assertThat(provider.requests().getFirst().context().turnId()).contains("turn-1");
         assertThat(provider.requests().getFirst().context().cwd()).contains(Path.of("/repo").toAbsolutePath().normalize());
+        assertThat(provider.requests().getFirst().options().timeout()).contains(Duration.ofSeconds(30));
         assertThat(provider.requests().getFirst().options().maxRetries()).isEqualTo(3);
         assertThat(provider.requests().getFirst().turn().tools()).extracting(tool -> tool.name()).containsExactly("echo");
         assertThat(provider.requests().get(1).turn().messages()).extracting(AiMessage::role)
@@ -337,6 +340,32 @@ class AgentLoopTest {
                 .map(AgentEvent.TurnEnded.class::cast)
                 .map(AgentEvent.TurnEnded::usage))
                 .containsExactly(new Usage(5, 1, 2, 0), new Usage(4, 2, 0, 1));
+    }
+
+    @Test
+    void rejectsNonPositiveModelTimeout() {
+        AgentMessage user = userMessage("user-1", "hello");
+
+        assertThatThrownBy(() -> new AgentLoopRequest(
+                "session-1",
+                "turn-1",
+                user.id(),
+                List.of(user),
+                Path.of("/repo"),
+                clock,
+                new AbortController().signal(),
+                Map.of(),
+                null,
+                1,
+                0,
+                Optional.of(Duration.ZERO),
+                List.of(user),
+                List.of(),
+                List.of(),
+                QueueMode.ONE_AT_A_TIME,
+                QueueMode.ONE_AT_A_TIME))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("modelTimeout");
     }
 
     @Test
@@ -1067,6 +1096,7 @@ class AgentLoopTest {
                 Map.of(),
                 maxToolRounds,
                 maxModelRetries,
+                Optional.empty(),
                 List.of(messages.getLast()),
                 List.of(),
                 List.of(),
@@ -1087,6 +1117,7 @@ class AgentLoopTest {
                 null,
                 maxToolRounds,
                 0,
+                Optional.empty(),
                 toolExecutionMode,
                 List.of(messages.getLast()),
                 List.of(),
@@ -1145,6 +1176,7 @@ class AgentLoopTest {
                 Map.of(),
                 maxToolRounds,
                 0,
+                Optional.empty(),
                 promptMessages,
                 steeringMessages,
                 followUpMessages,

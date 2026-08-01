@@ -407,7 +407,10 @@ Tasks:
 - Normalize usage reporting. Done by carrying provider `AiUsage` into per-turn
   `AgentEvent.TurnEnded` usage and aggregate `AgentLoopResult`/`AgentEnded`
   usage.
-- Add timeout and retry configuration.
+- Add timeout and retry configuration. Done with `AgentLoopRequest`
+  `modelTimeout`, provider `AiStreamOptions.timeout`, loop-owned
+  `maxModelRetries`, and coding settings defaults from `httpIdleTimeoutMs` and
+  `retry.maxRetries`.
 
 Exit criteria:
 

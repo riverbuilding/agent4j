@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -58,6 +59,7 @@ class CodingAgentLoopRequestFactoryTest {
                 null,
                 3,
                 2,
+                java.util.Optional.empty(),
                 ToolExecutionMode.SEQUENTIAL,
                 List.of(user),
                 List.of(steering),
@@ -103,6 +105,74 @@ class CodingAgentLoopRequestFactoryTest {
 
         assertThat(prepared.request().systemPrompt()).isNull();
         assertThat(prepared.discovery().contextFiles()).isEmpty();
+    }
+
+    @Test
+    void appliesRetryAndTimeoutDefaultsFromSettings() throws Exception {
+        Path home = tempDir.resolve("home");
+        Path cwd = tempDir.resolve("repo");
+        write(home.resolve(".pi/agent/settings.json"), """
+                {
+                  "httpIdleTimeoutMs": 300000,
+                  "retry": {
+                    "maxRetries": 4
+                  }
+                }
+                """);
+        AgentMessage user = message("user-1", AgentMessageRole.USER, "hello");
+        AgentLoopRequest request = new AgentLoopRequest(
+                "session-1",
+                "turn-1",
+                user.id(),
+                List.of(user),
+                cwd,
+                clock,
+                new AbortController().signal(),
+                Map.of(),
+                1);
+
+        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestFactory().prepare(request, home);
+
+        assertThat(prepared.request().maxModelRetries()).isEqualTo(4);
+        assertThat(prepared.request().modelTimeout()).contains(Duration.ofMillis(300000));
+    }
+
+    @Test
+    void preservesRequestRetryAndTimeoutOverSettingsDefaults() throws Exception {
+        Path home = tempDir.resolve("home");
+        Path cwd = tempDir.resolve("repo");
+        write(home.resolve(".pi/agent/settings.json"), """
+                {
+                  "httpIdleTimeoutMs": 300000,
+                  "retry": {
+                    "maxRetries": 4
+                  }
+                }
+                """);
+        AgentMessage user = message("user-1", AgentMessageRole.USER, "hello");
+        AgentLoopRequest request = new AgentLoopRequest(
+                "session-1",
+                "turn-1",
+                user.id(),
+                List.of(user),
+                cwd,
+                clock,
+                new AbortController().signal(),
+                Map.of(),
+                null,
+                1,
+                2,
+                java.util.Optional.of(Duration.ofSeconds(10)),
+                List.of(user),
+                List.of(),
+                List.of(),
+                QueueMode.ONE_AT_A_TIME,
+                QueueMode.ONE_AT_A_TIME);
+
+        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestFactory().prepare(request, home);
+
+        assertThat(prepared.request().maxModelRetries()).isEqualTo(2);
+        assertThat(prepared.request().modelTimeout()).contains(Duration.ofSeconds(10));
     }
 
     private AgentMessage message(String id, AgentMessageRole role, String text) {
