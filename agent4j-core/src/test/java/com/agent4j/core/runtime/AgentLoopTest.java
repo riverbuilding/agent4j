@@ -14,6 +14,7 @@ import com.agent4j.ai.AiToolCallContent;
 import com.agent4j.ai.AiToolResultMessage;
 import com.agent4j.ai.AiUsage;
 import com.agent4j.core.compaction.CompactionConfig;
+import com.agent4j.core.compaction.CompactionReason;
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.message.AgentMessage;
@@ -562,6 +563,136 @@ class AgentLoopTest {
                 .map(AgentMessage::textContent))
                 .anySatisfy(text -> assertThat(text).contains("ROUND_1"))
                 .anySatisfy(text -> assertThat(text).contains("ROUND_2"));
+    }
+
+    @Test
+    void overflowCompactionRebuildsModelMessagesAndRetriesSameRound() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("fake-provider", "fake-model"), "Fake Model");
+        FakeProvider provider = new FakeProvider(
+                "fake-provider",
+                "Fake Provider",
+                AiProviderApi.CUSTOM,
+                List.of(model))
+                .enqueueFailure(new IllegalStateException("context_length_exceeded: too many tokens"))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageCompleted(
+                                "compaction-overflow",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("overflow summary")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("recovered")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        AgentMessage oldUser = userMessage("user-1", "old request");
+        AgentMessage oldAssistant = customMessage("assistant-0", AgentMessageRole.ASSISTANT, "old answer");
+        AgentMessage prompt = userMessage("user-2", "continue");
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(provider, model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(new AgentLoopRequest(
+                        "session-1",
+                        "turn-1",
+                        prompt.id(),
+                        List.of(oldUser, oldAssistant, prompt),
+                        Path.of("/repo"),
+                        clock,
+                        new AbortController().signal(),
+                        Map.of(),
+                        null,
+                        1,
+                        1,
+                        Optional.empty(),
+                        ToolExecutionMode.PARALLEL,
+                        List.of(prompt),
+                        List.of(),
+                        List.of(),
+                        QueueMode.ONE_AT_A_TIME,
+                        QueueMode.ONE_AT_A_TIME,
+                        CompactionConfig.builder()
+                                .triggerMessages(100)
+                                .keepTokens(0)
+                                .keepMessages(1)
+                                .summaryPrompt("Summarize:\n{messages}")
+                                .build()));
+
+        assertThat(provider.requests()).hasSize(3);
+        assertThat(((com.agent4j.ai.AiUserMessage) provider.requests().get(1).turn().messages().getFirst())
+                .content().getFirst())
+                .isInstanceOfSatisfying(AiTextContent.class, text ->
+                        assertThat(text.text()).contains("old request", "old answer"));
+        assertThat(provider.requests().get(2).turn().messages()).extracting(AiMessage::role)
+                .containsExactly("user", "user");
+        assertThat(result.assistantMessages().getFirst().textContent()).isEqualTo("recovered");
+        assertThat(result.messages()).extracting(AgentMessage::role)
+                .containsExactly(
+                        AgentMessageRole.USER,
+                        AgentMessageRole.COMPACTION_SUMMARY,
+                        AgentMessageRole.ASSISTANT);
+        AgentEvent.CompactionStarted started = events.stream()
+                .filter(AgentEvent.CompactionStarted.class::isInstance)
+                .map(AgentEvent.CompactionStarted.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(started.reason()).isEqualTo(CompactionReason.OVERFLOW.wireName());
+        assertThat(events).noneMatch(AgentEvent.RetryStarted.class::isInstance);
+    }
+
+    @Test
+    void overflowCompactionCanBeDisabled() {
+        AiModel model = new AiModel(new AiModelReference("fake-provider", "fake-model"), "Fake Model");
+        FakeProvider provider = new FakeProvider(
+                "fake-provider",
+                "Fake Provider",
+                AiProviderApi.CUSTOM,
+                List.of(model))
+                .enqueueFailure(new IllegalStateException("maximum context length exceeded"));
+        AgentMessage oldUser = userMessage("user-1", "old request");
+        AgentMessage oldAssistant = customMessage("assistant-0", AgentMessageRole.ASSISTANT, "old answer");
+        AgentMessage prompt = userMessage("user-2", "continue");
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        assertThatThrownBy(() -> new AgentLoop(provider, model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(new AgentLoopRequest(
+                        "session-1",
+                        "turn-1",
+                        prompt.id(),
+                        List.of(oldUser, oldAssistant, prompt),
+                        Path.of("/repo"),
+                        clock,
+                        new AbortController().signal(),
+                        Map.of(),
+                        null,
+                        1,
+                        1,
+                        Optional.empty(),
+                        ToolExecutionMode.PARALLEL,
+                        List.of(prompt),
+                        List.of(),
+                        List.of(),
+                        QueueMode.ONE_AT_A_TIME,
+                        QueueMode.ONE_AT_A_TIME,
+                        CompactionConfig.builder()
+                                .triggerMessages(100)
+                                .keepTokens(0)
+                                .keepMessages(1)
+                                .summaryPrompt("Summarize:\n{messages}")
+                                .overflowRetryEnabled(false)
+                                .build())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("maximum context length exceeded");
+
+        assertThat(provider.requests()).hasSize(1);
+        assertThat(events).noneMatch(AgentEvent.CompactionStarted.class::isInstance);
     }
 
     @Test

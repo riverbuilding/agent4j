@@ -436,7 +436,10 @@ Tasks:
 - Add context usage calculation.
 - Add manual compaction.
 - Add threshold compaction.
-- Add overflow-triggered compaction and retry.
+- Add overflow-triggered compaction and retry. Done in `AgentLoop`: context
+  overflow model errors bypass normal retry, force an overflow compaction when
+  enabled, rebuild model input from the compacted transcript, and retry the
+  same round.
 - Persist compaction entries with summaries and retained tail messages.
 - Add branch summary generation hooks.
 

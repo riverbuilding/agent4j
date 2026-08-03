@@ -253,7 +253,18 @@ public final class AgentLoop {
                     pendingMessages.clear();
                 }
                 modelMessages = compactForThresholdIfNeeded(request, newMessages, transcriptMessages, modelMessages);
-                RoundResult roundResult = runModelRoundWithRetries(request, modelMessages);
+                RoundResult roundResult;
+                try {
+                    roundResult = runModelRoundWithRetries(request, modelMessages);
+                } catch (Exception e) {
+                    modelMessages = compactForOverflowAndRetryIfPossible(
+                            request,
+                            newMessages,
+                            transcriptMessages,
+                            modelMessages,
+                            e);
+                    roundResult = runModelRoundWithRetries(request, modelMessages);
+                }
                 usage = usage.plus(roundResult.usage());
                 newMessages.add(roundResult.message());
                 assistantMessages.add(roundResult.message());
@@ -434,15 +445,49 @@ public final class AgentLoop {
             List<AgentMessage> transcriptMessages,
             List<AiMessage> modelMessages
     ) throws Exception {
-        if (compactionService == null || compactionProvider == null || compactionModel == null) {
+        if (!request.compactionConfig().enabled()) {
             return modelMessages;
         }
-        if (!request.compactionConfig().enabled()) {
+        return compactIfNeeded(request, newMessages, transcriptMessages, modelMessages, CompactionReason.THRESHOLD);
+    }
+
+    private List<AiMessage> compactForOverflowAndRetryIfPossible(
+            AgentLoopRequest request,
+            List<AgentMessage> newMessages,
+            List<AgentMessage> transcriptMessages,
+            List<AiMessage> modelMessages,
+            Exception failure
+    ) throws Exception {
+        if (!isContextOverflowError(failure)
+                || !request.compactionConfig().enabled()
+                || !request.compactionConfig().overflowRetryEnabled()) {
+            throw failure;
+        }
+        List<AiMessage> compacted = compactIfNeeded(
+                request,
+                newMessages,
+                transcriptMessages,
+                modelMessages,
+                CompactionReason.OVERFLOW);
+        if (compacted == modelMessages) {
+            throw failure;
+        }
+        return compacted;
+    }
+
+    private List<AiMessage> compactIfNeeded(
+            AgentLoopRequest request,
+            List<AgentMessage> newMessages,
+            List<AgentMessage> transcriptMessages,
+            List<AiMessage> modelMessages,
+            CompactionReason reason
+    ) throws Exception {
+        if (compactionService == null || compactionProvider == null || compactionModel == null) {
             return modelMessages;
         }
         CompactionRequest compactionRequest = new CompactionRequest(
                 request.sessionId(),
-                CompactionReason.THRESHOLD,
+                reason,
                 transcriptMessages,
                 request.systemPrompt(),
                 request.compactionConfig(),
@@ -457,7 +502,7 @@ public final class AgentLoop {
         eventBus.publish(new AgentEvent.CompactionStarted(
                 request.sessionId(),
                 now(request),
-                CompactionReason.THRESHOLD.wireName()));
+                reason.wireName()));
         CompactionResult result = compactionService.compact(
                 compactionRequest,
                 compactionProvider,
@@ -478,6 +523,21 @@ public final class AgentLoop {
                 now(request),
                 result.summaryMessage().id()));
         return modelMessagesFromTranscript(request, transcriptMessages);
+    }
+
+    private static boolean isContextOverflowError(Exception e) {
+        String message = e.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String lower = message.toLowerCase();
+        return lower.contains("context_length_exceeded")
+                || lower.contains("context length")
+                || lower.contains("maximum context")
+                || lower.contains("token limit")
+                || lower.contains("too many tokens")
+                || lower.contains("exceeds the model's maximum")
+                || lower.contains("reduce the length");
     }
 
     private List<AgentMessage> drainQueue(
@@ -512,6 +572,9 @@ public final class AgentLoop {
             } catch (AgentAbortException e) {
                 throw e;
             } catch (Exception e) {
+                if (isContextOverflowError(e)) {
+                    throw e;
+                }
                 if (retryAttempt >= request.maxModelRetries()) {
                     if (retryAttempt > 0) {
                         eventBus.publish(new AgentEvent.RetryCompleted(request.sessionId(), now(request), retryAttempt, false));
