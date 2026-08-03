@@ -1,5 +1,6 @@
 package com.agent4j.coding.session;
 
+import com.agent4j.core.compaction.CompactionResult;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -165,6 +166,27 @@ public final class SessionManager {
             appended.add(appendAgentMessage(agentMessage));
         }
         return List.copyOf(appended);
+    }
+
+    public List<SessionEntry> appendCompactionResult(CompactionResult result) throws IOException {
+        Objects.requireNonNull(result, "result");
+        if (!result.compacted()) {
+            return List.of();
+        }
+        AgentMessage summaryMessage = result.summaryMessage();
+        SessionEntry summaryEntry = appendAgentMessage(summaryMessage);
+        SessionEntry compactionEntry = append(SessionEntryType.COMPACTION, payload -> {
+            payload.set("summary", toSessionMessage(summaryMessage));
+            var retainedEntries = payload.putArray("retainedEntries");
+            result.retainedMessages().stream()
+                    .map(AgentMessage::id)
+                    .forEach(retainedEntries::add);
+            payload.put("reason", result.reason().wireName());
+            payload.put("summaryMessageId", summaryMessage.id());
+            payload.put("usageBeforeTokens", result.usageBefore().totalTokens());
+            payload.put("usageAfterTokens", result.usageAfter().totalTokens());
+        });
+        return List.of(summaryEntry, compactionEntry);
     }
 
     public SessionEntry appendMessage(SessionMessageRole role, com.fasterxml.jackson.databind.JsonNode content)

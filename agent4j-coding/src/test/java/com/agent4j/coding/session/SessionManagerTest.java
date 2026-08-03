@@ -1,5 +1,8 @@
 package com.agent4j.coding.session;
 
+import com.agent4j.core.compaction.CompactionReason;
+import com.agent4j.core.compaction.CompactionResult;
+import com.agent4j.core.compaction.ContextUsage;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
 import com.agent4j.core.message.ContentBlocks;
@@ -16,6 +19,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -174,6 +178,85 @@ class SessionManagerTest {
         assertThat(activeAgentMessages.get(2).metadata().path("error").asBoolean()).isFalse();
         assertThat(activeAgentMessages.get(2).metadata().path("isError").asBoolean()).isFalse();
         assertThat(activeAgentMessages.get(2).metadata().path("futureField").asText()).isEqualTo("kept");
+    }
+
+    @Test
+    void appendsCompactionResultAsSummaryMessageAndCompactionEntry() throws Exception {
+        Path sessionFile = tempDir.resolve("compaction-result.jsonl");
+        SessionManager manager = SessionManager.create(
+                sessionFile,
+                tempDir,
+                new SessionJsonlCodec(),
+                () -> "compact-entry-1",
+                clock);
+        AgentMessage user = agentMessage("user-1", AgentMessageRole.USER, "old user", JSON.objectNode());
+        AgentMessage assistant = agentMessage("assistant-1", AgentMessageRole.ASSISTANT, "retained", JSON.objectNode());
+        manager.appendAgentMessage(user);
+        AgentMessage summary = agentMessage(
+                "compaction-summary-1",
+                AgentMessageRole.COMPACTION_SUMMARY,
+                "summary text",
+                JSON.objectNode().put("reason", "manual"));
+        CompactionResult result = new CompactionResult(
+                CompactionReason.MANUAL,
+                summary,
+                List.of(assistant),
+                new ContextUsage(1, 100, 4, OptionalLong.of(1000)),
+                new ContextUsage(1, 20, 2, OptionalLong.of(1000)));
+
+        List<SessionEntry> appended = manager.appendCompactionResult(result);
+
+        assertThat(appended).extracting(SessionEntry::type)
+                .containsExactly(SessionEntryType.MESSAGE, SessionEntryType.COMPACTION);
+        assertThat(appended).extracting(SessionEntry::id)
+                .containsExactly("compaction-summary-1", "compact-entry-1");
+        assertThat(appended).extracting(SessionEntry::parentId)
+                .containsExactly("user-1", "compaction-summary-1");
+
+        SessionMessage summaryMessage = appended.getFirst().message().orElseThrow();
+        assertThat(summaryMessage.role()).isEqualTo(SessionMessageRole.COMPACTION_SUMMARY);
+        assertThat(summaryMessage.content().get(0).get("text").asText()).isEqualTo("summary text");
+        assertThat(summaryMessage.payload().get("reason").asText()).isEqualTo("manual");
+
+        SessionCompaction compaction = appended.get(1).compaction().orElseThrow();
+        assertThat(compaction.optionalSummary()).isPresent();
+        assertThat(compaction.summary().get("role").asText()).isEqualTo("compactionSummary");
+        assertThat(compaction.summary().get("content").get(0).get("text").asText()).isEqualTo("summary text");
+        assertThat(compaction.retainedEntries().get(0).asText()).isEqualTo("assistant-1");
+        assertThat(compaction.payload().get("reason").asText()).isEqualTo("manual");
+        assertThat(compaction.payload().get("summaryMessageId").asText()).isEqualTo("compaction-summary-1");
+        assertThat(compaction.payload().get("usageBeforeTokens").asLong()).isEqualTo(101);
+        assertThat(compaction.payload().get("usageAfterTokens").asLong()).isEqualTo(21);
+
+        SessionManager reopened = SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock);
+        assertThat(reopened.activeAgentMessages()).extracting(AgentMessage::id)
+                .containsExactly("user-1", "compaction-summary-1");
+        assertThat(reopened.activeAgentMessages().get(1).role()).isEqualTo(AgentMessageRole.COMPACTION_SUMMARY);
+        assertThat(reopened.document().entries().get(2).compaction().orElseThrow()
+                .retainedEntries().get(0).asText()).isEqualTo("assistant-1");
+    }
+
+    @Test
+    void appendCompactionResultSkipsNoOpResult() throws Exception {
+        Path sessionFile = tempDir.resolve("compaction-noop.jsonl");
+        SessionManager manager = SessionManager.create(
+                sessionFile,
+                tempDir,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock);
+        ContextUsage usage = new ContextUsage(0, 0, 0, OptionalLong.empty());
+
+        List<SessionEntry> appended = manager.appendCompactionResult(
+                CompactionResult.noOp(CompactionReason.THRESHOLD, usage));
+
+        assertThat(appended).isEmpty();
+        assertThat(manager.document().entries()).isEmpty();
+        assertThat(Files.readAllLines(sessionFile)).hasSize(1);
     }
 
     @Test
