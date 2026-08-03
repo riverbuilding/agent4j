@@ -22,7 +22,7 @@ class DefaultAgentMessageConverterTest {
     private final Instant timestamp = Instant.parse("2026-07-30T10:00:00Z");
 
     @Test
-    void convertsOnlyStandardTranscriptViewsToLlmMessages() {
+    void convertsStandardTranscriptViewsAndCompactionSummaryToLlmMessages() {
         AgentMessage user = message("user-1", AgentMessageRole.USER, "hello", JSON.objectNode());
         AgentMessage assistant = message("assistant-1", AgentMessageRole.ASSISTANT, "hi", JSON.objectNode());
         AgentMessage toolResult = message(
@@ -34,6 +34,11 @@ class DefaultAgentMessageConverterTest {
                         .put("toolName", "read")
                         .put("error", true)
                         .put("futureField", "kept"));
+        AgentMessage compactionSummary = message(
+                "summary-1",
+                AgentMessageRole.COMPACTION_SUMMARY,
+                "summary",
+                JSON.objectNode());
         AgentMessage custom = message("custom-1", AgentMessageRole.CUSTOM, "custom", JSON.objectNode());
         AgentMessage unknown = message("unknown-1", AgentMessageRole.UNKNOWN, "unknown", JSON.objectNode());
 
@@ -41,10 +46,11 @@ class DefaultAgentMessageConverterTest {
                 user,
                 assistant,
                 toolResult,
+                compactionSummary,
                 custom,
                 unknown));
 
-        assertThat(converted).hasSize(3);
+        assertThat(converted).hasSize(4);
         assertThat(converted.get(0)).isInstanceOf(AiUserMessage.class);
         assertThat(text((AiUserMessage) converted.get(0))).isEqualTo("hello");
         assertThat(converted.get(1)).isInstanceOf(AiAssistantMessage.class);
@@ -55,6 +61,8 @@ class DefaultAgentMessageConverterTest {
         assertThat(aiToolResult.toolName()).isEqualTo("read");
         assertThat(aiToolResult.error()).isTrue();
         assertThat(((AiTextContent) aiToolResult.content().getFirst()).text()).isEqualTo("content");
+        assertThat(converted.get(3)).isInstanceOf(AiUserMessage.class);
+        assertThat(text((AiUserMessage) converted.get(3))).isEqualTo("summary");
     }
 
     private AgentMessage message(

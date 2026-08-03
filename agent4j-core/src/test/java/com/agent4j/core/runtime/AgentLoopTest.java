@@ -13,6 +13,7 @@ import com.agent4j.ai.AiThinkingContent;
 import com.agent4j.ai.AiToolCallContent;
 import com.agent4j.ai.AiToolResultMessage;
 import com.agent4j.ai.AiUsage;
+import com.agent4j.core.compaction.CompactionConfig;
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.message.AgentMessage;
@@ -371,6 +372,196 @@ class AgentLoopTest {
 
         assertThat(provider.requests()).hasSize(1);
         assertThat(provider.requests().getFirst().context().auth()).isEqualTo(auth);
+    }
+
+    @Test
+    void thresholdCompactionRunsBeforeProviderModelRoundAndRebuildsModelMessages() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("fake-provider", "fake-model"), "Fake Model");
+        FakeProvider provider = new FakeProvider(
+                "fake-provider",
+                "Fake Provider",
+                AiProviderApi.CUSTOM,
+                List.of(model))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageCompleted(
+                                "compaction-model-message",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("old work summarized")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        new AiUsage(4, 2, 0, 0)))));
+        AgentMessage oldUser = userMessage("user-1", "old request with lots of detail");
+        AgentMessage oldAssistant = customMessage("assistant-1", AgentMessageRole.ASSISTANT, "old assistant answer");
+        AgentMessage prompt = userMessage("user-2", "continue");
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(provider, model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(new AgentLoopRequest(
+                        "session-1",
+                        "turn-1",
+                        prompt.id(),
+                        List.of(oldUser, oldAssistant, prompt),
+                        Path.of("/repo"),
+                        clock,
+                        new AbortController().signal(),
+                        Map.of(),
+                        "Use concise answers.",
+                        1,
+                        0,
+                        Optional.empty(),
+                        ToolExecutionMode.PARALLEL,
+                        List.of(prompt),
+                        List.of(),
+                        List.of(),
+                        QueueMode.ONE_AT_A_TIME,
+                        QueueMode.ONE_AT_A_TIME,
+                        CompactionConfig.builder()
+                                .triggerMessages(2)
+                                .keepTokens(0)
+                                .keepMessages(1)
+                                .summaryPrompt("Summarize:\n{messages}")
+                                .build()));
+
+        assertThat(provider.requests()).hasSize(2);
+        assertThat(provider.requests().getFirst().turn().tools()).isEmpty();
+        assertThat(provider.requests().getFirst().turn().messages()).extracting(AiMessage::role)
+                .containsExactly("user");
+        assertThat(((com.agent4j.ai.AiUserMessage) provider.requests().getFirst().turn().messages().getFirst())
+                .content().getFirst())
+                .isInstanceOfSatisfying(AiTextContent.class, text ->
+                        assertThat(text.text()).isEqualTo("""
+                                Summarize:
+                                Human: old request with lots of detail
+
+                                AI: old assistant answer"""));
+        assertThat(provider.requests().get(1).turn().messages()).extracting(AiMessage::role)
+                .containsExactly("system", "user", "user");
+        assertThat(result.messages()).extracting(AgentMessage::role)
+                .containsExactly(
+                        AgentMessageRole.USER,
+                        AgentMessageRole.COMPACTION_SUMMARY,
+                        AgentMessageRole.ASSISTANT);
+        assertThat(result.messages().get(1).textContent()).contains("old work summarized");
+        assertThat(events.stream().filter(AgentEvent.CompactionStarted.class::isInstance))
+                .hasSize(1);
+        assertThat(events.stream()
+                .filter(AgentEvent.CompactionCompleted.class::isInstance)
+                .map(AgentEvent.CompactionCompleted.class::cast)
+                .map(AgentEvent.CompactionCompleted::summaryMessageId))
+                .singleElement()
+                .isEqualTo(result.messages().get(1).id());
+    }
+
+    @Test
+    void thresholdCompactionCanChainWhenTranscriptGrowsAgainInSameRun() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("fake-provider", "fake-model"), "Fake Model");
+        ToolCall toolCall = new ToolCall("tool-1", "echo", JSON.objectNode().put("text", "hello"));
+        FakeProvider provider = new FakeProvider(
+                "fake-provider",
+                "Fake Provider",
+                AiProviderApi.CUSTOM,
+                List.of(model))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageCompleted(
+                                "compaction-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("ROUND_1")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-1",
+                                new AiAssistantMessage(
+                                        List.of(new AiToolCallContent(toolCall.id(), toolCall.name(), toolCall.arguments())),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageCompleted(
+                                "compaction-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("ROUND_2")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))))
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-2"),
+                        new AiStreamEvent.MessageCompleted(
+                                "assistant-2",
+                                new AiAssistantMessage(
+                                        List.of(new AiTextContent("done")),
+                                        AiStopReason.STOP,
+                                        AiUsage.zero()))));
+        ToolRegistry registry = InMemoryToolRegistry.builder()
+                .register(new ToolSpec("echo", "Echo text", JSON.objectNode().put("type", "object")), (call, context) ->
+                        new ToolResult(call.id(), call.name(), false, call.arguments().get("text"), JSON.objectNode()))
+                .build();
+        AgentMessage oldUser = userMessage("user-1", "old request");
+        AgentMessage oldAssistant = customMessage("assistant-0", AgentMessageRole.ASSISTANT, "old answer");
+        AgentMessage prompt = userMessage("user-2", "continue");
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        AgentLoopResult result = new AgentLoop(provider, model, registry, bus)
+                .runTurn(new AgentLoopRequest(
+                        "session-1",
+                        "turn-1",
+                        prompt.id(),
+                        List.of(oldUser, oldAssistant, prompt),
+                        Path.of("/repo"),
+                        clock,
+                        new AbortController().signal(),
+                        Map.of(),
+                        null,
+                        2,
+                        0,
+                        Optional.empty(),
+                        ToolExecutionMode.SEQUENTIAL,
+                        List.of(prompt),
+                        List.of(),
+                        List.of(),
+                        QueueMode.ONE_AT_A_TIME,
+                        QueueMode.ONE_AT_A_TIME,
+                        CompactionConfig.builder()
+                                .triggerMessages(2)
+                                .keepTokens(0)
+                                .keepMessages(2)
+                                .summaryPrompt("Summarize:\n{messages}")
+                                .build()));
+
+        assertThat(provider.requests()).hasSize(4);
+        assertThat(((com.agent4j.ai.AiUserMessage) provider.requests().get(2).turn().messages().getFirst())
+                .content().getFirst())
+                .isInstanceOfSatisfying(AiTextContent.class, text -> {
+                    assertThat(text.text()).contains("ROUND_1");
+                    assertThat(text.text()).contains("Human: continue");
+                });
+        assertThat(provider.requests().get(3).turn().messages()).extracting(AiMessage::role)
+                .containsExactly("user", "assistant", "toolResult");
+        assertThat(events.stream().filter(AgentEvent.CompactionStarted.class::isInstance))
+                .hasSize(2);
+        assertThat(result.messages()).extracting(AgentMessage::role)
+                .containsExactly(
+                        AgentMessageRole.USER,
+                        AgentMessageRole.COMPACTION_SUMMARY,
+                        AgentMessageRole.ASSISTANT,
+                        AgentMessageRole.TOOL_RESULT,
+                        AgentMessageRole.COMPACTION_SUMMARY,
+                        AgentMessageRole.ASSISTANT);
+        assertThat(result.messages().stream()
+                .filter(message -> message.role() == AgentMessageRole.COMPACTION_SUMMARY)
+                .map(AgentMessage::textContent))
+                .anySatisfy(text -> assertThat(text).contains("ROUND_1"))
+                .anySatisfy(text -> assertThat(text).contains("ROUND_2"));
     }
 
     @Test

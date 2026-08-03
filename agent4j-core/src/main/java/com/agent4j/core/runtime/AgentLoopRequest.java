@@ -1,5 +1,6 @@
 package com.agent4j.core.runtime;
 
+import com.agent4j.core.compaction.CompactionConfig;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.UserAgentMessageView;
 
@@ -29,7 +30,8 @@ public record AgentLoopRequest(
         List<AgentMessage> steeringMessages,
         List<AgentMessage> followUpMessages,
         QueueMode steeringMode,
-        QueueMode followUpMode
+        QueueMode followUpMode,
+        CompactionConfig compactionConfig
 ) {
     public AgentLoopRequest(
             String sessionId,
@@ -60,7 +62,8 @@ public record AgentLoopRequest(
                 List.of(),
                 List.of(),
                 QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                QueueMode.ONE_AT_A_TIME,
+                null);
     }
 
     public AgentLoopRequest(
@@ -93,7 +96,8 @@ public record AgentLoopRequest(
                 List.of(),
                 List.of(),
                 QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                QueueMode.ONE_AT_A_TIME,
+                null);
     }
 
     public AgentLoopRequest(
@@ -131,7 +135,50 @@ public record AgentLoopRequest(
                 steeringMessages,
                 followUpMessages,
                 steeringMode,
-                followUpMode);
+                followUpMode,
+                null);
+    }
+
+    public AgentLoopRequest(
+            String sessionId,
+            String turnId,
+            String parentMessageId,
+            List<AgentMessage> messages,
+            Path cwd,
+            Clock clock,
+            AbortSignal abortSignal,
+            Map<String, Object> toolAttributes,
+            String systemPrompt,
+            int maxToolRounds,
+            int maxModelRetries,
+            Optional<Duration> modelTimeout,
+            ToolExecutionMode toolExecutionMode,
+            List<AgentMessage> promptMessages,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode
+    ) {
+        this(
+                sessionId,
+                turnId,
+                parentMessageId,
+                messages,
+                cwd,
+                clock,
+                abortSignal,
+                toolAttributes,
+                systemPrompt,
+                maxToolRounds,
+                maxModelRetries,
+                modelTimeout,
+                toolExecutionMode,
+                promptMessages,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode,
+                null);
     }
 
     public AgentLoopRequest(
@@ -170,7 +217,8 @@ public record AgentLoopRequest(
                 steeringMessages,
                 followUpMessages,
                 steeringMode,
-                followUpMode);
+                followUpMode,
+                null);
     }
 
     public AgentLoopRequest(
@@ -209,7 +257,8 @@ public record AgentLoopRequest(
                 steeringMessages,
                 followUpMessages,
                 steeringMode,
-                followUpMode);
+                followUpMode,
+                null);
     }
 
     public AgentLoopRequest(
@@ -249,7 +298,8 @@ public record AgentLoopRequest(
                 steeringMessages,
                 followUpMessages,
                 steeringMode,
-                followUpMode);
+                followUpMode,
+                null);
     }
 
     public AgentLoopRequest {
@@ -280,6 +330,9 @@ public record AgentLoopRequest(
         promptMessages = promptMessages == null ? List.of() : List.copyOf(promptMessages);
         steeringMessages = steeringMessages == null ? List.of() : List.copyOf(steeringMessages);
         followUpMessages = followUpMessages == null ? List.of() : List.copyOf(followUpMessages);
+        compactionConfig = compactionConfig == null
+                ? CompactionConfig.builder().enabled(false).build()
+                : compactionConfig;
     }
 
     private static List<AgentMessage> inferPromptMessages(String parentMessageId, List<AgentMessage> messages) {

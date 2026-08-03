@@ -11,6 +11,7 @@ import com.agent4j.ai.AiUserMessage;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageView;
 import com.agent4j.core.message.AssistantAgentMessageView;
+import com.agent4j.core.message.CustomAgentMessageView;
 import com.agent4j.core.message.ToolResultAgentMessageView;
 import com.agent4j.core.message.UserAgentMessageView;
 
@@ -49,7 +50,10 @@ public final class DefaultAgentMessageConverter implements AgentMessageConverter
                     toolResult.toolName(),
                     aiContent(toolResult.envelope()),
                     toolResult.error()));
-            case com.agent4j.core.message.CustomAgentMessageView ignored -> Optional.empty();
+            case CustomAgentMessageView custom -> switch (custom.role()) {
+                case COMPACTION_SUMMARY -> Optional.of(AiUserMessage.text(custom.text()));
+                default -> Optional.empty();
+            };
             case com.agent4j.core.message.UnknownAgentMessageView ignored -> Optional.empty();
         };
     }

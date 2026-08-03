@@ -453,6 +453,11 @@ Tasks:
 
 - Mirror PI `AgentSession`, `AgentSessionRuntime`, and harness service
   responsibilities before adding Java-only conveniences.
+- Close the AgentLoop message-state parity gap by moving toward PI's
+  session-owned conversation model: make the runtime/session context own the
+  canonical mutable transcript, build provider-facing model input only at the
+  model boundary, and reduce loop-local message collections to result/event
+  accumulators where they remain necessary.
 - Add `AgentSession`.
 - Add `AgentSessionRuntime`.
 - Add runtime replacement for new, resume, fork, clone, and import.
@@ -477,6 +482,9 @@ Exit criteria:
 
 - Minimal Java example can create a session, subscribe to events, and prompt
   against a fake model.
+- Runtime/session APIs own the canonical conversation context in the PI style,
+  and tests show repeated runs can resume from that context without rebuilding
+  history outside the runtime boundary.
 - Login API supports real ChatGPT/Codex subscription login shape, including
   browser OAuth, device code, status, logout, persisted user credentials, and
   resolved auth for provider-backed runtime creation. Fake-provider auth covers
