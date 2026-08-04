@@ -56,6 +56,10 @@ public final class CompactionService {
         return planner.plan(preprocessedRequest(request), tokenEstimator, contextWindow);
     }
 
+    public ContextStatus status(CompactionRequest request, AiModel model) {
+        return ContextStatus.fromPlan(plan(request, model));
+    }
+
     public CompactionResult compact(
             CompactionRequest request,
             AiProvider provider,

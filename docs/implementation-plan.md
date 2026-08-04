@@ -434,6 +434,10 @@ Tasks:
   overflow retry shape.
 - Add token estimation abstraction.
 - Add context usage calculation.
+- Add context status reporting. Done with `ContextStatus` and
+  `CompactionService.status(...)`, which report model-aware usage, effective
+  thresholds, remaining/context-window ratio, cutoff, and whether compaction
+  would run without invoking the summarization model.
 - Add manual compaction.
 - Add threshold compaction.
 - Add overflow-triggered compaction and retry. Done in `AgentLoop`: context
@@ -451,7 +455,8 @@ Tasks:
 Exit criteria:
 
 - Tests cover cut-point selection, retained tail persistence, manual compaction,
-  threshold compaction, and overflow retry.
+  threshold compaction, overflow retry, tool-result pruning, argument
+  truncation, and context status reporting.
 
 ## Phase 8: SDK And Runtime API
 
