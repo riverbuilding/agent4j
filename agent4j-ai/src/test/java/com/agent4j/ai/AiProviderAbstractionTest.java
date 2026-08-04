@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -250,6 +251,31 @@ class AiProviderAbstractionTest {
             assertThat(auth.source()).contains("environment");
         });
         assertThat(environment.resolve("openai")).isEmpty();
+    }
+
+    @Test
+    void resolvedAuthCarriesExplicitModesAndBearerTokens() {
+        Instant expiresAt = Instant.parse("2026-08-04T12:00:00Z");
+        AiResolvedAuth subscription = AiResolvedAuth.chatGptSubscription(
+                "access-token",
+                Optional.of("https://codex.openai.com/api"),
+                Optional.of("login"),
+                Optional.of(expiresAt),
+                Map.of("plan", "plus"));
+
+        assertThat(subscription.mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
+        assertThat(subscription.apiKey()).isEmpty();
+        assertThat(subscription.accessToken()).contains("access-token");
+        assertThat(subscription.authorizationBearerToken()).contains("access-token");
+        assertThat(subscription.expiresAt()).contains(expiresAt);
+        assertThat(subscription.metadata()).containsEntry("plan", "plus");
+        assertThat(subscription.hasCredentials()).isTrue();
+        assertThat(new AiResolvedAuth(
+                Optional.empty(),
+                Map.of("Authorization", "Bearer custom"),
+                Optional.empty(),
+                Optional.of("test"),
+                Map.of()).mode()).isEqualTo(AiAuthMode.CUSTOM_HEADERS);
     }
 
     private record FakeProvider(List<AiModel> models) implements AiProvider {

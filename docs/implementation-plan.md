@@ -500,7 +500,10 @@ Tasks:
     URIs from `request.model().baseUrl()` plus their API path suffix, and the
     `agent4j-ai` README documents the PI-compatible shape.
   - keep live ChatGPT/Codex subscription login flow in Phase 9, but make the
-    provider abstraction ready for that auth mode in Phase 8
+    provider abstraction ready for that auth mode in Phase 8. Done with
+    `AiAuthMode`, access-token/subscription-ready `AiResolvedAuth` fields,
+    OpenAI bearer-token handling, and settings parsing for `authMode`,
+    `accessToken`, `expiresAt`, and auth metadata.
 - Close the `AgentLoop` message-state parity gap by moving toward PI's
   session-owned conversation model: make the runtime/session context own the
   canonical mutable transcript, build provider-facing model input only at the
@@ -669,11 +672,10 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Continue Phase 8 provider parity fixes in `agent4j-ai`: auth-mode readiness.
-2. Then address the `AgentLoop`/session-owned conversation context parity fix.
-3. Define and test stale snapshot and multi-process same-file resume semantics.
-4. Add stronger validation for parent references and malformed typed payloads.
-5. Audit coding tool schemas/result shapes and custom/session message
+1. Address the `AgentLoop`/session-owned conversation context parity fix.
+2. Define and test stale snapshot and multi-process same-file resume semantics.
+3. Add stronger validation for parent references and malformed typed payloads.
+4. Audit coding tool schemas/result shapes and custom/session message
    conversion prompt text against PI.
-6. Keep expanding fixtures with real PI session samples as they become
+5. Keep expanding fixtures with real PI session samples as they become
    available.

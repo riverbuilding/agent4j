@@ -275,6 +275,38 @@ class OpenAiResponsesProviderTest {
     }
 
     @Test
+    void usesAccessTokenAuthAsBearerCredential() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("openai", "gpt-5"), "GPT-5");
+        CapturingTransport transport = new CapturingTransport(List.of(
+                "data: {\"type\":\"response.created\",\"response\":{\"id\":\"res_1\"}}",
+                "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"res_1\",\"status\":\"completed\",\"usage\":{}}}",
+                "data: [DONE]"));
+        OpenAiResponsesProvider provider = new OpenAiResponsesProvider(
+                OpenAiResponsesProviderOptions.defaults(List.of(model)),
+                transport);
+
+        provider.stream(new AiProviderRequest(
+                model,
+                new AiTurnRequest(List.of(AiUserMessage.text("hello")), List.of()),
+                new AiProviderContext(
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        AiResolvedAuth.accessToken(
+                                "oauth-token",
+                                Optional.empty(),
+                                Optional.of("test"),
+                                Optional.empty(),
+                                Map.of()),
+                        Map.of(),
+                        Map.of()),
+                AiStreamOptions.defaults()), event -> {
+        });
+
+        assertThat(transport.request.headers()).containsEntry("Authorization", "Bearer oauth-token");
+    }
+
+    @Test
     void accumulatesTextDeltasIntoFinalAssistantMessageLikePiResponsesStream() throws Exception {
         AiModel model = new AiModel(new AiModelReference("openai", "gpt-5"), "GPT-5");
         CapturingTransport transport = new CapturingTransport(List.of(

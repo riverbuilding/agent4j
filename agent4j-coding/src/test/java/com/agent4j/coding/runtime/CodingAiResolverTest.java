@@ -1,5 +1,6 @@
 package com.agent4j.coding.runtime;
 
+import com.agent4j.ai.AiAuthMode;
 import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProviderApi;
@@ -84,6 +85,40 @@ class CodingAiResolverTest {
         assertThat(auth.headers()).containsEntry("OpenAI-Beta", "responses=v1");
         assertThat(auth.source()).contains("settings");
         assertThat(resolver.resolveAuth(settings, "anthropic")).isEqualTo(AiResolvedAuth.none());
+    }
+
+    @Test
+    void resolvesProviderAuthModeAndAccessTokenFromSettings() throws Exception {
+        AiModel openai = new AiModel(new AiModelReference("openai", "gpt-5"), "GPT-5");
+        CodingAiResolver resolver = new CodingAiResolver(AiProviderRegistry.builder()
+                .add(new StaticProvider("openai", List.of(openai)))
+                .build());
+        AgentSettings settings = settings("""
+                {
+                  "providers": {
+                    "openai": {
+                      "authMode": "chatgpt-subscription",
+                      "accessToken": "oauth-token",
+                      "baseUrl": "https://codex.openai.com/api",
+                      "expiresAt": "2026-08-04T12:00:00Z",
+                      "metadata": {
+                        "plan": "plus",
+                        "accountId": "acct-1"
+                      }
+                    }
+                  }
+                }
+                """);
+
+        AiResolvedAuth auth = resolver.resolveAuth(settings, "openai");
+
+        assertThat(auth.mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
+        assertThat(auth.accessToken()).contains("oauth-token");
+        assertThat(auth.authorizationBearerToken()).contains("oauth-token");
+        assertThat(auth.baseUrl()).contains("https://codex.openai.com/api");
+        assertThat(auth.expiresAt()).contains(java.time.Instant.parse("2026-08-04T12:00:00Z"));
+        assertThat(auth.metadata()).containsEntry("plan", "plus");
+        assertThat(auth.metadata()).containsEntry("accountId", "acct-1");
     }
 
     private static AiProviderRegistry registry(AiModel openai, AiModel anthropic) {

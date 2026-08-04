@@ -52,3 +52,19 @@ it unchanged. Otherwise it trims trailing slashes and appends the provider path.
 This keeps provider stream execution simple: the provider receives the effective
 model configuration for that request, while auth resolution remains responsible
 for credentials, headers, and endpoint overrides.
+
+## Auth Modes
+
+`AiResolvedAuth.mode()` records how credentials were obtained or should be
+interpreted:
+
+- `none`: no resolved credentials
+- `api-key`: provider API key, usually from settings or environment
+- `access-token`: bearer access token for OpenAI-compatible automation
+- `chatgpt-subscription`: bearer access token obtained from a ChatGPT/Codex
+  subscription login flow
+- `custom-headers`: caller-supplied headers without a standard credential
+
+Phase 8 only makes the provider abstraction ready for these modes. The live
+browser/device OAuth login flow, persisted user credential store, auth status,
+and logout API remain Phase 9 work.

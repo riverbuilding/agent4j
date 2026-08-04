@@ -1,5 +1,6 @@
 package com.agent4j.coding.runtime;
 
+import com.agent4j.ai.AiAuthMode;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProviderRegistry;
 import com.agent4j.ai.AiProviderSelection;
@@ -7,6 +8,8 @@ import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.coding.resource.AgentSettings;
 import com.fasterxml.jackson.databind.JsonNode;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -34,12 +37,25 @@ public final class CodingAiResolver {
             return AiResolvedAuth.none();
         }
         Optional<String> apiKey = text(provider.get("apiKey"));
+        Optional<String> accessToken = text(provider.get("accessToken"));
         Optional<String> baseUrl = text(provider.get("baseUrl"));
+        Optional<AiAuthMode> mode = text(provider.get("authMode")).map(AiAuthMode::fromWireName);
+        Optional<Instant> expiresAt = text(provider.get("expiresAt")).flatMap(CodingAiResolver::instant);
         Map<String, String> headers = stringMap(provider.get("headers"));
-        if (apiKey.isEmpty() && baseUrl.isEmpty() && headers.isEmpty()) {
+        Map<String, String> metadata = stringMap(provider.get("metadata"));
+        if (mode.isEmpty() && apiKey.isEmpty() && accessToken.isEmpty() && baseUrl.isEmpty() && headers.isEmpty()) {
             return AiResolvedAuth.none();
         }
-        return new AiResolvedAuth(apiKey, headers, baseUrl, Optional.of("settings"), Map.of());
+        return new AiResolvedAuth(
+                mode.orElse(AiAuthMode.NONE),
+                apiKey,
+                accessToken,
+                headers,
+                baseUrl,
+                Optional.of("settings"),
+                expiresAt,
+                Map.of(),
+                metadata);
     }
 
     private Optional<AiModelReference> modelReference(AgentSettings settings) {
@@ -66,5 +82,13 @@ public final class CodingAiResolver {
                 .filter(JsonNode::isTextual)
                 .map(JsonNode::asText)
                 .filter(value -> !value.isBlank());
+    }
+
+    private static Optional<Instant> instant(String value) {
+        try {
+            return Optional.of(Instant.parse(value));
+        } catch (DateTimeParseException ignored) {
+            return Optional.empty();
+        }
     }
 }
