@@ -49,6 +49,13 @@ public final class CompactionService {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
+    public CompactionPlan plan(CompactionRequest request, AiModel model) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(model, "model");
+        OptionalLong contextWindow = OptionalLong.of(model.contextWindow());
+        return planner.plan(preprocessedRequest(request), tokenEstimator, contextWindow);
+    }
+
     public CompactionResult compact(
             CompactionRequest request,
             AiProvider provider,
@@ -63,14 +70,15 @@ public final class CompactionService {
         options = options == null ? AiStreamOptions.defaults() : options;
 
         OptionalLong contextWindow = OptionalLong.of(model.contextWindow());
-        CompactionPlan plan = planner.plan(request, tokenEstimator, contextWindow);
+        CompactionRequest preparedRequest = preprocessedRequest(request);
+        CompactionPlan plan = planner.plan(preparedRequest, tokenEstimator, contextWindow);
         if (!plan.compact()) {
-            return CompactionResult.noOp(request.reason(), plan.usage());
+            return CompactionResult.noOp(preparedRequest.reason(), plan.usage());
         }
 
-        String prompt = serializer.buildSummaryPrompt(request, plan.prefixMessages());
+        String prompt = serializer.buildSummaryPrompt(preparedRequest, plan.prefixMessages());
         String summary = summarize(prompt, provider, model, context, options);
-        AgentMessage summaryMessage = summaryMessage(request, plan, summary);
+        AgentMessage summaryMessage = summaryMessage(preparedRequest, plan, summary);
         List<AgentMessage> compactedMessages = new java.util.ArrayList<>();
         compactedMessages.add(summaryMessage);
         compactedMessages.addAll(plan.retainedMessages());
@@ -85,6 +93,21 @@ public final class CompactionService {
                 plan.retainedMessages(),
                 plan.usage(),
                 usageAfter);
+    }
+
+    private CompactionRequest preprocessedRequest(CompactionRequest request) {
+        List<AgentMessage> messages = new CompactionMessagePreprocessor(tokenEstimator)
+                .prepare(request.messages(), request.config());
+        if (messages == request.messages()) {
+            return request;
+        }
+        return new CompactionRequest(
+                request.sessionId(),
+                request.reason(),
+                messages,
+                request.systemPrompt(),
+                request.config(),
+                request.optionalFocusInstructions().orElse(null));
     }
 
     private static String summarize(

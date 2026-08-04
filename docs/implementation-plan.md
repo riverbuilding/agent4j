@@ -440,6 +440,11 @@ Tasks:
   overflow model errors bypass normal retry, force an overflow compaction when
   enabled, rebuild model input from the compacted transcript, and retry the
   same round.
+- Add PI-style pre-summarization tool-result pruning and tool-call argument
+  truncation. Done in `CompactionService` through a shared
+  `CompactionMessagePreprocessor`: pruning is enabled by default with PI-shaped
+  protect/minimum/max-output/excluded-tool defaults, while argument truncation is
+  opt-in through `CompactionConfig.TruncateArgsConfig`.
 - Persist compaction entries with summaries and retained tail messages.
 - Add branch summary generation hooks.
 

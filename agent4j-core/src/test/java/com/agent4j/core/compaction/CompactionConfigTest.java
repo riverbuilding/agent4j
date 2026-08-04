@@ -21,6 +21,13 @@ class CompactionConfigTest {
         assertThat(config.keepTokensRatio()).isEqualTo(0.25);
         assertThat(config.overflowRetryEnabled()).isTrue();
         assertThat(config.summaryPrompt()).contains("{messages}");
+        assertThat(config.truncateArgsConfig()).isNull();
+        assertThat(config.pruneConfig()).isNotNull();
+        assertThat(config.pruneConfig().protectTokens()).isEqualTo(40_000);
+        assertThat(config.pruneConfig().minimumTokens()).isEqualTo(20_000);
+        assertThat(config.pruneConfig().maxOutputChars()).isEqualTo(2_000);
+        assertThat(config.pruneConfig().excludedTools())
+                .containsExactlyInAnyOrder("read_file", "memory_search", "memory_get", "session_search");
     }
 
     @Test

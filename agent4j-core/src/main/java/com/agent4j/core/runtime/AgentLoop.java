@@ -18,9 +18,7 @@ import com.agent4j.ai.AiSystemMessage;
 import com.agent4j.ai.AiToolSpec;
 import com.agent4j.ai.AiTurnRequest;
 import com.agent4j.ai.AiUsage;
-import com.agent4j.core.compaction.ApproximateTokenEstimator;
 import com.agent4j.core.compaction.CompactionPlan;
-import com.agent4j.core.compaction.CompactionPlanner;
 import com.agent4j.core.compaction.CompactionReason;
 import com.agent4j.core.compaction.CompactionRequest;
 import com.agent4j.core.compaction.CompactionResult;
@@ -45,7 +43,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -492,10 +489,7 @@ public final class AgentLoop {
                 request.systemPrompt(),
                 request.compactionConfig(),
                 null);
-        CompactionPlan plan = new CompactionPlanner().plan(
-                compactionRequest,
-                new ApproximateTokenEstimator(),
-                OptionalLong.of(compactionModel.contextWindow()));
+        CompactionPlan plan = compactionService.plan(compactionRequest, compactionModel);
         if (!plan.compact()) {
             return modelMessages;
         }

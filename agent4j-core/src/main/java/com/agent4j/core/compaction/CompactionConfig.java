@@ -2,6 +2,7 @@ package com.agent4j.core.compaction;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 public record CompactionConfig(
         boolean enabled,
@@ -14,7 +15,9 @@ public record CompactionConfig(
         long keepTokensMax,
         double keepTokensRatio,
         String summaryPrompt,
-        boolean overflowRetryEnabled
+        boolean overflowRetryEnabled,
+        TruncateArgsConfig truncateArgsConfig,
+        PruneConfig pruneConfig
 ) {
     public static final long FALLBACK_TRIGGER_TOKENS = 160_000;
     public static final long DYNAMIC_TRIGGER_TOKENS = 0;
@@ -106,7 +109,9 @@ public record CompactionConfig(
                 keepTokensMax,
                 keepTokensRatio,
                 summaryPrompt,
-                overflowRetryEnabled);
+                overflowRetryEnabled,
+                truncateArgsConfig,
+                pruneConfig);
     }
 
     public static Builder builder() {
@@ -125,6 +130,8 @@ public record CompactionConfig(
         private double keepTokensRatio = 0.25;
         private String summaryPrompt = DEFAULT_SUMMARY_PROMPT;
         private boolean overflowRetryEnabled = true;
+        private TruncateArgsConfig truncateArgsConfig = null;
+        private PruneConfig pruneConfig = PruneConfig.defaults();
 
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
@@ -181,6 +188,16 @@ public record CompactionConfig(
             return this;
         }
 
+        public Builder truncateArgs(TruncateArgsConfig truncateArgsConfig) {
+            this.truncateArgsConfig = truncateArgsConfig;
+            return this;
+        }
+
+        public Builder prune(PruneConfig pruneConfig) {
+            this.pruneConfig = pruneConfig;
+            return this;
+        }
+
         public CompactionConfig build() {
             return new CompactionConfig(
                     enabled,
@@ -193,7 +210,141 @@ public record CompactionConfig(
                     keepTokensMax,
                     keepTokensRatio,
                     summaryPrompt,
-                    overflowRetryEnabled);
+                    overflowRetryEnabled,
+                    truncateArgsConfig,
+                    pruneConfig);
+        }
+    }
+
+    public record TruncateArgsConfig(
+            int triggerMessages,
+            long triggerTokens,
+            int keepMessages,
+            long keepTokens,
+            int maxArgLength,
+            String truncationText
+    ) {
+        public TruncateArgsConfig {
+            if (triggerMessages < 0 || triggerTokens < 0 || keepMessages < 0 || keepTokens < 0) {
+                throw new IllegalArgumentException("truncate argument thresholds must be non-negative");
+            }
+            if (maxArgLength < 0) {
+                throw new IllegalArgumentException("maxArgLength must be non-negative");
+            }
+            Objects.requireNonNull(truncationText, "truncationText");
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        public static final class Builder {
+            private int triggerMessages = 25;
+            private long triggerTokens = 40_000;
+            private int keepMessages = 20;
+            private long keepTokens = 0;
+            private int maxArgLength = 2_000;
+            private String truncationText = "...(argument truncated)";
+
+            public Builder triggerMessages(int triggerMessages) {
+                this.triggerMessages = triggerMessages;
+                return this;
+            }
+
+            public Builder triggerTokens(long triggerTokens) {
+                this.triggerTokens = triggerTokens;
+                return this;
+            }
+
+            public Builder keepMessages(int keepMessages) {
+                this.keepMessages = keepMessages;
+                return this;
+            }
+
+            public Builder keepTokens(long keepTokens) {
+                this.keepTokens = keepTokens;
+                return this;
+            }
+
+            public Builder maxArgLength(int maxArgLength) {
+                this.maxArgLength = maxArgLength;
+                return this;
+            }
+
+            public Builder truncationText(String truncationText) {
+                this.truncationText = truncationText;
+                return this;
+            }
+
+            public TruncateArgsConfig build() {
+                return new TruncateArgsConfig(
+                        triggerMessages,
+                        triggerTokens,
+                        keepMessages,
+                        keepTokens,
+                        maxArgLength,
+                        truncationText);
+            }
+        }
+    }
+
+    public record PruneConfig(
+            long protectTokens,
+            long minimumTokens,
+            int maxOutputChars,
+            Set<String> excludedTools
+    ) {
+        public PruneConfig {
+            if (protectTokens < 0 || minimumTokens < 0) {
+                throw new IllegalArgumentException("prune token budgets must be non-negative");
+            }
+            if (maxOutputChars < 0) {
+                throw new IllegalArgumentException("maxOutputChars must be non-negative");
+            }
+            excludedTools = excludedTools == null ? Set.of() : Set.copyOf(excludedTools);
+        }
+
+        public static PruneConfig defaults() {
+            return builder().build();
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        public static final class Builder {
+            private long protectTokens = 40_000;
+            private long minimumTokens = 20_000;
+            private int maxOutputChars = 2_000;
+            private Set<String> excludedTools = Set.of(
+                    "read_file",
+                    "memory_search",
+                    "memory_get",
+                    "session_search");
+
+            public Builder protectTokens(long protectTokens) {
+                this.protectTokens = protectTokens;
+                return this;
+            }
+
+            public Builder minimumTokens(long minimumTokens) {
+                this.minimumTokens = minimumTokens;
+                return this;
+            }
+
+            public Builder maxOutputChars(int maxOutputChars) {
+                this.maxOutputChars = maxOutputChars;
+                return this;
+            }
+
+            public Builder excludedTools(Set<String> excludedTools) {
+                this.excludedTools = excludedTools;
+                return this;
+            }
+
+            public PruneConfig build() {
+                return new PruneConfig(protectTokens, minimumTokens, maxOutputChars, excludedTools);
+            }
         }
     }
 }
