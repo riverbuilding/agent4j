@@ -8,6 +8,7 @@ import com.agent4j.ai.AiProvider;
 import com.agent4j.ai.AiProviderContext;
 import com.agent4j.ai.AiProviderRequest;
 import com.agent4j.ai.AiProviderSelection;
+import com.agent4j.ai.AiRetryClassifier;
 import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
@@ -569,6 +570,9 @@ public final class AgentLoop {
                 if (isContextOverflowError(e)) {
                     throw e;
                 }
+                if (!AiRetryClassifier.isRetryable(e)) {
+                    throw e;
+                }
                 if (retryAttempt >= request.maxModelRetries()) {
                     if (retryAttempt > 0) {
                         eventBus.publish(new AgentEvent.RetryCompleted(request.sessionId(), now(request), retryAttempt, false));
@@ -804,7 +808,7 @@ public final class AgentLoop {
                     }
                 },
                 request.modelTimeout(),
-                request.maxModelRetries(),
+                0,
                 Map.of(),
                 Map.of());
     }

@@ -1,6 +1,7 @@
 package com.agent4j.ai.openai;
 
-import java.io.IOException;
+import com.agent4j.ai.AiProviderHttpException;
+
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -32,7 +33,7 @@ public final class DefaultOpenAiTransport implements OpenAiTransport {
             try (Stream<String> lines = response.body()) {
                 body = String.join("\n", lines.toList());
             }
-            throw new IOException("OpenAI request failed with HTTP " + response.statusCode() + ": " + body);
+            throw new AiProviderHttpException("openai", response.statusCode(), body);
         }
         try (Stream<String> lines = response.body()) {
             lines.forEach(lineSink);

@@ -33,6 +33,7 @@ import com.agent4j.testkit.ai.FakeProvider;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -323,7 +324,7 @@ class AgentLoopTest {
         assertThat(provider.requests().getFirst().context().turnId()).contains("turn-1");
         assertThat(provider.requests().getFirst().context().cwd()).contains(Path.of("/repo").toAbsolutePath().normalize());
         assertThat(provider.requests().getFirst().options().timeout()).contains(Duration.ofSeconds(30));
-        assertThat(provider.requests().getFirst().options().maxRetries()).isEqualTo(3);
+        assertThat(provider.requests().getFirst().options().maxRetries()).isZero();
         assertThat(provider.requests().getFirst().turn().tools()).extracting(tool -> tool.name()).containsExactly("echo");
         assertThat(provider.requests().get(1).turn().messages()).extracting(AiMessage::role)
                 .containsExactly("user", "assistant", "toolResult");
@@ -1251,7 +1252,7 @@ class AgentLoopTest {
     @Test
     void retriesModelRoundFailureWithinConfiguredLimit() throws Exception {
         FakeModelClient model = new FakeModelClient()
-                .enqueueFailure(new IllegalStateException("temporary provider failure"))
+                .enqueueFailure(new RuntimeException("temporary provider failure", new IOException("network reset")))
                 .enqueue(List.of(
                         new AiStreamEvent.MessageStarted("assistant-1"),
                         new AiStreamEvent.MessageCompleted(
@@ -1290,15 +1291,15 @@ class AgentLoopTest {
     @Test
     void emitsFailedRetryCompletionWhenRetryLimitIsExhausted() {
         FakeModelClient model = new FakeModelClient()
-                .enqueueFailure(new IllegalStateException("first provider failure"))
-                .enqueueFailure(new IllegalStateException("second provider failure"));
+                .enqueueFailure(new RuntimeException("first provider failure", new IOException("network reset")))
+                .enqueueFailure(new RuntimeException("second provider failure", new IOException("network reset")));
         AgentEventBus bus = new AgentEventBus();
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
         assertThatThrownBy(() -> new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(List.of(userMessage("user-1", "try")), 2, 1)))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(RuntimeException.class)
                 .hasMessage("second provider failure");
 
         assertThat(model.requests()).hasSize(2);
@@ -1312,6 +1313,24 @@ class AgentLoopTest {
                 .orElseThrow();
         assertThat(completed.attempt()).isEqualTo(1);
         assertThat(completed.success()).isFalse();
+    }
+
+    @Test
+    void doesNotRetryNonTransientModelRoundFailure() {
+        FakeModelClient model = new FakeModelClient()
+                .enqueueFailure(new IllegalArgumentException("bad request"));
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
+
+        assertThatThrownBy(() -> new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+                .runTurn(request(List.of(userMessage("user-1", "try")), 2, 3)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("bad request");
+
+        assertThat(model.requests()).hasSize(1);
+        assertThat(events).noneMatch(AgentEvent.RetryStarted.class::isInstance);
+        assertThat(events).noneMatch(AgentEvent.RetryCompleted.class::isInstance);
     }
 
     @Test

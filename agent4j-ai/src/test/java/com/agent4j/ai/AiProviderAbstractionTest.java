@@ -2,6 +2,7 @@ package com.agent4j.ai;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -51,6 +52,7 @@ class AiProviderAbstractionTest {
     @Test
     void streamOptionsValidateTimeoutAndRetryShape() {
         assertThat(AiStreamOptions.defaults().signal().aborted()).isFalse();
+        assertThat(AiStreamOptions.defaults().maxRetries()).isZero();
         assertThat(AiStreamOptions.defaults().generation()).isEqualTo(AiGenerationOptions.defaults());
 
         assertThatThrownBy(() -> new AiStreamOptions(
@@ -69,6 +71,15 @@ class AiProviderAbstractionTest {
                 Map.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxRetries");
+    }
+
+    @Test
+    void retryClassifierPinsTransientProviderFailures() {
+        assertThat(new AiProviderHttpException("openai", 429, "rate limit").retryable()).isTrue();
+        assertThat(new AiProviderHttpException("openai", 503, "overloaded").retryable()).isTrue();
+        assertThat(new AiProviderHttpException("openai", 400, "bad request").retryable()).isFalse();
+        assertThat(AiRetryClassifier.isRetryable(new IOException("network reset"))).isTrue();
+        assertThat(AiRetryClassifier.isRetryable(new IllegalArgumentException("invalid input"))).isFalse();
     }
 
     @Test

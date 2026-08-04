@@ -1,6 +1,7 @@
 package com.agent4j.ai.anthropic;
 
-import java.io.IOException;
+import com.agent4j.ai.AiProviderHttpException;
+
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -32,7 +33,7 @@ public final class DefaultAnthropicTransport implements AnthropicTransport {
             try (Stream<String> lines = response.body()) {
                 body = String.join("\n", lines.toList());
             }
-            throw new IOException("Anthropic request failed with HTTP " + response.statusCode() + ": " + body);
+            throw new AiProviderHttpException("anthropic", response.statusCode(), body);
         }
         try (Stream<String> lines = response.body()) {
             lines.forEach(lineSink);

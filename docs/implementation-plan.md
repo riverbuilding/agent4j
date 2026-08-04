@@ -480,7 +480,13 @@ Tasks:
     the supported subset into request bodies with tests.
   - pin exact timeout and retry semantics at the provider abstraction boundary,
     including which layer owns idle timeout, total timeout, and retry
-    classification
+    classification. Done for the current provider path: coding settings
+    `httpIdleTimeoutMs` becomes `AgentLoopRequest.modelTimeout`, which becomes
+    provider transport request timeout; `AgentLoopRequest.maxModelRetries` owns
+    model-round retries; provider calls made by `AgentLoop` carry
+    `AiStreamOptions.maxRetries = 0` to avoid nested adapter retries; and
+    `AiRetryClassifier` plus `AiProviderHttpException` classify transient HTTP
+    and transport failures.
   - add provider/model feature flags and capability metadata needed by later
     runtime and CLI selection
   - make endpoint/base-url resolution match PI's effective-model behavior and
@@ -656,9 +662,8 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Start Phase 8 with provider parity fixes in `agent4j-ai`: provider-specific
-   options, timeout/retry ownership, model/provider feature flags, and
-   endpoint/base-url resolution.
+1. Continue Phase 8 provider parity fixes in `agent4j-ai`: model/provider
+   feature flags, endpoint/base-url resolution, and auth-mode readiness.
 2. Then address the `AgentLoop`/session-owned conversation context parity fix.
 3. Define and test stale snapshot and multi-process same-file resume semantics.
 4. Add stronger validation for parent references and malformed typed payloads.
