@@ -534,7 +534,10 @@ Tasks:
     appended under one freshness-checked file lock so a repeated-run result does
     not partially append or interleave at message granularity.
   - expand real PI fixture coverage for branches, compaction entries, branch
-    summaries, unknown payloads, and malformed records
+    summaries, unknown payloads, and malformed records. Done for Phase 8:
+    testkit fixtures now cover branch/compaction/branch-summary resume,
+    unknown forward-compatible entries/messages, and malformed typed payloads;
+    session tests exercise codec validation plus `SessionManager.open/importFrom`.
 - Audit `agent4j-coding` built-in tools against PI implementation details:
   argument schemas, descriptions, image/text read behavior, edit
   multi-replacement behavior, render/update events, and result content/details

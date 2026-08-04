@@ -221,6 +221,54 @@ class SessionJsonlCodecTest {
         assertThat(document.entries().get(12).customEntry().orElseThrow().optionalCustomType()).contains("vendor");
     }
 
+    @Test
+    void validatesRichResumeFixtureWithCompactionAndBranchSummary() throws Exception {
+        SessionDocument document = readFixture("pi-sessions/resume-with-compaction-branch-summary.jsonl");
+
+        SessionDocumentValidator.validate(document);
+        SessionTree tree = SessionTree.from(document);
+
+        assertThat(document.header().header().orElseThrow().sourceSessionId()).contains("session-source");
+        assertThat(tree.activePathTo("user-follow-up")).extracting(SessionEntry::id)
+                .containsExactly(
+                        "user-root",
+                        "assistant-tool",
+                        "tool-result-read",
+                        "assistant-summary",
+                        "branch-summary-1",
+                        "compaction-summary-1",
+                        "compaction-1",
+                        "user-follow-up");
+        assertThat(document.entries()).extracting(entry -> entry.messageRole().orElse(null))
+                .contains(SessionMessageRole.TOOL_RESULT, SessionMessageRole.BRANCH_SUMMARY, SessionMessageRole.COMPACTION_SUMMARY);
+        assertThat(document.entries().get(6).compaction().orElseThrow()
+                .retainedEntries().get(0).asText()).isEqualTo("assistant-summary");
+    }
+
+    @Test
+    void validatesAndRoundTripsUnknownForwardCompatibleFixture() throws Exception {
+        SessionDocument document = readFixture("pi-sessions/unknown-forward-compatible.jsonl");
+        StringWriter writer = new StringWriter();
+
+        SessionDocumentValidator.validate(document);
+        codec.write(document, writer);
+
+        assertThat(document.entries()).extracting(SessionEntry::type).contains(SessionEntryType.UNKNOWN);
+        assertThat(document.entries()).extracting(entry -> entry.messageRole().orElse(null))
+                .contains(SessionMessageRole.UNKNOWN);
+        assertThat(writer.toString()).contains("\"futureSessionField\":{\"kept\":true}");
+        assertThat(writer.toString()).contains("\"vendorPayload\":{\"kept\":true}");
+    }
+
+    @Test
+    void rejectsMalformedTypedPayloadFixture() throws Exception {
+        SessionDocument document = readFixture("pi-sessions/malformed-typed-payload.jsonl");
+
+        assertThatThrownBy(() -> SessionDocumentValidator.validate(document))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("modelId");
+    }
+
     private SessionDocument readFixture(String name) throws Exception {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         try (InputStreamReader reader = new InputStreamReader(

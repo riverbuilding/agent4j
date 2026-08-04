@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"session-unknown","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo","futureSessionField":{"kept":true}}
+{"type":"message","id":"user-1","parentId":null,"timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"hello","futureMessageField":{"kept":true}}}
+{"type":"vendor_future","id":"future-entry-1","parentId":"user-1","timestamp":"2026-07-28T10:00:02Z","vendorPayload":{"kept":true}}
+{"type":"message","id":"future-message-1","parentId":"future-entry-1","timestamp":"2026-07-28T10:00:03Z","message":{"role":"vendorMessage","vendorPayload":{"kept":true}}}
+{"type":"custom","id":"custom-1","parentId":"future-message-1","timestamp":"2026-07-28T10:00:04Z","customType":"vendor","data":{"kept":true}}

@@ -576,6 +576,72 @@ class SessionManagerTest {
         assertThat(Files.readAllLines(sessionFile)).hasSize(1);
     }
 
+    @Test
+    void opensRichResumeFixtureAndRebuildsActiveMessages() throws Exception {
+        Path sessionFile = copyFixture(
+                "pi-sessions/resume-with-compaction-branch-summary.jsonl",
+                "resume-rich.jsonl");
+
+        SessionManager manager = SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock);
+
+        assertThat(manager.activeEntryId()).isEqualTo("user-follow-up");
+        assertThat(manager.activeAgentMessages()).extracting(AgentMessage::role)
+                .containsExactly(
+                        AgentMessageRole.USER,
+                        AgentMessageRole.ASSISTANT,
+                        AgentMessageRole.TOOL_RESULT,
+                        AgentMessageRole.ASSISTANT,
+                        AgentMessageRole.BRANCH_SUMMARY,
+                        AgentMessageRole.COMPACTION_SUMMARY,
+                        AgentMessageRole.USER);
+        assertThat(manager.activeAgentMessages()).extracting(AgentMessage::id)
+                .doesNotContain("compaction-1");
+    }
+
+    @Test
+    void importsUnknownForwardCompatibleFixtureWithoutDroppingPayloads() throws Exception {
+        Path sourceFile = copyFixture("pi-sessions/unknown-forward-compatible.jsonl", "unknown-source.jsonl");
+        Path targetFile = tempDir.resolve("unknown-target.jsonl");
+
+        SessionManager imported = SessionManager.importFrom(
+                sourceFile,
+                targetFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock);
+
+        assertThat(imported.document().entries()).extracting(SessionEntry::type).contains(SessionEntryType.UNKNOWN);
+        assertThat(Files.readString(targetFile)).isEqualTo(Files.readString(sourceFile));
+        assertThat(Files.readString(targetFile)).contains("\"vendorPayload\":{\"kept\":true}");
+    }
+
+    @Test
+    void rejectsMalformedTypedPayloadFixtureOnOpenAndImport() throws Exception {
+        Path sourceFile = copyFixture("pi-sessions/malformed-typed-payload.jsonl", "malformed-source.jsonl");
+        Path targetFile = tempDir.resolve("malformed-target.jsonl");
+
+        assertThatThrownBy(() -> SessionManager.open(
+                sourceFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("modelId");
+        assertThatThrownBy(() -> SessionManager.importFrom(
+                sourceFile,
+                targetFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("modelId");
+        assertThat(targetFile).doesNotExist();
+    }
+
     private AgentMessage agentMessage(String id, AgentMessageRole role, String text, com.fasterxml.jackson.databind.JsonNode metadata) {
         return new AgentMessage(
                 id,
@@ -584,5 +650,14 @@ class SessionManagerTest {
                 role,
                 ContentBlocks.toJsonArray(List.of(new TextBlock(text, null))),
                 metadata);
+    }
+
+    private Path copyFixture(String resourceName, String fileName) throws Exception {
+        Path target = tempDir.resolve(fileName);
+        try (var input = Thread.currentThread().getContextClassLoader().getResourceAsStream(resourceName)) {
+            assertThat(input).isNotNull();
+            Files.copy(input, target);
+        }
+        return target;
     }
 }
