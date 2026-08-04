@@ -612,7 +612,11 @@ Tasks:
 - Add runtime replacement for new, resume, fork, clone, and import. These flows
   should initialize or refresh `AgentConversationContext` from
   `SessionManager.activeAgentMessages()` and persist generated loop messages
-  through `SessionManager.appendAgentLoopResult(...)`.
+  through `SessionManager.appendAgentLoopResult(...)`. Session creation is done:
+  `CodingAgentSessionRuntime.createSession(...)` creates a PI-shaped JSONL
+  session, appends optional session-info/model-change entries, initializes an
+  empty session-owned `AgentConversationContext`, and returns a
+  `CodingAgentSession` handle. Resume/import/clone/fork remain later slices.
 - Add `AgentSession.prompt(...)`, which appends the user prompt, prepares
   resources/settings, runs `AgentLoop`, persists generated messages, refreshes
   session context, and returns SDK-facing prompt result metadata.
