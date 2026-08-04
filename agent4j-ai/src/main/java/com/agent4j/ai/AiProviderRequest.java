@@ -12,6 +12,7 @@ public record AiProviderRequest(
         Objects.requireNonNull(model, "model");
         Objects.requireNonNull(turn, "turn");
         Objects.requireNonNull(context, "context");
+        model = AiEndpointResolver.applyAuthBaseUrl(model, context.auth());
         options = options == null ? AiStreamOptions.defaults() : options;
     }
 }

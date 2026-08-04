@@ -494,7 +494,11 @@ Tasks:
     support while preserving existing default behavior.
   - make endpoint/base-url resolution match PI's effective-model behavior and
     decide the fate of the local `agent4j-ai/README.md` parity note by
-    committing it as module documentation or folding it into ADR/plan docs
+    committing it as module documentation or folding it into ADR/plan docs.
+    Done with `AiEndpointResolver`: `AiProviderRequest` applies auth
+    `baseUrl` to a request-scoped effective model, providers resolve endpoint
+    URIs from `request.model().baseUrl()` plus their API path suffix, and the
+    `agent4j-ai` README documents the PI-compatible shape.
   - keep live ChatGPT/Codex subscription login flow in Phase 9, but make the
     provider abstraction ready for that auth mode in Phase 8
 - Close the `AgentLoop` message-state parity gap by moving toward PI's
@@ -665,8 +669,7 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Continue Phase 8 provider parity fixes in `agent4j-ai`: endpoint/base-url
-   resolution and auth-mode readiness.
+1. Continue Phase 8 provider parity fixes in `agent4j-ai`: auth-mode readiness.
 2. Then address the `AgentLoop`/session-owned conversation context parity fix.
 3. Define and test stale snapshot and multi-process same-file resume semantics.
 4. Add stronger validation for parent references and malformed typed payloads.

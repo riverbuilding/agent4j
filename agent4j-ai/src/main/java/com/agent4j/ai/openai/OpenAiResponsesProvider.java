@@ -2,6 +2,7 @@ package com.agent4j.ai.openai;
 
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlock;
+import com.agent4j.ai.AiEndpointResolver;
 import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiImageContent;
 import com.agent4j.ai.AiMessage;
@@ -153,10 +154,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
                 .or(() -> Optional.ofNullable(System.getenv("OPENAI_API_KEY")));
         apiKey.ifPresent(value -> headers.putIfAbsent("Authorization", "Bearer " + value));
         return new OpenAiHttpRequest(
-                request.context().auth().baseUrl()
-                        .map(baseUrl -> baseUrl.endsWith("/responses") ? baseUrl : stripTrailingSlash(baseUrl) + "/responses")
-                        .map(java.net.URI::create)
-                        .orElse(options.endpoint()),
+                AiEndpointResolver.endpoint(request.model(), options.endpoint(), "/responses"),
                 headers,
                 mapper.writeValueAsString(toRequestJson(request)),
                 request.options().timeout());
@@ -234,10 +232,6 @@ public final class OpenAiResponsesProvider implements AiProvider {
             }
         }
         return builder.toString();
-    }
-
-    private static String stripTrailingSlash(String value) {
-        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     private static final class OpenAiStreamNormalizer {

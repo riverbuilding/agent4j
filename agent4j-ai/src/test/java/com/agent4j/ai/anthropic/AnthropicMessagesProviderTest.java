@@ -237,6 +237,7 @@ class AnthropicMessagesProviderTest {
         assertThat(transport.request.headers()).containsEntry("anthropic-beta", "fine-grained-tool-streaming-2025-05-14");
         assertThat(transport.request.headers()).containsEntry("X-Test", "yes");
         assertThat(transport.request.headers()).containsEntry("X-Request", "1");
+        assertThat(transport.request.uri()).isEqualTo(URI.create("https://api.anthropic.com/v1/messages"));
         assertThat(transport.request.timeout()).contains(Duration.ofSeconds(10));
         assertThat(events).extracting(event -> event.getClass().getSimpleName())
                 .containsExactly(
@@ -260,6 +261,44 @@ class AnthropicMessagesProviderTest {
                     new AiTextContent("Hello"),
                     new AiToolCallContent("toolu_1", "read", JSON.objectNode().put("path", "README.md")));
         });
+    }
+
+    @Test
+    void resolvesEndpointFromEffectiveModelBaseUrl() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("anthropic", "claude-sonnet-4-5"), "Claude Sonnet 4.5")
+                .withBaseUrl("https://catalog.anthropic.test/v1");
+        CapturingTransport transport = new CapturingTransport(List.of(
+                "event: message_start",
+                "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude\",\"stop_reason\":null,\"usage\":{}}}",
+                "",
+                "event: message_stop",
+                "data: {\"type\":\"message_stop\"}",
+                ""));
+        AnthropicMessagesProvider provider = new AnthropicMessagesProvider(
+                AnthropicMessagesProviderOptions.defaults(List.of(model)),
+                transport);
+        AiProviderRequest request = new AiProviderRequest(
+                model,
+                new AiTurnRequest(List.of(AiUserMessage.text("hello")), List.of()),
+                new AiProviderContext(
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        new AiResolvedAuth(
+                                Optional.empty(),
+                                Map.of(),
+                                Optional.of("https://auth.anthropic.test/v1"),
+                                Optional.of("test"),
+                                Map.of()),
+                        Map.of(),
+                        Map.of()),
+                AiStreamOptions.defaults());
+
+        provider.stream(request, event -> {
+        });
+
+        assertThat(request.model().baseUrl()).contains("https://auth.anthropic.test/v1");
+        assertThat(transport.request.uri()).isEqualTo(URI.create("https://auth.anthropic.test/v1/messages"));
     }
 
     private static final class CapturingTransport implements AnthropicTransport {

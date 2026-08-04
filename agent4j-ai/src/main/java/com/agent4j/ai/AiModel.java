@@ -100,4 +100,21 @@ public record AiModel(
     public String id() {
         return reference.modelId();
     }
+
+    public AiModel withBaseUrl(String baseUrl) {
+        return new AiModel(
+                reference,
+                name,
+                api,
+                Optional.ofNullable(baseUrl).map(String::strip).filter(value -> !value.isBlank()),
+                reasoning,
+                thinkingLevelMap,
+                unsupportedThinkingLevels,
+                input,
+                contextWindow,
+                maxTokens,
+                cost,
+                compat,
+                features);
+    }
 }

@@ -374,6 +374,7 @@ class AgentLoopTest {
 
         assertThat(provider.requests()).hasSize(1);
         assertThat(provider.requests().getFirst().context().auth()).isEqualTo(auth);
+        assertThat(provider.requests().getFirst().model().baseUrl()).contains("https://provider.test");
     }
 
     @Test

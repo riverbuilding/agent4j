@@ -2,6 +2,7 @@ package com.agent4j.ai.anthropic;
 
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlock;
+import com.agent4j.ai.AiEndpointResolver;
 import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiImageContent;
 import com.agent4j.ai.AiMessage;
@@ -165,10 +166,7 @@ public final class AnthropicMessagesProvider implements AiProvider {
     }
 
     private URI endpoint(AiProviderRequest request) {
-        return request.context().auth().baseUrl()
-                .map(baseUrl -> baseUrl.endsWith("/messages") ? baseUrl : stripTrailingSlash(baseUrl) + "/messages")
-                .map(URI::create)
-                .orElse(options.endpoint());
+        return AiEndpointResolver.endpoint(request.model(), options.endpoint(), "/messages");
     }
 
     private static ArrayNode messages(List<AiMessage> messages) {
@@ -274,10 +272,6 @@ public final class AnthropicMessagesProvider implements AiProvider {
             }
         }
         return builder.toString();
-    }
-
-    private static String stripTrailingSlash(String value) {
-        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     private static final class AnthropicStreamNormalizer {

@@ -214,6 +214,7 @@ class OpenAiResponsesProviderTest {
         assertThat(transport.request.headers()).containsEntry("OpenAI-Beta", "responses=v1");
         assertThat(transport.request.headers()).containsEntry("X-Test", "yes");
         assertThat(transport.request.headers()).containsEntry("X-Request", "1");
+        assertThat(transport.request.uri()).isEqualTo(URI.create("https://api.openai.com/v1/responses"));
         assertThat(transport.request.timeout()).contains(Duration.ofSeconds(10));
         assertThat(events).extracting(event -> event.getClass().getSimpleName())
                 .containsExactly(
@@ -236,6 +237,41 @@ class OpenAiResponsesProviderTest {
                     new AiTextContent("Reading"),
                     new AiToolCallContent("call_1", "read", JSON.objectNode().put("path", "README.md")));
         });
+    }
+
+    @Test
+    void resolvesEndpointFromEffectiveModelBaseUrl() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("openai", "gpt-5"), "GPT-5")
+                .withBaseUrl("https://catalog.openai.test/v1");
+        CapturingTransport transport = new CapturingTransport(List.of(
+                "data: {\"type\":\"response.created\",\"response\":{\"id\":\"res_1\"}}",
+                "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"res_1\",\"status\":\"completed\",\"usage\":{}}}",
+                "data: [DONE]"));
+        OpenAiResponsesProvider provider = new OpenAiResponsesProvider(
+                OpenAiResponsesProviderOptions.defaults(List.of(model)),
+                transport);
+        AiProviderRequest request = new AiProviderRequest(
+                model,
+                new AiTurnRequest(List.of(AiUserMessage.text("hello")), List.of()),
+                new AiProviderContext(
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        new AiResolvedAuth(
+                                Optional.empty(),
+                                Map.of(),
+                                Optional.of("https://auth.openai.test/v1"),
+                                Optional.of("test"),
+                                Map.of()),
+                        Map.of(),
+                        Map.of()),
+                AiStreamOptions.defaults());
+
+        provider.stream(request, event -> {
+        });
+
+        assertThat(request.model().baseUrl()).contains("https://auth.openai.test/v1");
+        assertThat(transport.request.uri()).isEqualTo(URI.create("https://auth.openai.test/v1/responses"));
     }
 
     @Test

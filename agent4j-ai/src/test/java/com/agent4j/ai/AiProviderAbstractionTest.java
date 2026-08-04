@@ -62,6 +62,50 @@ class AiProviderAbstractionTest {
     }
 
     @Test
+    void providerRequestAppliesAuthBaseUrlToEffectiveRequestModel() {
+        AiModel catalogModel = new AiModel(new AiModelReference("openai", "gpt-5"), "GPT-5")
+                .withBaseUrl("https://catalog.test/v1");
+        AiResolvedAuth auth = new AiResolvedAuth(
+                Optional.empty(),
+                Map.of(),
+                Optional.of("https://auth.test/v1"),
+                Optional.of("test"),
+                Map.of());
+
+        AiProviderRequest request = new AiProviderRequest(
+                catalogModel,
+                new AiTurnRequest(List.of(AiUserMessage.text("hello")), List.of()),
+                new AiProviderContext(
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        auth,
+                        Map.of(),
+                        Map.of()),
+                AiStreamOptions.defaults());
+
+        assertThat(request.model().baseUrl()).contains("https://auth.test/v1");
+        assertThat(catalogModel.baseUrl()).contains("https://catalog.test/v1");
+    }
+
+    @Test
+    void endpointResolverUsesModelBaseUrlWithProviderPathSuffix() {
+        AiModel model = new AiModel(new AiModelReference("anthropic", "claude"), "Claude")
+                .withBaseUrl("https://anthropic.test/v1/");
+
+        assertThat(AiEndpointResolver.endpoint(
+                model,
+                java.net.URI.create("https://api.anthropic.com/v1/messages"),
+                "/messages"))
+                .hasToString("https://anthropic.test/v1/messages");
+        assertThat(AiEndpointResolver.endpoint(
+                model.withBaseUrl("https://anthropic.test/v1/messages"),
+                java.net.URI.create("https://api.anthropic.com/v1/messages"),
+                "/messages"))
+                .hasToString("https://anthropic.test/v1/messages");
+    }
+
+    @Test
     void streamOptionsValidateTimeoutAndRetryShape() {
         assertThat(AiStreamOptions.defaults().signal().aborted()).isFalse();
         assertThat(AiStreamOptions.defaults().maxRetries()).isZero();
