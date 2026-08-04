@@ -3,6 +3,7 @@ package com.agent4j.coding.session;
 import com.agent4j.core.compaction.CompactionResult;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
+import com.agent4j.core.runtime.AgentLoopResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -143,8 +144,9 @@ public final class SessionManager {
         payload.put("timestamp", Instant.now(clock).toString());
         payloadCustomizer.accept(payload);
 
-        SessionEntry entry = codec.parseLine(codec.writeJson(payload), entries.size() + 2);
-        appendLineWithLock(sessionFile, codec.writeLine(entry));
+        String line = codec.writeJson(payload);
+        appendFreshLineWithLock(line);
+        SessionEntry entry = codec.parseLine(line, entries.size() + 2);
         entries.add(entry);
         activeEntryId = entry.id();
         return entry;
@@ -166,6 +168,11 @@ public final class SessionManager {
             appended.add(appendAgentMessage(agentMessage));
         }
         return List.copyOf(appended);
+    }
+
+    public List<SessionEntry> appendAgentLoopResult(AgentLoopResult result) throws IOException {
+        Objects.requireNonNull(result, "result");
+        return appendAgentMessages(result.messages());
     }
 
     public List<SessionEntry> appendCompactionResult(CompactionResult result) throws IOException {
@@ -330,11 +337,46 @@ public final class SessionManager {
         payload.put("timestamp", timestamp.toString());
         payloadCustomizer.accept(payload);
 
-        SessionEntry entry = codec.parseLine(codec.writeJson(payload), entries.size() + 2);
-        appendLineWithLock(sessionFile, codec.writeLine(entry));
+        String line = codec.writeJson(payload);
+        appendFreshLineWithLock(line);
+        SessionEntry entry = codec.parseLine(line, entries.size() + 2);
         entries.add(entry);
         activeEntryId = entry.id();
         return entry;
+    }
+
+    private void appendFreshLineWithLock(String line) throws IOException {
+        Files.createDirectories(sessionFile.toAbsolutePath().getParent());
+        byte[] bytes = (line + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
+        try (FileChannel channel = FileChannel.open(
+                sessionFile,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.APPEND);
+             FileLock ignored = channel.lock()) {
+            assertSessionSnapshotIsFresh();
+            channel.write(ByteBuffer.wrap(bytes));
+        }
+    }
+
+    private void assertSessionSnapshotIsFresh() throws IOException {
+        SessionDocument diskDocument;
+        try (StringReader reader = new StringReader(Files.readString(sessionFile))) {
+            diskDocument = codec.read(reader);
+        }
+        if (!header.payload().equals(diskDocument.header().payload())
+                || entries.size() != diskDocument.entries().size()) {
+            throw staleSessionSnapshot();
+        }
+        for (int i = 0; i < entries.size(); i++) {
+            if (!entries.get(i).payload().equals(diskDocument.entries().get(i).payload())) {
+                throw staleSessionSnapshot();
+            }
+        }
+    }
+
+    private IllegalStateException staleSessionSnapshot() {
+        return new IllegalStateException("session file changed on disk; reopen before appending: " + sessionFile);
     }
 
     private ObjectNode toSessionMessage(AgentMessage agentMessage) {

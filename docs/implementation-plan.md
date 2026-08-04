@@ -517,7 +517,12 @@ Tasks:
   context to a session runtime.
 - Strengthen `SessionManager`/JSONL parity before SDK work:
   - validate parent references and malformed typed payloads
-  - define stale snapshot and multi-process same-file resume semantics
+  - define stale snapshot and multi-process same-file resume semantics. Done:
+    repeated runs persist `AgentLoopResult.messages()` through
+    `SessionManager.appendAgentLoopResult(...)`, resume rebuilds the next model
+    transcript from `activeAgentMessages()`, and append attempts from a stale
+    same-file snapshot fail with a reopen-required error while holding the
+    append lock.
   - expand real PI fixture coverage for branches, compaction entries, branch
     summaries, unknown payloads, and malformed records
 - Audit `agent4j-coding` built-in tools against PI implementation details:
@@ -678,9 +683,8 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Define and test stale snapshot and multi-process same-file resume semantics.
-2. Add stronger validation for parent references and malformed typed payloads.
-3. Audit coding tool schemas/result shapes and custom/session message
+1. Add stronger validation for parent references and malformed typed payloads.
+2. Audit coding tool schemas/result shapes and custom/session message
    conversion prompt text against PI.
-4. Keep expanding fixtures with real PI session samples as they become
+3. Keep expanding fixtures with real PI session samples as they become
    available.

@@ -9,6 +9,9 @@ import com.agent4j.core.message.ContentBlocks;
 import com.agent4j.core.message.TextBlock;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolCallBlock;
+import com.agent4j.core.message.ToolResult;
+import com.agent4j.core.runtime.AgentLoopResult;
+import com.agent4j.core.runtime.Usage;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,6 +26,7 @@ import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SessionManagerTest {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
@@ -181,6 +185,69 @@ class SessionManagerTest {
     }
 
     @Test
+    void appendsAgentLoopResultMessagesForRepeatedRunResume() throws Exception {
+        Path sessionFile = tempDir.resolve("repeated-run.jsonl");
+        SessionManager manager = SessionManager.create(
+                sessionFile,
+                tempDir,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock);
+        AgentMessage firstPrompt = agentMessage("user-1", AgentMessageRole.USER, "read README", JSON.objectNode());
+        ToolCall toolCall = new ToolCall("tool-1", "read", JSON.objectNode().put("path", "README.md"));
+        AgentMessage assistantToolCall = new AgentMessage(
+                "assistant-1",
+                "user-1",
+                Instant.parse("2026-07-28T10:00:01Z"),
+                AgentMessageRole.ASSISTANT,
+                ContentBlocks.toJsonArray(List.of(new ToolCallBlock(toolCall, null))),
+                JSON.objectNode());
+        ToolResult readResult = new ToolResult(
+                "tool-1",
+                "read",
+                false,
+                JSON.textNode("README content"),
+                JSON.objectNode());
+        AgentMessage toolResult = new AgentMessage(
+                "tool-result-tool-1",
+                "assistant-1",
+                Instant.parse("2026-07-28T10:00:02Z"),
+                AgentMessageRole.TOOL_RESULT,
+                readResult.content(),
+                JSON.objectNode()
+                        .put("toolCallId", readResult.toolCallId())
+                        .put("toolName", readResult.toolName())
+                        .put("error", readResult.error()));
+        AgentMessage assistantFinal = agentMessage("assistant-2", AgentMessageRole.ASSISTANT, "summary", JSON.objectNode());
+        AgentLoopResult result = new AgentLoopResult(
+                List.of(assistantToolCall, toolResult, assistantFinal),
+                List.of(assistantToolCall, assistantFinal),
+                List.of(readResult),
+                Usage.zero());
+
+        manager.appendAgentMessage(firstPrompt);
+        manager.appendAgentLoopResult(result);
+
+        SessionManager resumed = SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "user-2",
+                clock);
+        resumed.appendUserMessage("extend the summary");
+
+        assertThat(resumed.activeAgentMessages()).extracting(AgentMessage::id)
+                .containsExactly("user-1", "assistant-1", "tool-result-tool-1", "assistant-2", "user-2");
+        assertThat(resumed.activeAgentMessages()).extracting(AgentMessage::role)
+                .containsExactly(
+                        AgentMessageRole.USER,
+                        AgentMessageRole.ASSISTANT,
+                        AgentMessageRole.TOOL_RESULT,
+                        AgentMessageRole.ASSISTANT,
+                        AgentMessageRole.USER);
+        assertThat(resumed.activeAgentMessages().get(2).metadata().path("toolCallId").asText()).isEqualTo("tool-1");
+    }
+
+    @Test
     void appendsCompactionResultAsSummaryMessageAndCompactionEntry() throws Exception {
         Path sessionFile = tempDir.resolve("compaction-result.jsonl");
         SessionManager manager = SessionManager.create(
@@ -257,6 +324,41 @@ class SessionManagerTest {
         assertThat(appended).isEmpty();
         assertThat(manager.document().entries()).isEmpty();
         assertThat(Files.readAllLines(sessionFile)).hasSize(1);
+    }
+
+    @Test
+    void rejectsAppendFromStaleSnapshotAfterSameFileResumeAdvanced() throws Exception {
+        Path sessionFile = tempDir.resolve("stale-resume.jsonl");
+        AtomicInteger ids = new AtomicInteger();
+        SessionManager first = SessionManager.create(
+                sessionFile,
+                tempDir,
+                new SessionJsonlCodec(),
+                () -> "id%06d".formatted(ids.incrementAndGet()),
+                clock);
+        SessionManager staleSecond = SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "stale",
+                clock);
+
+        first.appendUserMessage("first prompt");
+
+        assertThatThrownBy(() -> staleSecond.appendUserMessage("second prompt"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("session file changed on disk")
+                .hasMessageContaining("reopen before appending");
+
+        SessionManager reopened = SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "id%06d".formatted(ids.incrementAndGet()),
+                clock);
+        SessionEntry second = reopened.appendUserMessage("second prompt");
+
+        assertThat(second.parentId()).isEqualTo("id000001");
+        assertThat(reopened.activeAgentMessages()).extracting(AgentMessage::id)
+                .containsExactly("id000001", "id000002");
     }
 
     @Test
