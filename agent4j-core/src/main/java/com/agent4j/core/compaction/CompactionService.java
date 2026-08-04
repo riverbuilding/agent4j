@@ -114,7 +114,7 @@ public final class CompactionService {
                 request.optionalFocusInstructions().orElse(null));
     }
 
-    private static String summarize(
+    static String summarize(
             String prompt,
             AiProvider provider,
             AiModel model,

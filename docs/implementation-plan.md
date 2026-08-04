@@ -450,13 +450,16 @@ Tasks:
   protect/minimum/max-output/excluded-tool defaults, while argument truncation is
   opt-in through `CompactionConfig.TruncateArgsConfig`.
 - Persist compaction entries with summaries and retained tail messages.
-- Add branch summary generation hooks.
+- Add branch summary generation hooks. Done with `BranchSummaryService` in
+  `agent4j-core` and `CodingBranchSummarizer` in `agent4j-coding`, which
+  generate provider-backed `branchSummary` transcript messages for fork/resume
+  workflows and persist them through `SessionManager`.
 
 Exit criteria:
 
 - Tests cover cut-point selection, retained tail persistence, manual compaction,
   threshold compaction, overflow retry, tool-result pruning, argument
-  truncation, and context status reporting.
+  truncation, context status reporting, and branch summary generation.
 
 ## Phase 8: SDK And Runtime API
 

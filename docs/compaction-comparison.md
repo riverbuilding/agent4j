@@ -189,3 +189,102 @@ Target external behavior:
 The critical implementation rule is to avoid summarizing or cutting blindly.
 Agent4j should preserve PI-style safe partitioning, especially keeping assistant
 tool calls together with their corresponding tool results.
+
+## Branch Summary
+
+`BranchSummary` means an agent session branch summary. It is not a Git branch.
+
+Agent4j sessions are stored as a tree of message entries. When a user resumes,
+forks, clones, imports, or navigates from one point in the session tree, the
+new path is a session branch. A branch summary is a synthetic transcript message
+that carries useful context from the source path into the target path.
+
+Example source path:
+
+```text
+user: Read README.md
+assistant: I will inspect it
+tool result: README content
+assistant: README says this project is an agent harness
+```
+
+A forked or resumed target path can receive:
+
+```text
+branchSummary: The source branch inspected README.md and found that the project
+is an agent harness. Important unresolved work is ...
+```
+
+Then the target branch can continue without replaying the full source path:
+
+```text
+user: Now compare it with PI Agent Harness
+```
+
+`BranchSummary` and `CompactionSummary` are related but serve different
+runtime jobs:
+
+- `CompactionSummary` reduces context size inside the same active conversation
+  path.
+- `BranchSummary` transfers context from a source session path into another
+  forked/resumed/target path.
+
+Both are transcript messages, and both convert to LLM-visible text at the
+`convertToLlm` boundary. The persisted role for branch summaries is
+`branchSummary`.
+
+## Branch Summary Implementation Layers
+
+Agent4j keeps two request types because the core layer and coding-session layer
+own different responsibilities.
+
+`BranchSummaryRequest` is the core request in `agent4j-core`. It is
+provider-neutral and session-storage-neutral. It contains:
+
+```text
+sessionId
+messages
+systemPrompt
+summaryPrompt
+focusInstructions
+sourceEntryId
+targetSessionId
+```
+
+`BranchSummaryService` consumes this request, serializes the source messages,
+calls the selected AI provider, and returns a `BRANCH_SUMMARY` `AgentMessage`.
+The core layer does not know about JSONL files or `SessionManager`.
+
+`BranchSummaryGenerationRequest` is the coding-runtime request in
+`agent4j-coding`. It knows about session persistence and contains:
+
+```text
+sourceSessionManager
+targetSessionManager
+selection
+auth
+cwd
+systemPrompt
+summaryPrompt
+focusInstructions
+options
+```
+
+`CodingBranchSummarizer` consumes this request, reads the source session active
+path, builds a core `BranchSummaryRequest`, calls `BranchSummaryService`, and
+appends the returned `branchSummary` message to the target `SessionManager`.
+
+The layering is:
+
+```text
+CodingBranchSummarizer
+  -> BranchSummaryGenerationRequest
+  -> source SessionManager active path
+  -> BranchSummaryRequest
+  -> BranchSummaryService
+  -> BRANCH_SUMMARY AgentMessage
+  -> target SessionManager append
+```
+
+This split keeps `agent4j-core` reusable for any runtime while keeping PI-style
+session JSONL persistence in `agent4j-coding`.

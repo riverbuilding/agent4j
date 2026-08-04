@@ -48,6 +48,15 @@ public final class CompactionSerializer {
                 .orElse(prompt);
     }
 
+    public String buildBranchSummaryPrompt(BranchSummaryRequest request) {
+        Objects.requireNonNull(request, "request");
+        String serializedMessages = serialize(request.messages());
+        String prompt = request.summaryPrompt().replace("{messages}", serializedMessages);
+        return request.optionalFocusInstructions()
+                .map(focus -> prompt + "\n\n<focusInstructions>\n" + focus + "\n</focusInstructions>")
+                .orElse(prompt);
+    }
+
     private String renderMessage(AgentMessage message) {
         String body = switch (message.role()) {
             case TOOL_RESULT -> renderToolResult(message);
