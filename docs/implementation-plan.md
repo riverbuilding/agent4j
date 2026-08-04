@@ -597,12 +597,18 @@ Tasks:
   runtime/session code must own canonical conversation context.
 - Add `AgentSession` as the user-facing persisted conversation handle in
   `agent4j-coding`, backed by `SessionManager` plus
-  `AgentConversationContext`.
+  `AgentConversationContext`. Interface baseline is done in
+  `com.agent4j.coding.sdk.AgentSession`; concrete session implementation is in
+  the next creation/resume/prompt slices.
 - Add `AgentSessionRuntime` in `agent4j-coding` as the services/lifecycle owner
   for providers, tools, events, resources, settings, sessions, compaction,
-  branch summaries, and auth.
+  branch summaries, and auth. Interface baseline is done in
+  `com.agent4j.coding.sdk.AgentSessionRuntime`, with lifecycle methods for
+  create/resume/import/clone/fork and SDK event subscription.
 - Add request/response records for the runtime API instead of exposing long
-  `AgentLoopRequest` constructors to SDK callers.
+  `AgentLoopRequest` constructors to SDK callers. Done for the first API
+  surface: create, resume, import, clone, fork, prompt, prompt result, and
+  session info records are in `com.agent4j.coding.sdk`.
 - Add runtime replacement for new, resume, fork, clone, and import. These flows
   should initialize or refresh `AgentConversationContext` from
   `SessionManager.activeAgentMessages()` and persist generated loop messages
