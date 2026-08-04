@@ -248,6 +248,26 @@ class SessionManagerTest {
     }
 
     @Test
+    void rejectsInvalidAgentMessageBatchWithoutPartialAppend() throws Exception {
+        Path sessionFile = tempDir.resolve("invalid-batch.jsonl");
+        SessionManager manager = SessionManager.create(
+                sessionFile,
+                tempDir,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock);
+        AgentMessage first = agentMessage("duplicate", AgentMessageRole.ASSISTANT, "first", JSON.objectNode());
+        AgentMessage second = agentMessage("duplicate", AgentMessageRole.ASSISTANT, "second", JSON.objectNode());
+
+        assertThatThrownBy(() -> manager.appendAgentMessages(List.of(first, second)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("own parent");
+
+        assertThat(manager.document().entries()).isEmpty();
+        assertThat(Files.readAllLines(sessionFile)).hasSize(1);
+    }
+
+    @Test
     void appendsCompactionResultAsSummaryMessageAndCompactionEntry() throws Exception {
         Path sessionFile = tempDir.resolve("compaction-result.jsonl");
         SessionManager manager = SessionManager.create(

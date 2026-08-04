@@ -526,7 +526,9 @@ Tasks:
     `SessionManager.appendAgentLoopResult(...)`, resume rebuilds the next model
     transcript from `activeAgentMessages()`, and append attempts from a stale
     same-file snapshot fail with a reopen-required error while holding the
-    append lock.
+    append lock. Generated message batches are validated before writing and are
+    appended under one freshness-checked file lock so a repeated-run result does
+    not partially append or interleave at message granularity.
   - expand real PI fixture coverage for branches, compaction entries, branch
     summaries, unknown payloads, and malformed records
 - Audit `agent4j-coding` built-in tools against PI implementation details:

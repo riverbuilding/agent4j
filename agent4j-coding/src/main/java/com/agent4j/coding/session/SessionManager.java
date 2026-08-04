@@ -163,10 +163,25 @@ public final class SessionManager {
 
     public List<SessionEntry> appendAgentMessages(List<AgentMessage> agentMessages) throws IOException {
         Objects.requireNonNull(agentMessages, "agentMessages");
-        List<SessionEntry> appended = new ArrayList<>(agentMessages.size());
-        for (AgentMessage agentMessage : agentMessages) {
-            appended.add(appendAgentMessage(agentMessage));
+        if (agentMessages.isEmpty()) {
+            return List.of();
         }
+        List<SessionEntry> appended = new ArrayList<>(agentMessages.size());
+        List<String> lines = new ArrayList<>(agentMessages.size());
+        String parentId = activeEntryId;
+        int lineNumber = entries.size() + 2;
+        for (AgentMessage agentMessage : agentMessages) {
+            Objects.requireNonNull(agentMessage, "agentMessages element");
+            ObjectNode payload = agentMessagePayload(agentMessage, parentId);
+            String line = codec.writeJson(payload);
+            lines.add(line);
+            appended.add(codec.parseLine(line, lineNumber++));
+            parentId = agentMessage.id();
+        }
+        validateAppendBatch(appended);
+        appendFreshLinesWithLock(lines);
+        entries.addAll(appended);
+        activeEntryId = appended.getLast().id();
         return List.copyOf(appended);
     }
 
@@ -346,8 +361,11 @@ public final class SessionManager {
     }
 
     private void appendFreshLineWithLock(String line) throws IOException {
+        appendFreshLinesWithLock(List.of(line));
+    }
+
+    private void appendFreshLinesWithLock(List<String> lines) throws IOException {
         Files.createDirectories(sessionFile.toAbsolutePath().getParent());
-        byte[] bytes = (line + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
         try (FileChannel channel = FileChannel.open(
                 sessionFile,
                 StandardOpenOption.CREATE,
@@ -355,8 +373,17 @@ public final class SessionManager {
                 StandardOpenOption.APPEND);
              FileLock ignored = channel.lock()) {
             assertSessionSnapshotIsFresh();
-            channel.write(ByteBuffer.wrap(bytes));
+            for (String line : lines) {
+                byte[] bytes = (line + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
+                channel.write(ByteBuffer.wrap(bytes));
+            }
         }
+    }
+
+    private void validateAppendBatch(List<SessionEntry> appended) {
+        SessionTree.from(new SessionDocument(header, java.util.stream.Stream
+                .concat(entries.stream(), appended.stream())
+                .toList()));
     }
 
     private void assertSessionSnapshotIsFresh() throws IOException {
@@ -396,6 +423,20 @@ public final class SessionManager {
             }
         }
         return message;
+    }
+
+    private ObjectNode agentMessagePayload(AgentMessage agentMessage, String parentId) {
+        ObjectNode payload = codec.createObjectNode();
+        payload.put("type", SessionEntryType.MESSAGE.wireName());
+        payload.put("id", agentMessage.id());
+        if (parentId == null) {
+            payload.putNull("parentId");
+        } else {
+            payload.put("parentId", parentId);
+        }
+        payload.put("timestamp", agentMessage.timestamp().toString());
+        payload.set("message", toSessionMessage(agentMessage));
+        return payload;
     }
 
     private static java.util.Optional<AgentMessage> toAgentMessage(SessionEntry entry) {
