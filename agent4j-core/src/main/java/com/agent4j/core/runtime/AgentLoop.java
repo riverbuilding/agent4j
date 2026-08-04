@@ -15,7 +15,6 @@ import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiStreamOptions;
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlocks;
-import com.agent4j.ai.AiSystemMessage;
 import com.agent4j.ai.AiToolSpec;
 import com.agent4j.ai.AiTurnRequest;
 import com.agent4j.ai.AiUsage;
@@ -231,9 +230,7 @@ public final class AgentLoop {
         eventBus.publish(new AgentEvent.AgentStarted(request.sessionId(), now(request), request.turnId()));
 
         List<AgentMessage> assistantMessages = new ArrayList<>();
-        List<AgentMessage> transcriptMessages = new ArrayList<>(request.messages());
-        List<AiMessage> modelMessages = initialModelMessages(request);
-        List<AgentMessage> newMessages = new ArrayList<>(request.promptMessages());
+        AgentConversationContext conversation = new AgentConversationContext(request.messages(), request.promptMessages());
         List<ToolResult> toolResults = new ArrayList<>();
         List<AgentMessage> steeringQueue = new ArrayList<>(request.steeringMessages());
         List<AgentMessage> followUpQueue = new ArrayList<>(request.followUpMessages());
@@ -247,27 +244,20 @@ public final class AgentLoop {
                 if (round == 0) {
                     publishPromptMessageEvents(request);
                 } else if (!pendingMessages.isEmpty()) {
-                    publishAndAppendQueuedMessages(request, pendingMessages, newMessages, transcriptMessages, modelMessages);
+                    publishAndAppendQueuedMessages(request, pendingMessages, conversation);
                     pendingMessages.clear();
                 }
-                modelMessages = compactForThresholdIfNeeded(request, newMessages, transcriptMessages, modelMessages);
+                compactForThresholdIfNeeded(request, conversation);
                 RoundResult roundResult;
                 try {
-                    roundResult = runModelRoundWithRetries(request, modelMessages);
+                    roundResult = runModelRoundWithRetries(request, modelMessages(request, conversation));
                 } catch (Exception e) {
-                    modelMessages = compactForOverflowAndRetryIfPossible(
-                            request,
-                            newMessages,
-                            transcriptMessages,
-                            modelMessages,
-                            e);
-                    roundResult = runModelRoundWithRetries(request, modelMessages);
+                    compactForOverflowAndRetryIfPossible(request, conversation, e);
+                    roundResult = runModelRoundWithRetries(request, modelMessages(request, conversation));
                 }
                 usage = usage.plus(roundResult.usage());
-                newMessages.add(roundResult.message());
+                conversation.appendGenerated(roundResult.message());
                 assistantMessages.add(roundResult.message());
-                transcriptMessages.add(roundResult.message());
-                modelMessages.addAll(messageConverter.convertToLlm(List.of(roundResult.message())));
 
                 List<ToolCall> toolCalls = toolCalls(roundResult.message());
                 List<AgentMessage> roundToolResults = new ArrayList<>();
@@ -291,10 +281,10 @@ public final class AgentLoop {
                             request.sessionId(),
                             now(request),
                             request.turnId(),
-                            newMessages,
+                            conversation.generatedMessages(),
                             usage));
                     return new AgentLoopResult(
-                            List.copyOf(newMessages),
+                            conversation.generatedMessages(),
                             List.copyOf(assistantMessages),
                             List.copyOf(toolResults),
                             usage);
@@ -314,9 +304,7 @@ public final class AgentLoop {
                     eventBus.publish(new AgentEvent.ToolExecutionEnded(request.sessionId(), now(request), toolResult));
                     eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), toolResultMessage));
                     eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), toolResultMessage));
-                    newMessages.add(toolResultMessage);
-                    transcriptMessages.add(toolResultMessage);
-                    modelMessages.addAll(messageConverter.convertToLlm(List.of(toolResultMessage)));
+                    conversation.appendGenerated(toolResultMessage);
                 }
                 eventBus.publish(new AgentEvent.TurnEnded(
                         request.sessionId(),
@@ -330,10 +318,10 @@ public final class AgentLoop {
                             request.sessionId(),
                             now(request),
                             request.turnId(),
-                            newMessages,
+                            conversation.generatedMessages(),
                             usage));
                     return new AgentLoopResult(
-                            List.copyOf(newMessages),
+                            conversation.generatedMessages(),
                             List.copyOf(assistantMessages),
                             List.copyOf(toolResults),
                             usage);
@@ -424,36 +412,28 @@ public final class AgentLoop {
     private void publishAndAppendQueuedMessages(
             AgentLoopRequest request,
             List<AgentMessage> messages,
-            List<AgentMessage> newMessages,
-            List<AgentMessage> transcriptMessages,
-            List<AiMessage> modelMessages
+            AgentConversationContext conversation
     ) {
         for (AgentMessage message : messages) {
             eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), message));
             eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), message));
-            newMessages.add(message);
-            transcriptMessages.add(message);
+            conversation.appendGenerated(message);
         }
-        modelMessages.addAll(messageConverter.convertToLlm(messages));
     }
 
-    private List<AiMessage> compactForThresholdIfNeeded(
+    private void compactForThresholdIfNeeded(
             AgentLoopRequest request,
-            List<AgentMessage> newMessages,
-            List<AgentMessage> transcriptMessages,
-            List<AiMessage> modelMessages
+            AgentConversationContext conversation
     ) throws Exception {
         if (!request.compactionConfig().enabled()) {
-            return modelMessages;
+            return;
         }
-        return compactIfNeeded(request, newMessages, transcriptMessages, modelMessages, CompactionReason.THRESHOLD);
+        compactIfNeeded(request, conversation, CompactionReason.THRESHOLD);
     }
 
-    private List<AiMessage> compactForOverflowAndRetryIfPossible(
+    private void compactForOverflowAndRetryIfPossible(
             AgentLoopRequest request,
-            List<AgentMessage> newMessages,
-            List<AgentMessage> transcriptMessages,
-            List<AiMessage> modelMessages,
+            AgentConversationContext conversation,
             Exception failure
     ) throws Exception {
         if (!isContextOverflowError(failure)
@@ -461,38 +441,30 @@ public final class AgentLoop {
                 || !request.compactionConfig().overflowRetryEnabled()) {
             throw failure;
         }
-        List<AiMessage> compacted = compactIfNeeded(
-                request,
-                newMessages,
-                transcriptMessages,
-                modelMessages,
-                CompactionReason.OVERFLOW);
-        if (compacted == modelMessages) {
+        boolean compacted = compactIfNeeded(request, conversation, CompactionReason.OVERFLOW);
+        if (!compacted) {
             throw failure;
         }
-        return compacted;
     }
 
-    private List<AiMessage> compactIfNeeded(
+    private boolean compactIfNeeded(
             AgentLoopRequest request,
-            List<AgentMessage> newMessages,
-            List<AgentMessage> transcriptMessages,
-            List<AiMessage> modelMessages,
+            AgentConversationContext conversation,
             CompactionReason reason
     ) throws Exception {
         if (compactionService == null || compactionProvider == null || compactionModel == null) {
-            return modelMessages;
+            return false;
         }
         CompactionRequest compactionRequest = new CompactionRequest(
                 request.sessionId(),
                 reason,
-                transcriptMessages,
+                conversation.transcriptMessages(),
                 request.systemPrompt(),
                 request.compactionConfig(),
                 null);
         CompactionPlan plan = compactionService.plan(compactionRequest, compactionModel);
         if (!plan.compact()) {
-            return modelMessages;
+            return false;
         }
         eventBus.publish(new AgentEvent.CompactionStarted(
                 request.sessionId(),
@@ -506,18 +478,17 @@ public final class AgentLoop {
                 streamOptions(request));
         if (!result.compacted()) {
             eventBus.publish(new AgentEvent.CompactionCompleted(request.sessionId(), now(request), null));
-            return modelMessages;
+            return false;
         }
-        transcriptMessages.clear();
-        transcriptMessages.addAll(result.compactedMessages());
-        newMessages.add(result.summaryMessage());
+        conversation.replaceTranscript(result.compactedMessages());
+        conversation.recordGenerated(result.summaryMessage());
         eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), result.summaryMessage()));
         eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), result.summaryMessage()));
         eventBus.publish(new AgentEvent.CompactionCompleted(
                 request.sessionId(),
                 now(request),
                 result.summaryMessage().id()));
-        return modelMessagesFromTranscript(request, transcriptMessages);
+        return true;
     }
 
     private static boolean isContextOverflowError(Exception e) {
@@ -613,17 +584,8 @@ public final class AgentLoop {
         return new RoundResult(message, completedMessage.stopReason(), toUsage(completedMessage.usage()));
     }
 
-    private List<AiMessage> initialModelMessages(AgentLoopRequest request) {
-        return modelMessagesFromTranscript(request, request.messages());
-    }
-
-    private List<AiMessage> modelMessagesFromTranscript(AgentLoopRequest request, List<AgentMessage> transcriptMessages) {
-        List<AiMessage> modelMessages = new ArrayList<>();
-        if (request.systemPrompt() != null) {
-            modelMessages.add(new AiSystemMessage(request.systemPrompt()));
-        }
-        modelMessages.addAll(messageConverter.convertToLlm(transcriptMessages));
-        return modelMessages;
+    private List<AiMessage> modelMessages(AgentLoopRequest request, AgentConversationContext conversation) {
+        return conversation.toModelMessages(request.systemPrompt(), messageConverter);
     }
 
     private void publishModelEvent(AgentLoopRequest request, AiStreamEvent event) {

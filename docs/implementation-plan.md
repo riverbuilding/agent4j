@@ -508,7 +508,11 @@ Tasks:
   session-owned conversation model: make the runtime/session context own the
   canonical mutable transcript, build provider-facing model input only at the
   model boundary, and reduce loop-local message collections to result/event
-  accumulators where they remain necessary.
+  accumulators where they remain necessary. Done for the raw loop with
+  `AgentConversationContext`: it owns the working transcript and generated
+  messages, while `AgentLoop` rebuilds provider-facing `AiMessage` input at each
+  model boundary and keeps assistant messages as output reporting only. Phase 9
+  SDK/runtime should attach this context to a session runtime.
 - Strengthen `SessionManager`/JSONL parity before SDK work:
   - validate parent references and malformed typed payloads
   - define stale snapshot and multi-process same-file resume semantics
@@ -672,10 +676,9 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Address the `AgentLoop`/session-owned conversation context parity fix.
-2. Define and test stale snapshot and multi-process same-file resume semantics.
-3. Add stronger validation for parent references and malformed typed payloads.
-4. Audit coding tool schemas/result shapes and custom/session message
+1. Define and test stale snapshot and multi-process same-file resume semantics.
+2. Add stronger validation for parent references and malformed typed payloads.
+3. Audit coding tool schemas/result shapes and custom/session message
    conversion prompt text against PI.
-5. Keep expanding fixtures with real PI session samples as they become
+4. Keep expanding fixtures with real PI session samples as they become
    available.
