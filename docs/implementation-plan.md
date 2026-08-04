@@ -591,10 +591,28 @@ Goal: expose a stable Java embedding API equivalent to PI's SDK concepts.
 Tasks:
 
 - Mirror PI `AgentSession`, `AgentSessionRuntime`, and harness service
-  responsibilities before adding Java-only conveniences.
-- Add `AgentSession`.
-- Add `AgentSessionRuntime`.
-- Add runtime replacement for new, resume, fork, clone, and import.
+  responsibilities before adding Java-only conveniences. Initial shape audit is
+  done in `docs/sdk-runtime-shape-audit.md`: `agent4j-core` remains the generic
+  loop/context layer, `agent4j-coding` owns the coding SDK/runtime API, and
+  runtime/session code must own canonical conversation context.
+- Add `AgentSession` as the user-facing persisted conversation handle in
+  `agent4j-coding`, backed by `SessionManager` plus
+  `AgentConversationContext`.
+- Add `AgentSessionRuntime` in `agent4j-coding` as the services/lifecycle owner
+  for providers, tools, events, resources, settings, sessions, compaction,
+  branch summaries, and auth.
+- Add request/response records for the runtime API instead of exposing long
+  `AgentLoopRequest` constructors to SDK callers.
+- Add runtime replacement for new, resume, fork, clone, and import. These flows
+  should initialize or refresh `AgentConversationContext` from
+  `SessionManager.activeAgentMessages()` and persist generated loop messages
+  through `SessionManager.appendAgentLoopResult(...)`.
+- Add `AgentSession.prompt(...)`, which appends the user prompt, prepares
+  resources/settings, runs `AgentLoop`, persists generated messages, refreshes
+  session context, and returns SDK-facing prompt result metadata.
+- Add SDK-facing event subscription backed by `AgentEventBus`, keeping
+  `AgentEvent` as the Phase 9 listener payload and leaving CLI JSON/RPC event
+  mapping to Phase 10.
 - Add login/auth runtime API before CLI ownership:
   - provider-neutral `LoginService`/`AuthSession` API
   - ChatGPT/Codex subscription login flow, including browser OAuth and device
@@ -611,6 +629,9 @@ Tasks:
     provider login is test infrastructure only, not the product target
 - Add extension binding placeholders.
 - Add API docs and examples.
+- Re-check exact API names and lifecycle details against PI
+  `agent-session`/`sdk` source before Phase 9 closeout, because those PI source
+  files are not committed in this repository.
 
 Exit criteria:
 
