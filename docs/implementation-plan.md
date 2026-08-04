@@ -559,7 +559,7 @@ Tasks:
 - Bring resource/settings parity docs up to date and pin remaining later-phase
   gaps: npm/git package install/update/reconcile behavior, interactive trust
   prompting, `trust.json` persistence, and exact provider-facing prompt fixture
-  text.
+  text. Done in `docs/resource-settings-parity.md`.
 - Bring `agent4j-ai` parity docs up to date as provider slices complete:
   provider abstraction is implemented for Phase 6, Phase 8 owns provider
   options, timeout/retry semantics, feature flags, and endpoint/base-url
@@ -710,5 +710,7 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Keep expanding fixtures with real PI session samples as they become
+1. Begin Phase 9 SDK/runtime API, starting with the PI-style `AgentSession` and
+   `AgentSessionRuntime` shape.
+2. Keep expanding fixtures with real PI session samples as they become
    available.
