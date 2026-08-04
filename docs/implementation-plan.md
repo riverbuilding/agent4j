@@ -262,7 +262,9 @@ Tasks:
 - Add PI-style tool execution update callbacks. Done with `ToolContext`
   update publishing and `tool_execution_update` event coverage.
 - Add PI-style before/after tool execution hooks. Done with loop-level hooks
-  that run around tool execution and can publish tool updates.
+  that run inside the `tool_execution_start` / `tool_execution_end` event
+  window, can publish tool updates, run after-hooks for normal and blocked
+  results, and keep ordered transcript emission after `tool_execution_end`.
 - Add PI-style blocked tool results. Done with hook-returned blocked
   `ToolResult` values that skip execution and preserve normal result emission.
 - Add PI-style terminate hints. Done with `ToolResult` metadata that ends
@@ -644,6 +646,9 @@ Goal: support harness customization without embedding TypeScript first.
 Tasks:
 
 - Mirror PI extension lifecycle names and hook timing as the default Java SPI.
+  Phase 8 pins current tool-hook timing in `docs/tool-hook-timing-audit.md`;
+  Phase 11 still owns exact extension hook names, discovery, and exception
+  policy.
 - Define Java extension interfaces.
 - Add lifecycle hooks:
   - before agent start

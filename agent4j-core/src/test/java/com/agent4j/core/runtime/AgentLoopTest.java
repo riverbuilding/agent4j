@@ -845,11 +845,16 @@ class AgentLoopTest {
                                         List.of(new AiTextContent("done")),
                                         AiStopReason.STOP,
                                         AiUsage.zero()))));
+        AgentEventBus bus = new AgentEventBus();
+        List<AgentEvent> events = new ArrayList<>();
+        bus.subscribe(events::add);
         List<String> observations = new ArrayList<>();
         ToolExecutionHook hook = new ToolExecutionHook() {
             @Override
             public Optional<ToolResult> beforeToolExecution(ToolCall toolCall, ToolContext context) {
                 observations.add("before:" + toolCall.id());
+                observations.add("beforeSawStart:" + events.stream().anyMatch(AgentEvent.ToolExecutionStarted.class::isInstance));
+                observations.add("beforeSawEnd:" + events.stream().anyMatch(AgentEvent.ToolExecutionEnded.class::isInstance));
                 context.publishUpdate(JSON.objectNode().put("hook", "before"));
                 return Optional.empty();
             }
@@ -857,6 +862,8 @@ class AgentLoopTest {
             @Override
             public void afterToolExecution(ToolCall toolCall, ToolContext context, ToolResult result) {
                 observations.add("after:" + result.toolCallId() + ":" + result.content().asText());
+                observations.add("afterSawStart:" + events.stream().anyMatch(AgentEvent.ToolExecutionStarted.class::isInstance));
+                observations.add("afterSawEnd:" + events.stream().anyMatch(AgentEvent.ToolExecutionEnded.class::isInstance));
                 context.publishUpdate(JSON.objectNode().put("hook", "after"));
             }
         };
@@ -867,14 +874,18 @@ class AgentLoopTest {
                     return new ToolResult(call.id(), call.name(), false, JSON.textNode("ok"), JSON.objectNode());
                 })
                 .build();
-        AgentEventBus bus = new AgentEventBus();
-        List<AgentEvent> events = new ArrayList<>();
-        bus.subscribe(events::add);
 
         new AgentLoop(model, registry, bus, List.of(hook))
                 .runTurn(request(List.of(userMessage("user-1", "run hooked")), 2));
 
-        assertThat(observations).containsExactly("before:tool-1", "execute:tool-1", "after:tool-1:ok");
+        assertThat(observations).containsExactly(
+                "before:tool-1",
+                "beforeSawStart:true",
+                "beforeSawEnd:false",
+                "execute:tool-1",
+                "after:tool-1:ok",
+                "afterSawStart:true",
+                "afterSawEnd:false");
         assertThat(events).extracting(event -> event.getClass().getSimpleName())
                 .containsSubsequence(
                         "ToolExecutionStarted",
@@ -911,15 +922,18 @@ class AgentLoopTest {
                                         AiUsage.zero()))));
         AtomicBoolean executed = new AtomicBoolean(false);
         List<ToolResult> afterResults = new ArrayList<>();
+        List<String> observations = new ArrayList<>();
         ToolExecutionHook hook = new ToolExecutionHook() {
             @Override
             public Optional<ToolResult> beforeToolExecution(ToolCall toolCall, ToolContext context) {
+                observations.add("before:" + toolCall.id());
                 context.publishUpdate(JSON.objectNode().put("status", "blocked"));
                 return Optional.of(ToolResult.blocked(toolCall, "blocked by policy"));
             }
 
             @Override
             public void afterToolExecution(ToolCall toolCall, ToolContext context, ToolResult result) {
+                observations.add("after:" + result.toolCallId() + ":" + result.metadata().path("blocked").asBoolean());
                 afterResults.add(result);
             }
         };
@@ -937,6 +951,7 @@ class AgentLoopTest {
                 .runTurn(request(List.of(userMessage("user-1", "run blocked")), 2));
 
         assertThat(executed).isFalse();
+        assertThat(observations).containsExactly("before:tool-1", "after:tool-1:true");
         assertThat(afterResults).hasSize(1);
         assertThat(afterResults.getFirst().error()).isTrue();
         assertThat(afterResults.getFirst().metadata().path("blocked").asBoolean()).isTrue();
