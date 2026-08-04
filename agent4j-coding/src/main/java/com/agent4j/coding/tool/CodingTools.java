@@ -63,7 +63,7 @@ public final class CodingTools {
         String text = readTextFile(path);
         TruncatedText content = TruncatedText.of(text, limits.maxOutputChars());
         ObjectNode result = JSON.objectNode();
-        result.put("path", path.toString());
+        result.put("path", displayPath(context, path));
         result.put("content", content.text());
         result.put("truncated", content.truncated());
         result.put("originalLength", content.originalLength());
@@ -75,7 +75,7 @@ public final class CodingTools {
         String content = requiredText(call.arguments(), "content");
         fileSystemOps.writeString(path, content);
         ObjectNode result = JSON.objectNode();
-        result.put("path", path.toString());
+        result.put("path", displayPath(context, path));
         result.put("bytesWritten", content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
         return ok(call, result);
     }
@@ -96,7 +96,7 @@ public final class CodingTools {
         String updated = original.substring(0, first) + newText + original.substring(first + oldText.length());
         fileSystemOps.writeString(path, updated);
         ObjectNode result = JSON.objectNode();
-        result.put("path", path.toString());
+        result.put("path", displayPath(context, path));
         result.put("replacements", 1);
         result.put("matchCount", matchCount);
         result.put("ambiguous", matchCount > 1);
@@ -148,7 +148,7 @@ public final class CodingTools {
             emitted++;
         }
         ObjectNode result = JSON.objectNode();
-        result.put("path", path.toString());
+        result.put("path", displayPath(context, path));
         result.set("entries", entries);
         result.put("truncated", listed.size() > emitted);
         result.put("totalEntries", listed.size());
@@ -186,6 +186,7 @@ public final class CodingTools {
         }
         ObjectNode result = JSON.objectNode();
         result.put("pattern", pattern);
+        result.put("path", displayPath(context, path));
         result.set("matches", matches);
         result.put("truncated", totalMatches > matches.size());
         result.put("totalMatches", totalMatches);
@@ -218,7 +219,7 @@ public final class CodingTools {
             entries.add(item);
         }
         ObjectNode result = JSON.objectNode();
-        result.put("path", path.toString());
+        result.put("path", displayPath(context, path));
         result.put("name", name);
         result.set("entries", entries);
         result.put("truncated", totalMatches > entries.size());
@@ -228,6 +229,11 @@ public final class CodingTools {
 
     private Path resolvePath(com.agent4j.core.tool.ToolContext context, String path) {
         return pathPolicy.resolve(context.cwd(), Path.of(path));
+    }
+
+    private static String displayPath(com.agent4j.core.tool.ToolContext context, Path path) {
+        Path relative = context.cwd().relativize(path);
+        return relative.toString().isBlank() ? "." : relative.toString();
     }
 
     private String readTextFile(Path path) throws Exception {
@@ -312,51 +318,69 @@ public final class CodingTools {
     }
 
     private static ToolSpec readSpec() {
-        return new ToolSpec("read", "Read a UTF-8 text file from the workspace.", schema("path"));
+        return new ToolSpec("read", "Read a UTF-8 text file from the workspace.", schema(
+                new Field("path", "string", "Workspace-relative file path to read.", true)));
     }
 
     private static ToolSpec writeSpec() {
-        return new ToolSpec("write", "Write UTF-8 text content to a workspace file.", schema("path", "content"));
+        return new ToolSpec("write", "Write UTF-8 text content to a workspace file.", schema(
+                new Field("path", "string", "Workspace-relative file path to write.", true),
+                new Field("content", "string", "Complete file content to write.", true)));
     }
 
     private static ToolSpec editSpec() {
-        return new ToolSpec("edit", "Replace the first exact text occurrence in a workspace file.", schema("path", "oldText", "newText"));
+        return new ToolSpec("edit", "Replace the first exact text occurrence in a workspace file.", schema(
+                new Field("path", "string", "Workspace-relative file path to edit.", true),
+                new Field("oldText", "string", "Exact text to replace.", true),
+                new Field("newText", "string", "Replacement text.", true)));
     }
 
     private static ToolSpec bashSpec() {
-        return new ToolSpec("bash", "Run a shell command in the workspace.", schema("command"));
+        return new ToolSpec("bash", "Run a shell command in the workspace.", schema(
+                new Field("command", "string", "Shell command to run.", true),
+                new Field("timeoutSeconds", "integer", "Optional command timeout in seconds.", false)));
     }
 
     private static ToolSpec lsSpec() {
-        return new ToolSpec("ls", "List files in a workspace directory.", schema());
+        return new ToolSpec("ls", "List files in a workspace directory.", schema(
+                new Field("path", "string", "Workspace-relative directory path to list. Defaults to the workspace root.", false)));
     }
 
     private static ToolSpec grepSpec() {
-        return new ToolSpec("grep", "Search workspace text files with a regular expression.", schema("pattern"));
+        return new ToolSpec("grep", "Search workspace text files with a regular expression.", schema(
+                new Field("pattern", "string", "Java regular expression to search for.", true),
+                new Field("path", "string", "Workspace-relative file or directory path to search. Defaults to the workspace root.", false)));
     }
 
     private static ToolSpec findSpec() {
-        return new ToolSpec("find", "Find files or directories by name within the workspace.", schema());
+        return new ToolSpec("find", "Find files or directories by name within the workspace.", schema(
+                new Field("path", "string", "Workspace-relative file or directory path to search. Defaults to the workspace root.", false),
+                new Field("name", "string", "Optional substring to match against file or directory names.", false)));
     }
 
-    private static ObjectNode schema(String... requiredFields) {
+    private static ObjectNode schema(Field... fields) {
         ObjectNode schema = JSON.objectNode();
         schema.put("type", "object");
+        schema.put("additionalProperties", false);
         ObjectNode properties = JSON.objectNode();
-        for (String field : requiredFields) {
-            properties.set(field, JSON.objectNode().put("type", "string"));
-        }
-        if (requiredFields.length > 0 && "command".equals(requiredFields[0])) {
-            properties.set("timeoutSeconds", JSON.objectNode().put("type", "integer").put("minimum", 1));
-        }
-        properties.set("path", JSON.objectNode().put("type", "string"));
-        properties.set("name", JSON.objectNode().put("type", "string"));
-        schema.set("properties", properties);
         var required = JSON.arrayNode();
-        for (String field : requiredFields) {
-            required.add(field);
+        for (Field field : fields) {
+            ObjectNode property = JSON.objectNode()
+                    .put("type", field.type())
+                    .put("description", field.description());
+            if ("integer".equals(field.type())) {
+                property.put("minimum", 1);
+            }
+            properties.set(field.name(), property);
+            if (field.required()) {
+                required.add(field.name());
+            }
         }
+        schema.set("properties", properties);
         schema.set("required", required);
         return schema;
+    }
+
+    private record Field(String name, String type, String description, boolean required) {
     }
 }

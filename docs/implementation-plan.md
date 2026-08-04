@@ -541,7 +541,11 @@ Tasks:
 - Audit `agent4j-coding` built-in tools against PI implementation details:
   argument schemas, descriptions, image/text read behavior, edit
   multi-replacement behavior, render/update events, and result content/details
-  shape.
+  shape. Done for schema/result baseline: tool input schemas now expose only
+  accepted arguments with descriptions and `additionalProperties: false`, and
+  successful path-bearing results use workspace-relative paths. Remaining
+  PI-source audit: exact description text, image read payload shape, edit
+  multi-replacement behavior, and streaming render/update details.
 - Audit coding custom/session message conversion against PI prompt text and
   variants for bash execution, branch summary, compaction summary, and custom
   extension messages.
@@ -696,7 +700,6 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Audit coding tool schemas/result shapes and custom/session message
-   conversion prompt text against PI.
+1. Audit coding custom/session message conversion prompt text against PI.
 2. Keep expanding fixtures with real PI session samples as they become
    available.

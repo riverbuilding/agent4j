@@ -9,6 +9,8 @@ import com.agent4j.core.operation.ProcessResult;
 import com.agent4j.core.runtime.AbortController;
 import com.agent4j.core.tool.ToolContext;
 import com.agent4j.core.tool.ToolExecutor;
+import com.agent4j.core.tool.ToolSpec;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 
@@ -40,12 +42,29 @@ class CodingToolsTest {
     }
 
     @Test
+    void exposesAuditedInputSchemasWithoutLeakingUnrelatedProperties() {
+        Map<String, ToolSpec> specs = tools.registry().specs().stream()
+                .collect(java.util.stream.Collectors.toMap(ToolSpec::name, spec -> spec));
+
+        assertSchema(specs.get("read"), List.of("path"), List.of("path"));
+        assertSchema(specs.get("write"), List.of("path", "content"), List.of("path", "content"));
+        assertSchema(specs.get("edit"), List.of("path", "oldText", "newText"), List.of("path", "oldText", "newText"));
+        assertSchema(specs.get("bash"), List.of("command"), List.of("command", "timeoutSeconds"));
+        assertSchema(specs.get("ls"), List.of(), List.of("path"));
+        assertSchema(specs.get("grep"), List.of("pattern"), List.of("pattern", "path"));
+        assertSchema(specs.get("find"), List.of(), List.of("path", "name"));
+        assertThat(specs.get("bash").inputSchema().path("properties").has("path")).isFalse();
+        assertThat(specs.get("read").inputSchema().path("properties").has("name")).isFalse();
+    }
+
+    @Test
     void readsFileAndReportsTruncation() {
         files.writeStringUnchecked(CWD.resolve("README.md"), "hello world");
 
         ToolResult result = execute("read", args().put("path", "README.md"));
 
         assertThat(result.error()).isFalse();
+        assertThat(result.content().get("path").asText()).isEqualTo("README.md");
         assertThat(result.content().get("content").asText()).isEqualTo("hello wo");
         assertThat(result.content().get("truncated").asBoolean()).isTrue();
         assertThat(result.content().get("originalLength").asInt()).isEqualTo(11);
@@ -68,6 +87,7 @@ class CodingToolsTest {
                 .put("content", "class Main {}"));
 
         assertThat(result.error()).isFalse();
+        assertThat(result.content().get("path").asText()).isEqualTo("src/Main.java");
         assertThat(files.readStringUnchecked(CWD.resolve("src/Main.java"))).isEqualTo("class Main {}");
         assertThat(result.content().get("bytesWritten").asInt()).isEqualTo("class Main {}".getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
     }
@@ -82,6 +102,7 @@ class CodingToolsTest {
                 .put("newText", "three"));
 
         assertThat(result.error()).isFalse();
+        assertThat(result.content().get("path").asText()).isEqualTo("file.txt");
         assertThat(files.readStringUnchecked(CWD.resolve("file.txt"))).isEqualTo("one three two");
         assertThat(result.content().get("replacements").asInt()).isEqualTo(1);
         assertThat(result.content().get("matchCount").asInt()).isEqualTo(2);
@@ -162,6 +183,7 @@ class CodingToolsTest {
         ToolResult result = execute("ls", args().put("path", "src"));
 
         assertThat(result.error()).isFalse();
+        assertThat(result.content().get("path").asText()).isEqualTo("src");
         assertThat(result.content().get("entries")).hasSize(2);
         assertThat(result.content().get("entries").get(0).get("path").asText()).isEqualTo("src/Main.java");
         assertThat(result.content().get("entries").get(0).get("directory").asBoolean()).isFalse();
@@ -183,6 +205,7 @@ class CodingToolsTest {
                 .put("pattern", "target"));
 
         assertThat(result.error()).isFalse();
+        assertThat(result.content().get("path").asText()).isEqualTo(".");
         assertThat(result.content().get("matches")).hasSize(2);
         assertThat(result.content().get("matches").get(0).get("path").asText()).isEqualTo("README.md");
         assertThat(result.content().get("matches").get(0).get("line").asInt()).isEqualTo(1);
@@ -212,6 +235,7 @@ class CodingToolsTest {
                 .put("name", ".java"));
 
         assertThat(result.error()).isFalse();
+        assertThat(result.content().get("path").asText()).isEqualTo(".");
         assertThat(result.content().get("entries")).hasSize(2);
         assertThat(result.content().get("entries").get(0).get("path").asText()).isEqualTo("src/Main.java");
         assertThat(result.content().get("entries").get(1).get("path").asText()).isEqualTo("src/Other.java");
@@ -263,6 +287,20 @@ class CodingToolsTest {
 
     private ToolContext context() {
         return new ToolContext("session-1", CWD, Clock.systemUTC(), new AbortController().signal(), Map.of());
+    }
+
+    private static void assertSchema(ToolSpec spec, List<String> required, List<String> properties) {
+        JsonNode schema = spec.inputSchema();
+        assertThat(schema.path("type").asText()).isEqualTo("object");
+        assertThat(schema.path("additionalProperties").asBoolean()).isFalse();
+        assertThat(schema.path("required")).extracting(JsonNode::asText)
+                .containsExactlyElementsOf(required);
+        assertThat(schema.path("properties").fieldNames())
+                .toIterable()
+                .containsExactlyInAnyOrderElementsOf(properties);
+        for (String property : properties) {
+            assertThat(schema.path("properties").path(property).path("description").asText()).isNotBlank();
+        }
     }
 
     private static com.fasterxml.jackson.databind.node.ObjectNode args() {
