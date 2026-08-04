@@ -475,7 +475,7 @@ Tasks:
   including any remaining intentional divergence and its reason.
 - First fix provider parity gaps in `agent4j-ai` before runtime/session work:
   - align provider-specific option models with PI where Java currently only has
-    minimal OpenAI/Anthropic options. Started with the provider-options
+    minimal OpenAI/Anthropic options. Done with the provider-options
     baseline: `AiGenerationOptions` now carries common max-output,
     temperature, top-p, top-k, tool-choice, parallel-tool-call, and metadata
     settings through `AiStreamOptions`; OpenAI and Anthropic adapters serialize
@@ -499,8 +499,9 @@ Tasks:
     committing it as module documentation or folding it into ADR/plan docs.
     Done with `AiEndpointResolver`: `AiProviderRequest` applies auth
     `baseUrl` to a request-scoped effective model, providers resolve endpoint
-    URIs from `request.model().baseUrl()` plus their API path suffix, and the
-    `agent4j-ai` README documents the PI-compatible shape.
+    URIs from `request.model().baseUrl()` plus their API path suffix. The
+    duplicate `agent4j-ai` README parity note was removed, leaving this plan
+    and ADR 0002 as the authoritative provider parity docs.
   - keep live ChatGPT/Codex subscription login flow in Phase 9, but make the
     provider abstraction ready for that auth mode in Phase 8. Done with
     `AiAuthMode`, access-token/subscription-ready `AiResolvedAuth` fields,
@@ -564,8 +565,12 @@ Tasks:
   provider abstraction is implemented for Phase 6, Phase 8 owns provider
   options, timeout/retry semantics, feature flags, and endpoint/base-url
   parity, while Phase 9 owns live subscription login flow.
-- Decide whether to keep or remove any local module docs that describe parity
-  direction, such as `agent4j-ai/README.md`, before continuing implementation.
+- Remove stale local module docs that duplicate the ADR/plan parity direction.
+  Done: `agent4j-ai/README.md` was removed and provider parity status is kept
+  in this plan plus ADR 0002.
+- Close Phase 8 with a single audit note that records completed slices,
+  verification coverage, and intentionally deferred PI parity work. Done in
+  `docs/phase-8-closeout.md`.
 
 Exit criteria:
 
@@ -576,6 +581,8 @@ Exit criteria:
   and session resume behavior.
 - The next SDK/runtime phase can build on a PI-style session-owned conversation
   context rather than the current loop-local transcript/message-list shape.
+- `docs/phase-8-closeout.md` summarizes closed gaps and deferred work before
+  Phase 9 starts.
 
 ## Phase 9: SDK And Runtime API
 
