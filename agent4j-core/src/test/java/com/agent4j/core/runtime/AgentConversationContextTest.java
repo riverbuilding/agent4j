@@ -31,6 +31,8 @@ class AgentConversationContextTest {
                 .containsExactly("user-1", "assistant-1");
         assertThat(context.generatedMessages()).extracting(AgentMessage::id)
                 .containsExactly("assistant-1");
+        assertThat(context.assistantMessages()).extracting(AgentMessage::id)
+                .containsExactly("assistant-1");
     }
 
     @Test
@@ -48,6 +50,7 @@ class AgentConversationContextTest {
                 .containsExactly("summary-1", "assistant-2");
         assertThat(context.generatedMessages()).extracting(AgentMessage::id)
                 .containsExactly("summary-1");
+        assertThat(context.assistantMessages()).isEmpty();
     }
 
     @Test

@@ -55,8 +55,8 @@ drain, tool results, or compaction.
 
 ## Assistant Results
 
-`AgentLoopResult.assistantMessages()` remains a result accumulator containing
-only assistant model messages produced by the LLM.
+`AgentLoopResult.assistantMessages()` is derived from
+`AgentConversationContext.generatedMessages()`.
 
-It is intentionally separate from the conversation context because it is output
-reporting, not canonical conversation state.
+It contains only assistant model messages produced by the LLM. It is output
+reporting, not separate canonical conversation state.

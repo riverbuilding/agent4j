@@ -511,8 +511,10 @@ Tasks:
   accumulators where they remain necessary. Done for the raw loop with
   `AgentConversationContext`: it owns the working transcript and generated
   messages, while `AgentLoop` rebuilds provider-facing `AiMessage` input at each
-  model boundary and keeps assistant messages as output reporting only. Phase 9
-  SDK/runtime should attach this context to a session runtime.
+  model boundary. Message-state reduction is complete for the raw loop:
+  assistant-only results are derived from generated messages rather than tracked
+  as a separate loop-owned message list. Phase 9 SDK/runtime should attach this
+  context to a session runtime.
 - Strengthen `SessionManager`/JSONL parity before SDK work:
   - validate parent references and malformed typed payloads
   - define stale snapshot and multi-process same-file resume semantics

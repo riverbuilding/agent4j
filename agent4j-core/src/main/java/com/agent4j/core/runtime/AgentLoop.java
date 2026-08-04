@@ -229,7 +229,6 @@ public final class AgentLoop {
         request.abortSignal().throwIfAborted();
         eventBus.publish(new AgentEvent.AgentStarted(request.sessionId(), now(request), request.turnId()));
 
-        List<AgentMessage> assistantMessages = new ArrayList<>();
         AgentConversationContext conversation = new AgentConversationContext(request.messages(), request.promptMessages());
         List<ToolResult> toolResults = new ArrayList<>();
         List<AgentMessage> steeringQueue = new ArrayList<>(request.steeringMessages());
@@ -257,7 +256,6 @@ public final class AgentLoop {
                 }
                 usage = usage.plus(roundResult.usage());
                 conversation.appendGenerated(roundResult.message());
-                assistantMessages.add(roundResult.message());
 
                 List<ToolCall> toolCalls = toolCalls(roundResult.message());
                 List<AgentMessage> roundToolResults = new ArrayList<>();
@@ -285,7 +283,7 @@ public final class AgentLoop {
                             usage));
                     return new AgentLoopResult(
                             conversation.generatedMessages(),
-                            List.copyOf(assistantMessages),
+                            conversation.assistantMessages(),
                             List.copyOf(toolResults),
                             usage);
                 }
@@ -322,7 +320,7 @@ public final class AgentLoop {
                             usage));
                     return new AgentLoopResult(
                             conversation.generatedMessages(),
-                            List.copyOf(assistantMessages),
+                            conversation.assistantMessages(),
                             List.copyOf(toolResults),
                             usage);
                 }

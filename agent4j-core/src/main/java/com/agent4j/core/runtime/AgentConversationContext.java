@@ -3,6 +3,7 @@ package com.agent4j.core.runtime;
 import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiSystemMessage;
 import com.agent4j.core.message.AgentMessage;
+import com.agent4j.core.message.AgentMessageRole;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +26,12 @@ public final class AgentConversationContext {
 
     public List<AgentMessage> generatedMessages() {
         return List.copyOf(generatedMessages);
+    }
+
+    public List<AgentMessage> assistantMessages() {
+        return generatedMessages.stream()
+                .filter(message -> message.role() == AgentMessageRole.ASSISTANT)
+                .toList();
     }
 
     public void appendGenerated(AgentMessage message) {
