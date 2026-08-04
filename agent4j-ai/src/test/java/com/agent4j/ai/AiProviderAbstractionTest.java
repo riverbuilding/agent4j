@@ -25,6 +25,7 @@ class AiProviderAbstractionTest {
         assertThat(model.maxTokens()).isEqualTo(16384);
         assertThat(model.cost()).isEqualTo(AiCost.zero());
         assertThat(model.compat()).isEqualTo(AiModelCompat.defaults());
+        assertThat(model.features()).isEqualTo(AiModelFeatures.defaults());
     }
 
     @Test
@@ -41,12 +42,23 @@ class AiProviderAbstractionTest {
                 200000,
                 32000,
                 new AiCost(new AiTokenCost(3, 15, 0.3, 3.75), List.of(new AiCostTier(200000, AiTokenCost.zero()))),
-                AiModelCompat.defaults());
+                AiModelCompat.defaults(),
+                null);
 
         assertThatThrownBy(() -> model.input().add(AiInputType.TEXT))
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThat(model.thinkingLevelMap()).containsEntry(AiThinkingLevel.HIGH, "high");
         assertThat(model.unsupportedThinkingLevels()).containsExactly(AiThinkingLevel.MINIMAL);
+        assertThat(model.features().imageInput()).isTrue();
+        assertThat(model.features().reasoning()).isTrue();
+    }
+
+    @Test
+    void providerFeaturesHaveStableDefaults() {
+        assertThat(AiProviderFeatures.defaults().streaming()).isTrue();
+        assertThat(AiProviderFeatures.defaults().toolCalling()).isTrue();
+        assertThat(AiProviderFeatures.defaults().parallelToolCalls()).isTrue();
+        assertThat(AiProviderFeatures.withoutParallelToolCalls().parallelToolCalls()).isFalse();
     }
 
     @Test

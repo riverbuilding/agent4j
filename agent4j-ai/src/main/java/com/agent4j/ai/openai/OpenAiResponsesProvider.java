@@ -8,6 +8,7 @@ import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiProvider;
 import com.agent4j.ai.AiProviderApi;
+import com.agent4j.ai.AiProviderFeatures;
 import com.agent4j.ai.AiProviderRequest;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
@@ -75,6 +76,11 @@ public final class OpenAiResponsesProvider implements AiProvider {
     }
 
     @Override
+    public AiProviderFeatures features() {
+        return options.features();
+    }
+
+    @Override
     public List<AiModel> models() {
         return options.models();
     }
@@ -97,7 +103,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
         body.set("input", input(request.turn().messages()));
         applyGenerationOptions(body, request.options().generation());
         systemInstructions(request.turn().messages()).ifPresent(instructions -> body.put("instructions", instructions));
-        if (!request.turn().tools().isEmpty()) {
+        if (shouldSendTools(request)) {
             ArrayNode tools = JSON.arrayNode();
             for (AiToolSpec tool : request.turn().tools()) {
                 ObjectNode function = JSON.objectNode()
@@ -109,10 +115,20 @@ public final class OpenAiResponsesProvider implements AiProvider {
                 tools.add(function);
             }
             body.set("tools", tools);
-            body.put("tool_choice", request.options().generation().toolChoice().orElse("auto"));
-            body.put("parallel_tool_calls", request.options().generation().parallelToolCalls());
+            if (features().toolChoice() && request.model().features().toolChoice()) {
+                body.put("tool_choice", request.options().generation().toolChoice().orElse("auto"));
+            }
+            if (features().parallelToolCalls() && request.model().features().parallelToolCalls()) {
+                body.put("parallel_tool_calls", request.options().generation().parallelToolCalls());
+            }
         }
         return body;
+    }
+
+    private boolean shouldSendTools(AiProviderRequest request) {
+        return !request.turn().tools().isEmpty()
+                && features().toolCalling()
+                && request.model().features().toolCalling();
     }
 
     private static void applyGenerationOptions(ObjectNode body, AiGenerationOptions options) {

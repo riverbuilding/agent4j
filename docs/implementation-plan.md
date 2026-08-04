@@ -488,7 +488,10 @@ Tasks:
     `AiRetryClassifier` plus `AiProviderHttpException` classify transient HTTP
     and transport failures.
   - add provider/model feature flags and capability metadata needed by later
-    runtime and CLI selection
+    runtime and CLI selection. Done with `AiProviderFeatures` and
+    `AiModelFeatures`; OpenAI and Anthropic adapters expose provider flags and
+    honor model/provider tool-calling, tool-choice, and parallel-tool-call
+    support while preserving existing default behavior.
   - make endpoint/base-url resolution match PI's effective-model behavior and
     decide the fate of the local `agent4j-ai/README.md` parity note by
     committing it as module documentation or folding it into ADR/plan docs
@@ -662,8 +665,8 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Continue Phase 8 provider parity fixes in `agent4j-ai`: model/provider
-   feature flags, endpoint/base-url resolution, and auth-mode readiness.
+1. Continue Phase 8 provider parity fixes in `agent4j-ai`: endpoint/base-url
+   resolution and auth-mode readiness.
 2. Then address the `AgentLoop`/session-owned conversation context parity fix.
 3. Define and test stale snapshot and multi-process same-file resume semantics.
 4. Add stronger validation for parent references and malformed typed payloads.

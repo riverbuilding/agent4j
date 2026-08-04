@@ -18,7 +18,8 @@ public record AiModel(
         long contextWindow,
         long maxTokens,
         AiCost cost,
-        AiModelCompat compat
+        AiModelCompat compat,
+        AiModelFeatures features
 ) {
     public AiModel {
         Objects.requireNonNull(reference, "reference");
@@ -30,6 +31,7 @@ public record AiModel(
         Objects.requireNonNull(input, "input");
         Objects.requireNonNull(cost, "cost");
         Objects.requireNonNull(compat, "compat");
+        features = features == null ? AiModelFeatures.defaults(input, reasoning, compat) : features;
         if (name.isBlank()) {
             throw new IllegalArgumentException("name must not be blank");
         }
@@ -57,7 +59,38 @@ public record AiModel(
                 128000,
                 16384,
                 AiCost.zero(),
-                AiModelCompat.defaults());
+                AiModelCompat.defaults(),
+                null);
+    }
+
+    public AiModel(
+            AiModelReference reference,
+            String name,
+            Optional<AiProviderApi> api,
+            Optional<String> baseUrl,
+            boolean reasoning,
+            Map<AiThinkingLevel, String> thinkingLevelMap,
+            Set<AiThinkingLevel> unsupportedThinkingLevels,
+            Set<AiInputType> input,
+            long contextWindow,
+            long maxTokens,
+            AiCost cost,
+            AiModelCompat compat
+    ) {
+        this(
+                reference,
+                name,
+                api,
+                baseUrl,
+                reasoning,
+                thinkingLevelMap,
+                unsupportedThinkingLevels,
+                input,
+                contextWindow,
+                maxTokens,
+                cost,
+                compat,
+                null);
     }
 
     public String providerId() {

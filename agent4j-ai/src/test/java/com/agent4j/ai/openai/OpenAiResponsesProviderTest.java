@@ -4,7 +4,9 @@ import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlock;
 import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiModel;
+import com.agent4j.ai.AiModelFeatures;
 import com.agent4j.ai.AiModelReference;
+import com.agent4j.ai.AiProviderFeatures;
 import com.agent4j.ai.AiProviderContext;
 import com.agent4j.ai.AiProviderRequest;
 import com.agent4j.ai.AiResolvedAuth;
@@ -29,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,6 +112,58 @@ class OpenAiResponsesProviderTest {
         assertThat(body.get("tool_choice").asText()).isEqualTo("required");
         assertThat(body.get("parallel_tool_calls").asBoolean()).isFalse();
         assertThat(body.at("/metadata/session").asText()).isEqualTo("abc");
+    }
+
+    @Test
+    void omitsToolFieldsWhenModelDisablesToolCalling() {
+        AiModel model = new AiModel(
+                new AiModelReference("openai", "gpt-5-no-tools"),
+                "GPT-5 No Tools",
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                Map.of(),
+                Set.of(),
+                Set.of(),
+                128000,
+                16384,
+                com.agent4j.ai.AiCost.zero(),
+                com.agent4j.ai.AiModelCompat.defaults(),
+                new AiModelFeatures(true, false, false, false, false, false, false, true, true, false));
+        OpenAiResponsesProvider provider = new OpenAiResponsesProvider(
+                OpenAiResponsesProviderOptions.defaults(List.of(model)),
+                new CapturingTransport(List.of()));
+        AiProviderRequest request = new AiProviderRequest(
+                model,
+                new AiTurnRequest(
+                        List.of(AiUserMessage.text("hello")),
+                        List.of(new AiToolSpec("read", "Read a file", JSON.objectNode()))),
+                AiProviderContext.empty(),
+                AiStreamOptions.defaults());
+
+        JsonNode body = provider.toRequestJson(request);
+
+        assertThat(body.has("tools")).isFalse();
+        assertThat(body.has("tool_choice")).isFalse();
+        assertThat(body.has("parallel_tool_calls")).isFalse();
+    }
+
+    @Test
+    void exposesProviderFeatureFlagsFromOptions() {
+        AiModel model = new AiModel(new AiModelReference("openai", "gpt-5"), "GPT-5");
+        OpenAiResponsesProvider provider = new OpenAiResponsesProvider(
+                new OpenAiResponsesProviderOptions(
+                        "openai",
+                        "OpenAI",
+                        URI.create("https://api.openai.com/v1/responses"),
+                        List.of(model),
+                        Map.of(),
+                        request -> request,
+                        new AiProviderFeatures(true, true, true, true, true, true, true, true, false, false)),
+                new CapturingTransport(List.of()));
+
+        assertThat(provider.features().toolChoice()).isFalse();
+        assertThat(provider.features().parallelToolCalls()).isFalse();
     }
 
     @Test

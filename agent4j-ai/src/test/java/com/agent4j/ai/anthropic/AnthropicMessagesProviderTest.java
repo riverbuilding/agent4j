@@ -3,6 +3,7 @@ package com.agent4j.ai.anthropic;
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiModel;
+import com.agent4j.ai.AiModelFeatures;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProviderContext;
 import com.agent4j.ai.AiProviderRequest;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -117,6 +119,52 @@ class AnthropicMessagesProviderTest {
         assertThat(body.at("/tool_choice/type").asText()).isEqualTo("tool");
         assertThat(body.at("/tool_choice/name").asText()).isEqualTo("read");
         assertThat(body.at("/metadata/session").asText()).isEqualTo("abc");
+    }
+
+    @Test
+    void omitsToolChoiceWhenModelDisablesToolChoiceButKeepsTools() {
+        AiModel model = new AiModel(
+                new AiModelReference("anthropic", "claude-no-tool-choice"),
+                "Claude No Tool Choice",
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                Map.of(),
+                Set.of(),
+                Set.of(),
+                200000,
+                32000,
+                com.agent4j.ai.AiCost.zero(),
+                com.agent4j.ai.AiModelCompat.defaults(),
+                new AiModelFeatures(true, true, false, true, false, false, false, true, true, false));
+        AnthropicMessagesProvider provider = new AnthropicMessagesProvider(
+                AnthropicMessagesProviderOptions.defaults(List.of(model)),
+                new CapturingTransport(List.of()));
+        AiProviderRequest request = new AiProviderRequest(
+                model,
+                new AiTurnRequest(
+                        List.of(AiUserMessage.text("hello")),
+                        List.of(new AiToolSpec("read", "Read a file", JSON.objectNode()))),
+                AiProviderContext.empty(),
+                new AiStreamOptions(
+                        null,
+                        Optional.empty(),
+                        0,
+                        Map.of(),
+                        Map.of(),
+                        new AiGenerationOptions(
+                                Optional.empty(),
+                                Optional.empty(),
+                                Optional.empty(),
+                                Optional.empty(),
+                                Optional.of("tool:read"),
+                                true,
+                                Map.of())));
+
+        JsonNode body = provider.toRequestJson(request);
+
+        assertThat(body.has("tools")).isTrue();
+        assertThat(body.has("tool_choice")).isFalse();
     }
 
     @Test

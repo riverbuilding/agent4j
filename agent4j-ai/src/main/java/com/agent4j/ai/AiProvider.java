@@ -12,6 +12,10 @@ public interface AiProvider {
 
     AiProviderApi api();
 
+    default AiProviderFeatures features() {
+        return AiProviderFeatures.defaults();
+    }
+
     List<AiModel> models();
 
     void stream(AiProviderRequest request, Consumer<AiStreamEvent> sink) throws Exception;

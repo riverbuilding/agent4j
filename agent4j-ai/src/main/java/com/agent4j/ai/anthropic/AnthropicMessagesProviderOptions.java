@@ -1,6 +1,7 @@
 package com.agent4j.ai.anthropic;
 
 import com.agent4j.ai.AiModel;
+import com.agent4j.ai.AiProviderFeatures;
 import com.agent4j.ai.AiProviderRequestHook;
 
 import java.net.URI;
@@ -15,7 +16,8 @@ public record AnthropicMessagesProviderOptions(
         List<AiModel> models,
         Map<String, String> defaultHeaders,
         AiProviderRequestHook requestHook,
-        String anthropicVersion
+        String anthropicVersion,
+        AiProviderFeatures features
 ) {
     public AnthropicMessagesProviderOptions {
         Objects.requireNonNull(id, "id");
@@ -25,6 +27,7 @@ public record AnthropicMessagesProviderOptions(
         Objects.requireNonNull(defaultHeaders, "defaultHeaders");
         requestHook = requestHook == null ? AiProviderRequestHook.identity() : requestHook;
         anthropicVersion = anthropicVersion == null || anthropicVersion.isBlank() ? "2023-06-01" : anthropicVersion;
+        features = features == null ? AiProviderFeatures.withoutParallelToolCalls() : features;
         if (id.isBlank()) {
             throw new IllegalArgumentException("id must not be blank");
         }
@@ -43,6 +46,27 @@ public record AnthropicMessagesProviderOptions(
                 models,
                 Map.of(),
                 AiProviderRequestHook.identity(),
-                "2023-06-01");
+                "2023-06-01",
+                AiProviderFeatures.withoutParallelToolCalls());
+    }
+
+    public AnthropicMessagesProviderOptions(
+            String id,
+            String name,
+            URI endpoint,
+            List<AiModel> models,
+            Map<String, String> defaultHeaders,
+            AiProviderRequestHook requestHook,
+            String anthropicVersion
+    ) {
+        this(
+                id,
+                name,
+                endpoint,
+                models,
+                defaultHeaders,
+                requestHook,
+                anthropicVersion,
+                AiProviderFeatures.withoutParallelToolCalls());
     }
 }

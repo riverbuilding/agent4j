@@ -8,6 +8,7 @@ import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiProvider;
 import com.agent4j.ai.AiProviderApi;
+import com.agent4j.ai.AiProviderFeatures;
 import com.agent4j.ai.AiProviderRequest;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
@@ -76,6 +77,11 @@ public final class AnthropicMessagesProvider implements AiProvider {
     }
 
     @Override
+    public AiProviderFeatures features() {
+        return options.features();
+    }
+
+    @Override
     public List<AiModel> models() {
         return options.models();
     }
@@ -103,13 +109,21 @@ public final class AnthropicMessagesProvider implements AiProvider {
         applyGenerationOptions(body, generation);
         systemPrompt(request.turn().messages()).ifPresent(system -> body.put("system", system));
         body.set("messages", messages(request.turn().messages()));
-        if (!request.turn().tools().isEmpty()) {
+        if (shouldSendTools(request)) {
             body.set("tools", tools(request.turn().tools()));
-            generation.toolChoice()
-                    .map(AnthropicMessagesProvider::toolChoice)
-                    .ifPresent(toolChoice -> body.set("tool_choice", toolChoice));
+            if (features().toolChoice() && request.model().features().toolChoice()) {
+                generation.toolChoice()
+                        .map(AnthropicMessagesProvider::toolChoice)
+                        .ifPresent(toolChoice -> body.set("tool_choice", toolChoice));
+            }
         }
         return body;
+    }
+
+    private boolean shouldSendTools(AiProviderRequest request) {
+        return !request.turn().tools().isEmpty()
+                && features().toolCalling()
+                && request.model().features().toolCalling();
     }
 
     private static void applyGenerationOptions(ObjectNode body, AiGenerationOptions options) {
