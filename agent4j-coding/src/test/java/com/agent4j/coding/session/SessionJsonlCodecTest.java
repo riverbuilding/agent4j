@@ -81,6 +81,63 @@ class SessionJsonlCodecTest {
     }
 
     @Test
+    void rejectsMissingTreeEntryId() throws Exception {
+        String jsonl = """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","parentId":null,"timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"one"}}
+                """;
+        SessionDocument document = codec.read(new StringReader(jsonl));
+
+        assertThatThrownBy(() -> SessionTree.from(document))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("missing id");
+    }
+
+    @Test
+    void rejectsUnknownParentReference() throws Exception {
+        String jsonl = """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"child001","parentId":"missing1","timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"one"}}
+                """;
+        SessionDocument document = codec.read(new StringReader(jsonl));
+
+        assertThatThrownBy(() -> SessionTree.from(document))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("child001")
+                .hasMessageContaining("unknown parentId")
+                .hasMessageContaining("missing1");
+    }
+
+    @Test
+    void rejectsFutureParentReference() throws Exception {
+        String jsonl = """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"child001","parentId":"future01","timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"one"}}
+                {"type":"message","id":"future01","parentId":null,"timestamp":"2026-07-28T10:00:02Z","message":{"role":"assistant","content":[{"type":"text","text":"later"}]}}
+                """;
+        SessionDocument document = codec.read(new StringReader(jsonl));
+
+        assertThatThrownBy(() -> SessionTree.from(document))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknown parentId")
+                .hasMessageContaining("future01");
+    }
+
+    @Test
+    void rejectsSelfParentReference() throws Exception {
+        String jsonl = """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"self0001","parentId":"self0001","timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"one"}}
+                """;
+        SessionDocument document = codec.read(new StringReader(jsonl));
+
+        assertThatThrownBy(() -> SessionTree.from(document))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("own parent")
+                .hasMessageContaining("self0001");
+    }
+
+    @Test
     void exposesTypedMessageRoleViewWithoutLosingPayload() throws Exception {
         SessionDocument document = readFixture("pi-sessions/branched-session.jsonl");
 

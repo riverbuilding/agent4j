@@ -462,6 +462,45 @@ class SessionManagerTest {
         assertThat(imported.activeEntryId()).isEqualTo("root0001");
     }
 
+    @Test
+    void rejectsOpenWithUnknownParentReference() throws Exception {
+        Path sessionFile = tempDir.resolve("bad-open.jsonl");
+        Files.writeString(sessionFile, """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"child001","parentId":"missing1","timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"root"}}
+                """);
+
+        assertThatThrownBy(() -> SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknown parentId")
+                .hasMessageContaining("missing1");
+    }
+
+    @Test
+    void rejectsImportWithUnknownParentReference() throws Exception {
+        Path sourceFile = tempDir.resolve("bad-import-source.jsonl");
+        Files.writeString(sourceFile, """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"child001","parentId":"missing1","timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"root"}}
+                """);
+        Path targetFile = tempDir.resolve("bad-import-target.jsonl");
+
+        assertThatThrownBy(() -> SessionManager.importFrom(
+                sourceFile,
+                targetFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknown parentId")
+                .hasMessageContaining("missing1");
+        assertThat(targetFile).doesNotExist();
+    }
+
     private AgentMessage agentMessage(String id, AgentMessageRole role, String text, com.fasterxml.jackson.databind.JsonNode metadata) {
         return new AgentMessage(
                 id,

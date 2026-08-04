@@ -23,8 +23,17 @@ public final class SessionTree {
         Map<String, SessionEntry> entriesById = new HashMap<>();
         Map<String, List<SessionEntry>> childrenByParentId = new HashMap<>();
         for (SessionEntry entry : document.entries()) {
-            if (entry.id() == null) {
-                continue;
+            if (entry.id() == null || entry.id().isBlank()) {
+                throw new IllegalArgumentException("session entry is missing id");
+            }
+            if (entry.parentId() != null) {
+                if (entry.parentId().equals(entry.id())) {
+                    throw new IllegalArgumentException("session entry cannot be its own parent: " + entry.id());
+                }
+                if (!entriesById.containsKey(entry.parentId())) {
+                    throw new IllegalArgumentException(
+                            "session entry " + entry.id() + " has unknown parentId: " + entry.parentId());
+                }
             }
             SessionEntry previous = entriesById.put(entry.id(), entry);
             if (previous != null) {

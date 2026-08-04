@@ -516,7 +516,11 @@ Tasks:
   as a separate loop-owned message list. Phase 9 SDK/runtime should attach this
   context to a session runtime.
 - Strengthen `SessionManager`/JSONL parity before SDK work:
-  - validate parent references and malformed typed payloads
+  - validate parent references. Done: `SessionTree` rejects missing entry ids,
+    duplicate ids, unknown/future `parentId` references, and self-parenting,
+    and `SessionManager.open/importFrom` run that validation before resume or
+    import succeeds.
+  - validate malformed typed payloads
   - define stale snapshot and multi-process same-file resume semantics. Done:
     repeated runs persist `AgentLoopResult.messages()` through
     `SessionManager.appendAgentLoopResult(...)`, resume rebuilds the next model
@@ -683,7 +687,7 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Add stronger validation for parent references and malformed typed payloads.
+1. Add stronger validation for malformed typed payloads.
 2. Audit coding tool schemas/result shapes and custom/session message
    conversion prompt text against PI.
 3. Keep expanding fixtures with real PI session samples as they become
