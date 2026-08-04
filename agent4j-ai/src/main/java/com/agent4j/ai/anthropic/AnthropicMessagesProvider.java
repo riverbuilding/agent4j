@@ -2,6 +2,7 @@ package com.agent4j.ai.anthropic;
 
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlock;
+import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiImageContent;
 import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiModel;
@@ -95,13 +96,40 @@ public final class AnthropicMessagesProvider implements AiProvider {
         ObjectNode body = JSON.objectNode();
         body.put("model", request.model().id());
         body.put("stream", true);
-        body.put("max_tokens", request.model().maxTokens());
+        AiGenerationOptions generation = request.options().generation();
+        body.put("max_tokens", generation.maxOutputTokens()
+                .map(Integer::longValue)
+                .orElse(request.model().maxTokens()));
+        applyGenerationOptions(body, generation);
         systemPrompt(request.turn().messages()).ifPresent(system -> body.put("system", system));
         body.set("messages", messages(request.turn().messages()));
         if (!request.turn().tools().isEmpty()) {
             body.set("tools", tools(request.turn().tools()));
+            generation.toolChoice()
+                    .map(AnthropicMessagesProvider::toolChoice)
+                    .ifPresent(toolChoice -> body.set("tool_choice", toolChoice));
         }
         return body;
+    }
+
+    private static void applyGenerationOptions(ObjectNode body, AiGenerationOptions options) {
+        options.temperature().ifPresent(value -> body.put("temperature", value));
+        options.topP().ifPresent(value -> body.put("top_p", value));
+        options.topK().ifPresent(value -> body.put("top_k", value));
+        if (!options.metadata().isEmpty()) {
+            ObjectNode metadata = JSON.objectNode();
+            options.metadata().forEach(metadata::put);
+            body.set("metadata", metadata);
+        }
+    }
+
+    private static ObjectNode toolChoice(String value) {
+        if (value.startsWith("tool:")) {
+            return JSON.objectNode()
+                    .put("type", "tool")
+                    .put("name", value.substring("tool:".length()));
+        }
+        return JSON.objectNode().put("type", value);
     }
 
     private AnthropicHttpRequest httpRequest(AiProviderRequest request) throws IOException {

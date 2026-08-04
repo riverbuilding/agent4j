@@ -1,6 +1,7 @@
 package com.agent4j.ai.anthropic;
 
 import com.agent4j.ai.AiAssistantMessage;
+import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProviderContext;
@@ -78,6 +79,44 @@ class AnthropicMessagesProviderTest {
         assertThat(body.at("/messages/2/content/0/tool_use_id").asText()).isEqualTo("toolu_1");
         assertThat(body.at("/tools/0/name").asText()).isEqualTo("read");
         assertThat(body.at("/tools/0/input_schema/type").asText()).isEqualTo("object");
+    }
+
+    @Test
+    void serializesCommonGenerationOptionsToMessagesApiRequestBody() {
+        AiModel model = new AiModel(new AiModelReference("anthropic", "claude-sonnet-4-5"), "Claude Sonnet 4.5");
+        AnthropicMessagesProvider provider = new AnthropicMessagesProvider(
+                AnthropicMessagesProviderOptions.defaults(List.of(model)),
+                new CapturingTransport(List.of()));
+        AiProviderRequest request = new AiProviderRequest(
+                model,
+                new AiTurnRequest(
+                        List.of(AiUserMessage.text("hello")),
+                        List.of(new AiToolSpec("read", "Read a file", JSON.objectNode()))),
+                AiProviderContext.empty(),
+                new AiStreamOptions(
+                        null,
+                        Optional.empty(),
+                        0,
+                        Map.of(),
+                        Map.of(),
+                        new AiGenerationOptions(
+                                Optional.of(2048),
+                                Optional.of(0.3),
+                                Optional.of(0.8),
+                                Optional.of(40),
+                                Optional.of("tool:read"),
+                                true,
+                                Map.of("session", "abc"))));
+
+        JsonNode body = provider.toRequestJson(request);
+
+        assertThat(body.get("max_tokens").asInt()).isEqualTo(2048);
+        assertThat(body.get("temperature").asDouble()).isEqualTo(0.3);
+        assertThat(body.get("top_p").asDouble()).isEqualTo(0.8);
+        assertThat(body.get("top_k").asInt()).isEqualTo(40);
+        assertThat(body.at("/tool_choice/type").asText()).isEqualTo("tool");
+        assertThat(body.at("/tool_choice/name").asText()).isEqualTo("read");
+        assertThat(body.at("/metadata/session").asText()).isEqualTo("abc");
     }
 
     @Test

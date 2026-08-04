@@ -51,6 +51,7 @@ class AiProviderAbstractionTest {
     @Test
     void streamOptionsValidateTimeoutAndRetryShape() {
         assertThat(AiStreamOptions.defaults().signal().aborted()).isFalse();
+        assertThat(AiStreamOptions.defaults().generation()).isEqualTo(AiGenerationOptions.defaults());
 
         assertThatThrownBy(() -> new AiStreamOptions(
                 AiAbortSignal.none(),
@@ -68,6 +69,53 @@ class AiProviderAbstractionTest {
                 Map.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxRetries");
+    }
+
+    @Test
+    void generationOptionsValidateCommonProviderRequestKnobs() {
+        AiGenerationOptions options = new AiGenerationOptions(
+                Optional.of(1024),
+                Optional.of(0.7),
+                Optional.of(0.9),
+                Optional.of(40),
+                Optional.of(" auto "),
+                false,
+                Map.of("session", "abc"));
+
+        assertThat(options.maxOutputTokens()).contains(1024);
+        assertThat(options.toolChoice()).contains("auto");
+        assertThat(options.parallelToolCalls()).isFalse();
+        assertThat(options.metadata()).containsEntry("session", "abc");
+        assertThatThrownBy(() -> new AiGenerationOptions(
+                Optional.of(0),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                true,
+                Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxOutputTokens");
+        assertThatThrownBy(() -> new AiGenerationOptions(
+                Optional.empty(),
+                Optional.of(3.0),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                true,
+                Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("temperature");
+        assertThatThrownBy(() -> new AiGenerationOptions(
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(1.5),
+                Optional.empty(),
+                Optional.empty(),
+                true,
+                Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("topP");
     }
 
     @Test

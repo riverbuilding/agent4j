@@ -2,6 +2,7 @@ package com.agent4j.ai.openai;
 
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlock;
+import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiImageContent;
 import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiModel;
@@ -94,6 +95,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
         body.put("model", request.model().id());
         body.put("stream", true);
         body.set("input", input(request.turn().messages()));
+        applyGenerationOptions(body, request.options().generation());
         systemInstructions(request.turn().messages()).ifPresent(instructions -> body.put("instructions", instructions));
         if (!request.turn().tools().isEmpty()) {
             ArrayNode tools = JSON.arrayNode();
@@ -107,9 +109,21 @@ public final class OpenAiResponsesProvider implements AiProvider {
                 tools.add(function);
             }
             body.set("tools", tools);
-            body.put("tool_choice", "auto");
+            body.put("tool_choice", request.options().generation().toolChoice().orElse("auto"));
+            body.put("parallel_tool_calls", request.options().generation().parallelToolCalls());
         }
         return body;
+    }
+
+    private static void applyGenerationOptions(ObjectNode body, AiGenerationOptions options) {
+        options.maxOutputTokens().ifPresent(value -> body.put("max_output_tokens", value));
+        options.temperature().ifPresent(value -> body.put("temperature", value));
+        options.topP().ifPresent(value -> body.put("top_p", value));
+        if (!options.metadata().isEmpty()) {
+            ObjectNode metadata = JSON.objectNode();
+            options.metadata().forEach(metadata::put);
+            body.set("metadata", metadata);
+        }
     }
 
     private OpenAiHttpRequest httpRequest(AiProviderRequest request) throws IOException {

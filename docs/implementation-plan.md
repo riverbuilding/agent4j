@@ -461,7 +461,72 @@ Exit criteria:
   threshold compaction, overflow retry, tool-result pruning, argument
   truncation, context status reporting, and branch summary generation.
 
-## Phase 8: SDK And Runtime API
+## Phase 8: Parity Gap Fixes
+
+Goal: close known module-level PI parity gaps before adding new SDK, CLI, or UI
+surface area. This phase exists to avoid baking temporary internal divergences
+into public APIs.
+
+Tasks:
+
+- Update `docs/adr/0002-pi-internal-parity.md` after each module gap is closed,
+  including any remaining intentional divergence and its reason.
+- First fix provider parity gaps in `agent4j-ai` before runtime/session work:
+  - align provider-specific option models with PI where Java currently only has
+    minimal OpenAI/Anthropic options. Started with the provider-options
+    baseline: `AiGenerationOptions` now carries common max-output,
+    temperature, top-p, top-k, tool-choice, parallel-tool-call, and metadata
+    settings through `AiStreamOptions`; OpenAI and Anthropic adapters serialize
+    the supported subset into request bodies with tests.
+  - pin exact timeout and retry semantics at the provider abstraction boundary,
+    including which layer owns idle timeout, total timeout, and retry
+    classification
+  - add provider/model feature flags and capability metadata needed by later
+    runtime and CLI selection
+  - make endpoint/base-url resolution match PI's effective-model behavior and
+    decide the fate of the local `agent4j-ai/README.md` parity note by
+    committing it as module documentation or folding it into ADR/plan docs
+  - keep live ChatGPT/Codex subscription login flow in Phase 9, but make the
+    provider abstraction ready for that auth mode in Phase 8
+- Close the `AgentLoop` message-state parity gap by moving toward PI's
+  session-owned conversation model: make the runtime/session context own the
+  canonical mutable transcript, build provider-facing model input only at the
+  model boundary, and reduce loop-local message collections to result/event
+  accumulators where they remain necessary.
+- Strengthen `SessionManager`/JSONL parity before SDK work:
+  - validate parent references and malformed typed payloads
+  - define stale snapshot and multi-process same-file resume semantics
+  - expand real PI fixture coverage for branches, compaction entries, branch
+    summaries, unknown payloads, and malformed records
+- Audit `agent4j-coding` built-in tools against PI implementation details:
+  argument schemas, descriptions, image/text read behavior, edit
+  multi-replacement behavior, render/update events, and result content/details
+  shape.
+- Audit coding custom/session message conversion against PI prompt text and
+  variants for bash execution, branch summary, compaction summary, and custom
+  extension messages.
+- Bring resource/settings parity docs up to date and pin remaining later-phase
+  gaps: npm/git package install/update/reconcile behavior, interactive trust
+  prompting, `trust.json` persistence, and exact provider-facing prompt fixture
+  text.
+- Bring `agent4j-ai` parity docs up to date as provider slices complete:
+  provider abstraction is implemented for Phase 6, Phase 8 owns provider
+  options, timeout/retry semantics, feature flags, and endpoint/base-url
+  parity, while Phase 9 owns live subscription login flow.
+- Decide whether to keep or remove any local module docs that describe parity
+  direction, such as `agent4j-ai/README.md`, before continuing implementation.
+
+Exit criteria:
+
+- ADR 0002 and this plan accurately reflect module parity status after the
+  scan.
+- Tests or fixtures cover the closed parity gaps, especially provider options,
+  timeout/retry semantics, feature flags, session ownership, parent validation,
+  and session resume behavior.
+- The next SDK/runtime phase can build on a PI-style session-owned conversation
+  context rather than the current loop-local transcript/message-list shape.
+
+## Phase 9: SDK And Runtime API
 
 Goal: expose a stable Java embedding API equivalent to PI's SDK concepts.
 
@@ -469,11 +534,6 @@ Tasks:
 
 - Mirror PI `AgentSession`, `AgentSessionRuntime`, and harness service
   responsibilities before adding Java-only conveniences.
-- Close the AgentLoop message-state parity gap by moving toward PI's
-  session-owned conversation model: make the runtime/session context own the
-  canonical mutable transcript, build provider-facing model input only at the
-  model boundary, and reduce loop-local message collections to result/event
-  accumulators where they remain necessary.
 - Add `AgentSession`.
 - Add `AgentSessionRuntime`.
 - Add runtime replacement for new, resume, fork, clone, and import.
@@ -506,7 +566,7 @@ Exit criteria:
   resolved auth for provider-backed runtime creation. Fake-provider auth covers
   the same contract in deterministic tests.
 
-## Phase 9: CLI Modes
+## Phase 10: CLI Modes
 
 Goal: provide process entrypoints before investing in terminal UI.
 
@@ -526,14 +586,14 @@ Tasks:
   - name
 - Add model and tool selection flags.
 - Add `login`, `logout`, and auth-status commands as thin CLI wrappers over the
-  Phase 8 login/auth API.
+  Phase 9 login/auth API.
 
 Exit criteria:
 
 - CLI modes run against fake provider in tests.
 - JSON mode emits stable JSONL events.
 
-## Phase 10: Extension SPI
+## Phase 11: Extension SPI
 
 Goal: support harness customization without embedding TypeScript first.
 
@@ -555,7 +615,7 @@ Exit criteria:
 
 - A test extension can register a custom tool and mutate context.
 
-## Phase 11: Interactive Shell And TUI
+## Phase 12: Interactive Shell And TUI
 
 Goal: add human-facing interactive mode after the runtime is stable.
 
@@ -576,7 +636,7 @@ Exit criteria:
 - Basic interactive mode can run real sessions.
 - Rich TUI has screenshot/manual QA coverage before being treated as parity.
 
-## Phase 12: PI Package Bridge
+## Phase 13: PI Package Bridge
 
 Goal: decide whether PI package compatibility is worth the complexity.
 
@@ -596,14 +656,13 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Keep `docs/adr/0002-pi-internal-parity.md` updated as subsystem parity
-   audits uncover intentional divergences or additional PI reference files.
-2. Decide and document exact resume semantics for multi-process same-file
-   sessions, including stale snapshot handling.
-3. Add stronger validation for parent references and malformed typed payloads.
-4. Add remaining session helpers for compaction entries once compaction shape is
-   finalized.
-5. Start Phase 5 resource/settings discovery, beginning with PI resource-loader
-   reference mapping and precedence tests.
+1. Start Phase 8 with provider parity fixes in `agent4j-ai`: provider-specific
+   options, timeout/retry ownership, model/provider feature flags, and
+   endpoint/base-url resolution.
+2. Then address the `AgentLoop`/session-owned conversation context parity fix.
+3. Define and test stale snapshot and multi-process same-file resume semantics.
+4. Add stronger validation for parent references and malformed typed payloads.
+5. Audit coding tool schemas/result shapes and custom/session message
+   conversion prompt text against PI.
 6. Keep expanding fixtures with real PI session samples as they become
    available.

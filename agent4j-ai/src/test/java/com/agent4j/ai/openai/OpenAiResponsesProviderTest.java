@@ -2,6 +2,7 @@ package com.agent4j.ai.openai;
 
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiContentBlock;
+import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProviderContext;
@@ -71,6 +72,43 @@ class OpenAiResponsesProviderTest {
         assertThat(body.at("/tools/0/type").asText()).isEqualTo("function");
         assertThat(body.at("/tools/0/name").asText()).isEqualTo("read");
         assertThat(body.at("/tool_choice").asText()).isEqualTo("auto");
+    }
+
+    @Test
+    void serializesCommonGenerationOptionsToResponsesApiRequestBody() {
+        AiModel model = new AiModel(new AiModelReference("openai", "gpt-5"), "GPT-5");
+        OpenAiResponsesProvider provider = new OpenAiResponsesProvider(
+                OpenAiResponsesProviderOptions.defaults(List.of(model)),
+                new CapturingTransport(List.of()));
+        AiProviderRequest request = new AiProviderRequest(
+                model,
+                new AiTurnRequest(
+                        List.of(AiUserMessage.text("hello")),
+                        List.of(new AiToolSpec("read", "Read a file", JSON.objectNode()))),
+                AiProviderContext.empty(),
+                new AiStreamOptions(
+                        null,
+                        Optional.empty(),
+                        0,
+                        Map.of(),
+                        Map.of(),
+                        new AiGenerationOptions(
+                                Optional.of(2048),
+                                Optional.of(0.3),
+                                Optional.of(0.8),
+                                Optional.empty(),
+                                Optional.of("required"),
+                                false,
+                                Map.of("session", "abc"))));
+
+        JsonNode body = provider.toRequestJson(request);
+
+        assertThat(body.get("max_output_tokens").asInt()).isEqualTo(2048);
+        assertThat(body.get("temperature").asDouble()).isEqualTo(0.3);
+        assertThat(body.get("top_p").asDouble()).isEqualTo(0.8);
+        assertThat(body.get("tool_choice").asText()).isEqualTo("required");
+        assertThat(body.get("parallel_tool_calls").asBoolean()).isFalse();
+        assertThat(body.at("/metadata/session").asText()).isEqualTo("abc");
     }
 
     @Test
