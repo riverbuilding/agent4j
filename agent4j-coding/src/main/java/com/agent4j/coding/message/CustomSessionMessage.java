@@ -17,6 +17,6 @@ public record CustomSessionMessage(String customType, String content) {
     }
 
     public String toLlmText() {
-        return "<customMessage type=\"" + customType + "\">\n" + content + "\n</customMessage>";
+        return "<customMessage type=\"" + PromptMarkup.attribute(customType) + "\">\n" + content + "\n</customMessage>";
     }
 }

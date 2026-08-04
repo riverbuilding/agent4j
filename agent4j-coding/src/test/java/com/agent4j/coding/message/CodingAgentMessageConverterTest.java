@@ -72,6 +72,36 @@ class CodingAgentMessageConverterTest {
     }
 
     @Test
+    void escapesCustomMessageTypeWhenRenderingPromptWrapper() {
+        ObjectNode metadata = JSON.objectNode().put("customType", "vendor\" <note>&");
+
+        List<AiMessage> messages = CodingAgentMessageConverter.INSTANCE.convertToLlm(List.of(
+                message("custom-1", AgentMessageRole.CUSTOM, "custom content", metadata)));
+
+        assertThat(messages).hasSize(1);
+        assertThat(text(messages.getFirst())).isEqualTo("""
+                <customMessage type="vendor&quot; &lt;note&gt;&amp;">
+                custom content
+                </customMessage>""");
+    }
+
+    @Test
+    void usesStableDefaultCustomTypeWhenMissing() {
+        List<AiMessage> messages = CodingAgentMessageConverter.INSTANCE.convertToLlm(List.of(
+                message("custom-1", AgentMessageRole.CUSTOM, "custom content", JSON.objectNode())));
+
+        assertThat(text(messages.getFirst())).startsWith("<customMessage type=\"custom\">");
+    }
+
+    @Test
+    void skipsUnknownCustomRolesAtCodingBoundary() {
+        List<AiMessage> messages = CodingAgentMessageConverter.INSTANCE.convertToLlm(List.of(
+                message("unknown-1", AgentMessageRole.UNKNOWN, "unknown content", JSON.objectNode())));
+
+        assertThat(messages).isEmpty();
+    }
+
+    @Test
     void preservesStandardRoleConversionWhileAddingCodingMessages() throws Exception {
         FakeModelClient model = new FakeModelClient().enqueue(List.of(
                 new AiStreamEvent.MessageStarted("assistant-1"),

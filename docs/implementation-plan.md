@@ -550,7 +550,12 @@ Tasks:
   multi-replacement behavior, and streaming render/update details.
 - Audit coding custom/session message conversion against PI prompt text and
   variants for bash execution, branch summary, compaction summary, and custom
-  extension messages.
+  extension messages. Done for Java prompt contract: coding `convertToLlm`
+  renders bash execution, branch summary, compaction summary, and custom
+  extension messages as pinned XML-like user-context wrappers, escapes custom
+  message type attributes, and skips unknown custom roles until a PI source audit
+  identifies concrete variants. Remaining PI-source audit is exact prompt text
+  comparison against `packages/coding-agent/src/core/messages.ts`.
 - Bring resource/settings parity docs up to date and pin remaining later-phase
   gaps: npm/git package install/update/reconcile behavior, interactive trust
   prompting, `trust.json` persistence, and exact provider-facing prompt fixture
@@ -705,6 +710,5 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Audit coding custom/session message conversion prompt text against PI.
-2. Keep expanding fixtures with real PI session samples as they become
+1. Keep expanding fixtures with real PI session samples as they become
    available.
