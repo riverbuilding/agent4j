@@ -520,7 +520,11 @@ Tasks:
     duplicate ids, unknown/future `parentId` references, and self-parenting,
     and `SessionManager.open/importFrom` run that validation before resume or
     import succeeds.
-  - validate malformed typed payloads
+  - validate malformed typed payloads. Done: `SessionDocumentValidator`
+    validates required fields for known PI-shaped session/header/message/model/
+    thinking/compaction/file/custom entries, preserves unknown fields, and is
+    enforced by `SessionManager.open/importFrom`, stale snapshot checks, and
+    append validation before any line is written.
   - define stale snapshot and multi-process same-file resume semantics. Done:
     repeated runs persist `AgentLoopResult.messages()` through
     `SessionManager.appendAgentLoopResult(...)`, resume rebuilds the next model
@@ -689,8 +693,7 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Add stronger validation for malformed typed payloads.
-2. Audit coding tool schemas/result shapes and custom/session message
+1. Audit coding tool schemas/result shapes and custom/session message
    conversion prompt text against PI.
-3. Keep expanding fixtures with real PI session samples as they become
+2. Keep expanding fixtures with real PI session samples as they become
    available.

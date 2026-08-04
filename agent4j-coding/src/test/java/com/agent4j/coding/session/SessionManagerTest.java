@@ -521,6 +521,61 @@ class SessionManagerTest {
         assertThat(targetFile).doesNotExist();
     }
 
+    @Test
+    void rejectsOpenWithMalformedTypedPayload() throws Exception {
+        Path sessionFile = tempDir.resolve("bad-typed-open.jsonl");
+        Files.writeString(sessionFile, """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"msg-1","parentId":null,"timestamp":"2026-07-28T10:00:01Z","message":{"role":"user"}}
+                """);
+
+        assertThatThrownBy(() -> SessionManager.open(
+                sessionFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("message.content");
+    }
+
+    @Test
+    void rejectsImportWithMalformedTypedPayload() throws Exception {
+        Path sourceFile = tempDir.resolve("bad-typed-import-source.jsonl");
+        Files.writeString(sourceFile, """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"model_change","id":"model-1","parentId":null,"timestamp":"2026-07-28T10:00:01Z","provider":"openai"}
+                """);
+        Path targetFile = tempDir.resolve("bad-typed-import-target.jsonl");
+
+        assertThatThrownBy(() -> SessionManager.importFrom(
+                sourceFile,
+                targetFile,
+                new SessionJsonlCodec(),
+                () -> "unused",
+                clock))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("modelId");
+        assertThat(targetFile).doesNotExist();
+    }
+
+    @Test
+    void rejectsMalformedTypedAppendWithoutPartialWrite() throws Exception {
+        Path sessionFile = tempDir.resolve("bad-typed-append.jsonl");
+        SessionManager manager = SessionManager.create(
+                sessionFile,
+                tempDir,
+                new SessionJsonlCodec(),
+                () -> "model-1",
+                clock);
+
+        assertThatThrownBy(() -> manager.append(SessionEntryType.MODEL_CHANGE, payload -> payload.put("provider", "openai")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("modelId");
+
+        assertThat(manager.document().entries()).isEmpty();
+        assertThat(Files.readAllLines(sessionFile)).hasSize(1);
+    }
+
     private AgentMessage agentMessage(String id, AgentMessageRole role, String text, com.fasterxml.jackson.databind.JsonNode metadata) {
         return new AgentMessage(
                 id,

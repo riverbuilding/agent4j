@@ -97,7 +97,7 @@ public final class SessionManager {
         try (StringReader reader = new StringReader(Files.readString(sessionFile))) {
             document = codec.read(reader);
         }
-        SessionTree.from(document);
+        SessionDocumentValidator.validate(document);
         return new SessionManager(sessionFile, codec, idGenerator, clock, document.header(), document.entries());
     }
 
@@ -121,7 +121,7 @@ public final class SessionManager {
         try (StringReader reader = new StringReader(Files.readString(sourceFile))) {
             document = codec.read(reader);
         }
-        SessionTree.from(document);
+        SessionDocumentValidator.validate(document);
         writeDocument(targetFile, codec, document);
         return open(targetFile, codec, idGenerator, clock);
     }
@@ -145,8 +145,9 @@ public final class SessionManager {
         payloadCustomizer.accept(payload);
 
         String line = codec.writeJson(payload);
-        appendFreshLineWithLock(line);
         SessionEntry entry = codec.parseLine(line, entries.size() + 2);
+        validateAppendBatch(List.of(entry));
+        appendFreshLineWithLock(line);
         entries.add(entry);
         activeEntryId = entry.id();
         return entry;
@@ -353,8 +354,9 @@ public final class SessionManager {
         payloadCustomizer.accept(payload);
 
         String line = codec.writeJson(payload);
-        appendFreshLineWithLock(line);
         SessionEntry entry = codec.parseLine(line, entries.size() + 2);
+        validateAppendBatch(List.of(entry));
+        appendFreshLineWithLock(line);
         entries.add(entry);
         activeEntryId = entry.id();
         return entry;
@@ -381,7 +383,7 @@ public final class SessionManager {
     }
 
     private void validateAppendBatch(List<SessionEntry> appended) {
-        SessionTree.from(new SessionDocument(header, java.util.stream.Stream
+        SessionDocumentValidator.validate(new SessionDocument(header, java.util.stream.Stream
                 .concat(entries.stream(), appended.stream())
                 .toList()));
     }
@@ -391,6 +393,7 @@ public final class SessionManager {
         try (StringReader reader = new StringReader(Files.readString(sessionFile))) {
             diskDocument = codec.read(reader);
         }
+        SessionDocumentValidator.validate(diskDocument);
         if (!header.payload().equals(diskDocument.header().payload())
                 || entries.size() != diskDocument.entries().size()) {
             throw staleSessionSnapshot();

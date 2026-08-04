@@ -138,6 +138,51 @@ class SessionJsonlCodecTest {
     }
 
     @Test
+    void validatesKnownTypedPayloadsWithoutRejectingUnknownFields() throws Exception {
+        String jsonl = """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo","futureHeader":true}
+                {"type":"message","id":"user-1","parentId":null,"timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"hello","futureMessage":true}}
+                {"type":"model_change","id":"model-1","parentId":"user-1","timestamp":"2026-07-28T10:00:02Z","provider":"openai","modelId":"gpt-5","futureModel":true}
+                {"type":"custom","id":"custom-1","parentId":"model-1","timestamp":"2026-07-28T10:00:03Z","customType":"vendor","futureCustom":true}
+                """;
+        SessionDocument document = codec.read(new StringReader(jsonl));
+
+        SessionDocumentValidator.validate(document);
+
+        assertThat(document.header().payload().path("futureHeader").asBoolean()).isTrue();
+        assertThat(document.entries().getFirst().message().orElseThrow()
+                .payload().path("futureMessage").asBoolean()).isTrue();
+    }
+
+    @Test
+    void rejectsMalformedKnownMessagePayload() throws Exception {
+        String jsonl = """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"msg-1","parentId":null,"timestamp":"2026-07-28T10:00:01Z","message":{"role":"user"}}
+                """;
+        SessionDocument document = codec.read(new StringReader(jsonl));
+
+        assertThatThrownBy(() -> SessionDocumentValidator.validate(document))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("malformed message")
+                .hasMessageContaining("message.content");
+    }
+
+    @Test
+    void rejectsMalformedKnownNonMessagePayload() throws Exception {
+        String jsonl = """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"model_change","id":"model-1","parentId":null,"timestamp":"2026-07-28T10:00:01Z","provider":"openai"}
+                """;
+        SessionDocument document = codec.read(new StringReader(jsonl));
+
+        assertThatThrownBy(() -> SessionDocumentValidator.validate(document))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("malformed model_change")
+                .hasMessageContaining("modelId");
+    }
+
+    @Test
     void exposesTypedMessageRoleViewWithoutLosingPayload() throws Exception {
         SessionDocument document = readFixture("pi-sessions/branched-session.jsonl");
 
