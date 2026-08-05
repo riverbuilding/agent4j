@@ -619,7 +619,14 @@ Tasks:
   `CodingAgentSession` handle. Resume/import/clone/fork remain later slices.
 - Add `AgentSession.prompt(...)`, which appends the user prompt, prepares
   resources/settings, runs `AgentLoop`, persists generated messages, refreshes
-  session context, and returns SDK-facing prompt result metadata.
+  session context, and returns SDK-facing prompt result metadata. Prompt
+  baseline is done for direct model-client runtimes:
+  `CodingAgentSession.prompt(...)` creates an in-memory user prompt message,
+  runs `AgentLoop` with session-owned active history, persists the full
+  `AgentLoopResult.messages()` batch through `SessionManager`, and refreshes the
+  session context from persisted active messages. Resource/settings preparation
+  is deferred to the runtime services container slice so the SDK does not guess
+  user home or trust state.
 - Add SDK-facing event subscription backed by `AgentEventBus`, keeping
   `AgentEvent` as the Phase 9 listener payload and leaving CLI JSON/RPC event
   mapping to Phase 10.

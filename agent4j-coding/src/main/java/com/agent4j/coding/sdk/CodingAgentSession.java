@@ -31,8 +31,12 @@ public final class CodingAgentSession implements AgentSession {
     }
 
     @Override
-    public PromptResult prompt(PromptRequest request) {
-        throw new UnsupportedOperationException("prompt is not implemented yet");
+    public PromptResult prompt(PromptRequest request) throws Exception {
+        PromptResult result = runtime.prompt(this, request);
+        refreshConversationContext(new AgentConversationContext(
+                sessionManager.activeAgentMessages(),
+                result.loopResult().messages()));
+        return result;
     }
 
     SessionManager sessionManager() {
