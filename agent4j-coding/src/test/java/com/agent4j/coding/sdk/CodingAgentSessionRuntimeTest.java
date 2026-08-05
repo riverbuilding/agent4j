@@ -10,6 +10,8 @@ import com.agent4j.ai.AiUserMessage;
 import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionEntryType;
 import com.agent4j.coding.session.SessionManager;
+import com.agent4j.core.event.AgentEvent;
+import com.agent4j.core.event.EventSubscription;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
 import com.agent4j.core.runtime.Usage;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -284,6 +287,70 @@ class CodingAgentSessionRuntimeTest {
         assertThat(Files.readString(forkFile)).doesNotContain("second answer");
     }
 
+    @Test
+    void subscribeReceivesPromptEventSequenceThroughSdkRuntime() throws Exception {
+        Path sessionFile = tempDir.resolve("events.jsonl");
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(assistantStream("assistant-1", "hello", AiUsage.zero()));
+        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime(model);
+        AgentSession session = runtime.createSession(new CreateSessionRequest(sessionFile, tempDir));
+        List<AgentEvent> events = new ArrayList<>();
+        EventSubscription subscription = runtime.subscribe(events::add);
+
+        session.prompt(new PromptRequest("say hello"));
+        subscription.close();
+        model.enqueue(assistantStream("assistant-2", "ignored", AiUsage.zero()));
+        session.prompt(new PromptRequest("second prompt"));
+
+        assertThat(events).extracting(event -> event.getClass().getSimpleName())
+                .containsExactly(
+                        "AgentStarted",
+                        "TurnStarted",
+                        "MessageStarted",
+                        "MessageEnded",
+                        "MessageStarted",
+                        "MessageUpdated",
+                        "MessageEnded",
+                        "TurnEnded",
+                        "AgentEnded");
+        assertThat(events).allSatisfy(event -> assertThat(event.sessionId()).isEqualTo(session.id()));
+        assertThat(events.get(2)).isInstanceOfSatisfying(AgentEvent.MessageStarted.class, event ->
+                assertThat(event.message().textContent()).isEqualTo("say hello"));
+        assertThat(events.get(5)).isInstanceOfSatisfying(AgentEvent.MessageUpdated.class, event ->
+                assertThat(event.delta().path("delta").asText()).isEqualTo("hello"));
+        assertThat(events.getLast()).isInstanceOfSatisfying(AgentEvent.AgentEnded.class, event ->
+                assertThat(event.messages()).extracting(AgentMessage::textContent)
+                        .containsExactly("say hello", "hello"));
+    }
+
+    @Test
+    void subscribeSessionReceivesOnlyMatchingSessionEventsThroughSdkRuntime() throws Exception {
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(assistantText("assistant-1", "first", AiUsage.zero()))
+                .enqueue(assistantText("assistant-2", "second", AiUsage.zero()));
+        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime(model);
+        AgentSession first = runtime.createSession(new CreateSessionRequest(tempDir.resolve("first.jsonl"), tempDir));
+        AgentSession second = runtime.createSession(new CreateSessionRequest(tempDir.resolve("second.jsonl"), tempDir));
+        List<AgentEvent> firstEvents = new ArrayList<>();
+
+        runtime.subscribeSession(first.id(), firstEvents::add);
+
+        second.prompt(new PromptRequest("second prompt"));
+        first.prompt(new PromptRequest("first prompt"));
+
+        assertThat(firstEvents).isNotEmpty();
+        assertThat(firstEvents).allSatisfy(event -> assertThat(event.sessionId()).isEqualTo(first.id()));
+        assertThat(firstEvents).extracting(event -> event.getClass().getSimpleName())
+                .containsExactly(
+                        "AgentStarted",
+                        "TurnStarted",
+                        "MessageStarted",
+                        "MessageEnded",
+                        "MessageEnded",
+                        "TurnEnded",
+                        "AgentEnded");
+    }
+
     private static List<AiStreamEvent> assistantText(String messageId, String text, AiUsage usage) {
         return List.of(new AiStreamEvent.MessageCompleted(
                 messageId,
@@ -291,6 +358,18 @@ class CodingAgentSessionRuntimeTest {
                         List.of(new AiTextContent(text)),
                         AiStopReason.STOP,
                         usage)));
+    }
+
+    private static List<AiStreamEvent> assistantStream(String messageId, String text, AiUsage usage) {
+        return List.of(
+                new AiStreamEvent.MessageStarted(messageId),
+                new AiStreamEvent.TextDelta(messageId, 0, text),
+                new AiStreamEvent.MessageCompleted(
+                        messageId,
+                        new AiAssistantMessage(
+                                List.of(new AiTextContent(text)),
+                                AiStopReason.STOP,
+                                usage)));
     }
 
     private static String text(com.agent4j.ai.AiMessage message) {

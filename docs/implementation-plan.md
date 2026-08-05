@@ -636,7 +636,11 @@ Tasks:
   user home or trust state.
 - Add SDK-facing event subscription backed by `AgentEventBus`, keeping
   `AgentEvent` as the Phase 9 listener payload and leaving CLI JSON/RPC event
-  mapping to Phase 10.
+  mapping to Phase 10. Done for the SDK baseline: `AgentSessionRuntime`
+  exposes runtime-wide `subscribe(...)` plus session-filtered
+  `subscribeSession(...)`, and tests pin prompt event delivery, event ordering,
+  subscription close behavior, and session-id filtering through real
+  `AgentSession.prompt(...)` calls.
 - Add login/auth runtime API before CLI ownership:
   - provider-neutral `LoginService`/`AuthSession` API
   - ChatGPT/Codex subscription login flow, including browser OAuth and device
