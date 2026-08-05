@@ -214,6 +214,76 @@ class CodingAgentSessionRuntimeTest {
                 .containsExactly("first prompt", "first answer", "branched prompt", "branched answer");
     }
 
+    @Test
+    void importSessionCopiesValidatedJsonlAndReturnsSessionHandle() throws Exception {
+        Path sourceFile = tempDir.resolve("import-source.jsonl");
+        Files.writeString(sourceFile, """
+                {"type":"session","version":3,"id":"session-1","timestamp":"2026-07-28T10:00:00Z","cwd":"/repo"}
+                {"type":"message","id":"root0001","parentId":null,"timestamp":"2026-07-28T10:00:01Z","message":{"role":"user","content":"root"}}
+                """);
+        Path targetFile = tempDir.resolve("import-target.jsonl");
+
+        AgentSession imported = new CodingAgentSessionRuntime()
+                .importSession(new ImportSessionRequest(sourceFile, targetFile));
+
+        assertThat(Files.readString(targetFile)).isEqualTo(Files.readString(sourceFile));
+        assertThat(imported.id()).isEqualTo("session-1");
+        assertThat(imported.sessionFile()).isEqualTo(targetFile.toAbsolutePath().normalize());
+        assertThat(imported.cwd()).isEqualTo(Path.of("/repo").toAbsolutePath().normalize());
+        assertThat(imported.activeEntryId()).isEqualTo("root0001");
+        assertThat(imported.conversationContext().transcriptMessages()).extracting(AgentMessage::textContent)
+                .containsExactly("root");
+    }
+
+    @Test
+    void cloneSessionCopiesFullDocumentAndReturnsClonedSessionHandle() throws Exception {
+        Path sourceFile = tempDir.resolve("clone-source.jsonl");
+        AgentSession source = new CodingAgentSessionRuntime(new FakeModelClient()
+                        .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero()))
+                        .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero())))
+                .createSession(new CreateSessionRequest(sourceFile, tempDir));
+        source.prompt(new PromptRequest("first prompt"));
+        source.prompt(new PromptRequest("second prompt"));
+        Path targetFile = tempDir.resolve("clone-target.jsonl");
+
+        AgentSession clone = new CodingAgentSessionRuntime()
+                .cloneSession(new CloneSessionRequest(source, targetFile));
+
+        assertThat(Files.readString(targetFile)).isEqualTo(Files.readString(sourceFile));
+        assertThat(clone.id()).isEqualTo(source.id());
+        assertThat(clone.sessionFile()).isEqualTo(targetFile.toAbsolutePath().normalize());
+        assertThat(clone.activeEntryId()).isEqualTo(source.activeEntryId());
+        assertThat(clone.conversationContext().transcriptMessages()).extracting(AgentMessage::textContent)
+                .containsExactly("first prompt", "first answer", "second prompt", "second answer");
+    }
+
+    @Test
+    void forkSessionWritesOnlySelectedActivePathWithDerivedHeader() throws Exception {
+        Path sourceFile = tempDir.resolve("fork-source.jsonl");
+        AgentSession source = new CodingAgentSessionRuntime(new FakeModelClient()
+                        .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero()))
+                        .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero())))
+                .createSession(new CreateSessionRequest(sourceFile, tempDir));
+        source.prompt(new PromptRequest("first prompt"));
+        String firstAssistantId = SessionManager.open(sourceFile).activeAgentMessages().get(1).id();
+        source.prompt(new PromptRequest("second prompt"));
+        Path forkFile = tempDir.resolve("fork-target.jsonl");
+
+        AgentSession fork = new CodingAgentSessionRuntime()
+                .forkSession(new ForkSessionRequest(source, forkFile, Optional.of(firstAssistantId)));
+
+        assertThat(fork.sessionFile()).isEqualTo(forkFile.toAbsolutePath().normalize());
+        assertThat(fork.activeEntryId()).isEqualTo(firstAssistantId);
+        assertThat(fork.conversationContext().transcriptMessages()).extracting(AgentMessage::textContent)
+                .containsExactly("first prompt", "first answer");
+        SessionManager forkedManager = SessionManager.open(forkFile);
+        assertThat(forkedManager.document().header().header().orElseThrow().sourceSessionId()).contains(source.id());
+        assertThat(forkedManager.document().header().header().orElseThrow().forkedFromEntryId())
+                .contains(firstAssistantId);
+        assertThat(Files.readString(forkFile)).doesNotContain("second prompt");
+        assertThat(Files.readString(forkFile)).doesNotContain("second answer");
+    }
+
     private static List<AiStreamEvent> assistantText(String messageId, String text, AiUsage usage) {
         return List.of(new AiStreamEvent.MessageCompleted(
                 messageId,

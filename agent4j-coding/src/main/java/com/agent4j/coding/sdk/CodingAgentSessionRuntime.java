@@ -91,18 +91,27 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
     }
 
     @Override
-    public AgentSession importSession(ImportSessionRequest request) {
-        throw new UnsupportedOperationException("importSession is not implemented yet");
+    public AgentSession importSession(ImportSessionRequest request) throws Exception {
+        Objects.requireNonNull(request, "request");
+        return newSession(SessionManager.importFrom(request.sourceFile(), request.targetFile()));
     }
 
     @Override
-    public AgentSession cloneSession(CloneSessionRequest request) {
-        throw new UnsupportedOperationException("cloneSession is not implemented yet");
+    public AgentSession cloneSession(CloneSessionRequest request) throws Exception {
+        Objects.requireNonNull(request, "request");
+        SessionManager source = openSource(request.source());
+        return newSession(source.cloneTo(request.targetFile()));
     }
 
     @Override
-    public AgentSession forkSession(ForkSessionRequest request) {
-        throw new UnsupportedOperationException("forkSession is not implemented yet");
+    public AgentSession forkSession(ForkSessionRequest request) throws Exception {
+        Objects.requireNonNull(request, "request");
+        SessionManager source = openSource(request.source());
+        String activeEntryId = request.activeEntryId().orElse(request.source().activeEntryId());
+        if (activeEntryId != null) {
+            source.navigateTo(activeEntryId);
+        }
+        return newSession(source.forkToActivePath(request.targetFile()));
     }
 
     @Override
@@ -186,5 +195,10 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
                 this,
                 sessionManager,
                 new AgentConversationContext(sessionManager.activeAgentMessages(), List.of()));
+    }
+
+    private static SessionManager openSource(AgentSession source) throws java.io.IOException {
+        Objects.requireNonNull(source, "source");
+        return SessionManager.open(source.sessionFile());
     }
 }

@@ -620,8 +620,10 @@ Tasks:
   `CodingAgentSessionRuntime.resumeSession(...)` opens the JSONL session,
   optionally navigates to a requested active entry, initializes the
   session-owned context from `SessionManager.activeAgentMessages()`, and can
-  continue prompting without caller-rebuilt history. Import/clone/fork remain
-  later slices.
+  continue prompting without caller-rebuilt history. Import/clone/fork are done:
+  SDK runtime import validates and copies JSONL through `SessionManager`,
+  clone copies the full source document, and fork writes only the selected
+  active path with a derived header before returning a refreshed session handle.
 - Add `AgentSession.prompt(...)`, which appends the user prompt, prepares
   resources/settings, runs `AgentLoop`, persists generated messages, refreshes
   session context, and returns SDK-facing prompt result metadata. Prompt
