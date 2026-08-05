@@ -1,6 +1,9 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiModelClient;
+import com.agent4j.ai.AiProviderRegistry;
+import com.agent4j.ai.AiProviderSelection;
+import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionHeader;
 import com.agent4j.coding.session.SessionManager;
@@ -122,37 +125,66 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
     PromptResult prompt(CodingAgentSession session, PromptRequest request) throws Exception {
         Objects.requireNonNull(session, "session");
         Objects.requireNonNull(request, "request");
-        AiModelClient modelClient = services.optionalModelClient()
-                .orElseThrow(() -> new IllegalStateException("model client is not configured"));
-        ToolRegistry toolRegistry = services.toolRegistry();
-        AgentMessageConverter messageConverter = services.messageConverter();
         SessionManager sessionManager = session.sessionManager();
         AgentMessage promptMessage = promptMessage(sessionManager, request);
         List<AgentMessage> messages = java.util.stream.Stream
                 .concat(sessionManager.activeAgentMessages().stream(), java.util.stream.Stream.of(promptMessage))
                 .toList();
-        AgentLoopResult loopResult = new AgentLoop(modelClient, toolRegistry, services.eventBus(), messageConverter)
-                .runTurn(new AgentLoopRequest(
-                        session.id(),
-                        turnId(),
-                        promptMessage.id(),
-                        messages,
-                        session.cwd(),
-                        services.clock(),
-                        request.abortSignal().orElseGet(() -> new AbortController().signal()),
-                        request.toolAttributes(),
-                        null,
-                        request.maxToolRounds(),
-                        request.maxModelRetries(),
-                        request.modelTimeout(),
-                        request.toolExecutionMode(),
-                        List.of(promptMessage),
-                        request.steeringMessages(),
-                        request.followUpMessages(),
-                        request.steeringMode(),
-                        request.followUpMode()));
+        AgentLoopResult loopResult = agentLoop(request).runTurn(loopRequest(session, request, promptMessage, messages));
         List<SessionEntry> persisted = sessionManager.appendAgentLoopResult(loopResult);
         return new PromptResult(session, loopResult, persisted);
+    }
+
+    private AgentLoop agentLoop(PromptRequest request) {
+        ToolRegistry toolRegistry = services.toolRegistry();
+        AgentMessageConverter messageConverter = services.messageConverter();
+        return services.optionalModelClient()
+                .map(modelClient -> new AgentLoop(modelClient, toolRegistry, services.eventBus(), messageConverter))
+                .orElseGet(() -> {
+                    AiProviderSelection selection = providerSelection(request);
+                    AiResolvedAuth auth = services.loginService().resolveAuth(selection.provider().id());
+                    return new AgentLoop(
+                            selection,
+                            auth,
+                            toolRegistry,
+                            services.eventBus(),
+                            messageConverter);
+                });
+    }
+
+    private AiProviderSelection providerSelection(PromptRequest request) {
+        AiProviderRegistry registry = services.optionalProviderRegistry()
+                .orElseThrow(() -> new IllegalStateException("model client or provider registry is not configured"));
+        return request.model()
+                .map(registry::require)
+                .orElseGet(registry::requireDefault);
+    }
+
+    private AgentLoopRequest loopRequest(
+            CodingAgentSession session,
+            PromptRequest request,
+            AgentMessage promptMessage,
+            List<AgentMessage> messages
+    ) {
+        return new AgentLoopRequest(
+                session.id(),
+                turnId(),
+                promptMessage.id(),
+                messages,
+                session.cwd(),
+                services.clock(),
+                request.abortSignal().orElseGet(() -> new AbortController().signal()),
+                request.toolAttributes(),
+                null,
+                request.maxToolRounds(),
+                request.maxModelRetries(),
+                request.modelTimeout(),
+                request.toolExecutionMode(),
+                List.of(promptMessage),
+                request.steeringMessages(),
+                request.followUpMessages(),
+                request.steeringMode(),
+                request.followUpMode());
     }
 
     AgentSessionInfo sessionInfo(SessionManager sessionManager) {

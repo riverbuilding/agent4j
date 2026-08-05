@@ -1,7 +1,13 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiAssistantMessage;
+import com.agent4j.ai.AiAuthMode;
+import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelReference;
+import com.agent4j.ai.AiProvider;
+import com.agent4j.ai.AiProviderApi;
+import com.agent4j.ai.AiProviderRegistry;
+import com.agent4j.ai.AiProviderRequest;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiTextContent;
@@ -24,10 +30,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -156,7 +164,103 @@ class CodingAgentSessionRuntimeTest {
 
         assertThatThrownBy(() -> session.prompt(new PromptRequest("hello")))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("model client");
+                .hasMessageContaining("model client or provider registry");
+    }
+
+    @Test
+    void providerBackedPromptResolvesStoredApiKeyAuth() throws Exception {
+        Path sessionFile = tempDir.resolve("provider-api-key.jsonl");
+        AiModel model = new AiModel(new AiModelReference("fake-provider", "fake-model"), "Fake Model");
+        CapturingProvider provider = new CapturingProvider("fake-provider", List.of(model), "provider answer");
+        LoginService loginService = new DefaultLoginService(new InMemoryAuthCredentialStore(), Clock.systemUTC());
+        loginService.loginApiKey(new ApiKeyLoginRequest(
+                "fake-provider",
+                "sk-test",
+                Optional.of("https://api.example.test")));
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+                .providerRegistry(AiProviderRegistry.builder()
+                        .add(provider)
+                        .defaultModel(model.reference())
+                        .build())
+                .loginService(loginService)
+                .build();
+        AgentSession session = new CodingAgentSessionRuntime(services)
+                .createSession(new CreateSessionRequest(sessionFile, tempDir));
+
+        session.prompt(new PromptRequest("hello provider"));
+
+        assertThat(provider.requests()).hasSize(1);
+        assertThat(provider.requests().getFirst().context().auth().mode()).isEqualTo(AiAuthMode.API_KEY);
+        assertThat(provider.requests().getFirst().context().auth().apiKey()).contains("sk-test");
+        assertThat(provider.requests().getFirst().context().auth().baseUrl()).contains("https://api.example.test");
+    }
+
+    @Test
+    void providerBackedPromptResolvesStoredSubscriptionAuth() throws Exception {
+        Path sessionFile = tempDir.resolve("provider-subscription.jsonl");
+        AiModel model = new AiModel(new AiModelReference("fake-provider", "fake-model"), "Fake Model");
+        CapturingProvider provider = new CapturingProvider("fake-provider", List.of(model), "provider answer");
+        LoginService loginService = new DefaultLoginService(new InMemoryAuthCredentialStore(), Clock.systemUTC());
+        loginService.completeSubscriptionLogin(new SubscriptionLoginCompletion(
+                "fake-provider",
+                "flow-1",
+                "subscription-token",
+                Optional.of("https://codex.example.test"),
+                Optional.empty(),
+                Map.of("plan", "plus")));
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+                .providerRegistry(AiProviderRegistry.builder()
+                        .add(provider)
+                        .defaultModel(model.reference())
+                        .build())
+                .loginService(loginService)
+                .build();
+        AgentSession session = new CodingAgentSessionRuntime(services)
+                .createSession(new CreateSessionRequest(sessionFile, tempDir));
+
+        session.prompt(new PromptRequest("hello subscription"));
+
+        assertThat(provider.requests()).hasSize(1);
+        assertThat(provider.requests().getFirst().context().auth().mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
+        assertThat(provider.requests().getFirst().context().auth().accessToken()).contains("subscription-token");
+        assertThat(provider.requests().getFirst().context().auth().baseUrl()).contains("https://codex.example.test");
+        assertThat(provider.requests().getFirst().context().auth().metadata()).containsEntry("plan", "plus");
+    }
+
+    @Test
+    void promptModelOverridesProviderRegistryDefault() throws Exception {
+        Path sessionFile = tempDir.resolve("provider-model-override.jsonl");
+        AiModel defaultModel = new AiModel(new AiModelReference("fake-provider", "default-model"), "Default Model");
+        AiModel requestedModel = new AiModel(new AiModelReference("fake-provider", "requested-model"), "Requested Model");
+        CapturingProvider provider = new CapturingProvider(
+                "fake-provider",
+                List.of(defaultModel, requestedModel),
+                "provider answer");
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+                .providerRegistry(AiProviderRegistry.builder()
+                        .add(provider)
+                        .defaultModel(defaultModel.reference())
+                        .build())
+                .build();
+        AgentSession session = new CodingAgentSessionRuntime(services)
+                .createSession(new CreateSessionRequest(sessionFile, tempDir));
+
+        session.prompt(new PromptRequest(
+                "use requested model",
+                Optional.of(requestedModel.reference()),
+                0,
+                0,
+                Optional.empty(),
+                com.agent4j.core.runtime.ToolExecutionMode.PARALLEL,
+                Map.of(),
+                List.of(),
+                List.of(),
+                com.agent4j.core.runtime.QueueMode.ONE_AT_A_TIME,
+                com.agent4j.core.runtime.QueueMode.ONE_AT_A_TIME,
+                Optional.empty()));
+
+        assertThat(provider.requests()).hasSize(1);
+        assertThat(provider.requests().getFirst().model().reference()).isEqualTo(requestedModel.reference());
     }
 
     @Test
@@ -406,5 +510,53 @@ class CodingAgentSessionRuntimeTest {
             case AiAssistantMessage assistant -> ((AiTextContent) assistant.content().getFirst()).text();
             default -> throw new AssertionError("unexpected message type: " + message);
         };
+    }
+
+    private static final class CapturingProvider implements AiProvider {
+        private final String id;
+        private final List<AiModel> models;
+        private final String answer;
+        private final List<AiProviderRequest> requests = new ArrayList<>();
+
+        private CapturingProvider(String id, List<AiModel> models, String answer) {
+            this.id = id;
+            this.models = List.copyOf(models);
+            this.answer = answer;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public String name() {
+            return id;
+        }
+
+        @Override
+        public AiProviderApi api() {
+            return AiProviderApi.CUSTOM;
+        }
+
+        @Override
+        public List<AiModel> models() {
+            return models;
+        }
+
+        @Override
+        public void stream(AiProviderRequest request, Consumer<AiStreamEvent> sink) {
+            requests.add(request);
+            sink.accept(new AiStreamEvent.MessageCompleted(
+                    "assistant-" + requests.size(),
+                    new AiAssistantMessage(
+                            List.of(new AiTextContent(answer)),
+                            AiStopReason.STOP,
+                            AiUsage.zero())));
+        }
+
+        private List<AiProviderRequest> requests() {
+            return List.copyOf(requests);
+        }
     }
 }

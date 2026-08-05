@@ -1,6 +1,7 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiModelClient;
+import com.agent4j.ai.AiProviderRegistry;
 import com.agent4j.coding.message.CodingAgentMessageConverter;
 import com.agent4j.coding.runtime.CodingAgentLoopRequestFactory;
 import com.agent4j.coding.runtime.CodingBranchSummarizer;
@@ -17,6 +18,7 @@ import java.util.Optional;
 public record CodingAgentRuntimeServices(
         AgentEventBus eventBus,
         AiModelClient modelClient,
+        AiProviderRegistry providerRegistry,
         ToolRegistry toolRegistry,
         AgentMessageConverter messageConverter,
         Clock clock,
@@ -52,9 +54,14 @@ public record CodingAgentRuntimeServices(
         return Optional.ofNullable(modelClient);
     }
 
+    public Optional<AiProviderRegistry> optionalProviderRegistry() {
+        return Optional.ofNullable(providerRegistry);
+    }
+
     public static final class Builder {
         private AgentEventBus eventBus;
         private AiModelClient modelClient;
+        private AiProviderRegistry providerRegistry;
         private ToolRegistry toolRegistry;
         private AgentMessageConverter messageConverter;
         private Clock clock;
@@ -70,6 +77,11 @@ public record CodingAgentRuntimeServices(
 
         public Builder modelClient(AiModelClient modelClient) {
             this.modelClient = modelClient;
+            return this;
+        }
+
+        public Builder providerRegistry(AiProviderRegistry providerRegistry) {
+            this.providerRegistry = Objects.requireNonNull(providerRegistry, "providerRegistry");
             return this;
         }
 
@@ -112,11 +124,12 @@ public record CodingAgentRuntimeServices(
             AgentEventBus resolvedEventBus = eventBus == null ? new AgentEventBus() : eventBus;
             Clock resolvedClock = clock == null ? Clock.systemUTC() : clock;
             LoginService resolvedLoginService = loginService == null
-                    ? new DefaultLoginService(new InMemoryAuthCredentialStore(), resolvedClock)
+                    ? new DefaultLoginService(PersistentAuthCredentialStore.userDefault(), resolvedClock)
                     : loginService;
             return new CodingAgentRuntimeServices(
                     resolvedEventBus,
                     modelClient,
+                    providerRegistry,
                     toolRegistry == null ? InMemoryToolRegistry.builder().build() : toolRegistry,
                     messageConverter == null ? CodingAgentMessageConverter.INSTANCE : messageConverter,
                     resolvedClock,

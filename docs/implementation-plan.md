@@ -666,8 +666,11 @@ Tasks:
     Done in `DefaultLoginService` with expiry/metadata-aware
     `AiResolvedAuth.accessToken(...)` storage.
   - local user credential store abstraction with explicit non-project-secret
-    storage boundary. Baseline is in-memory only; persistent user-scoped storage
-    remains a later auth slice.
+    storage boundary. Done with `PersistentAuthCredentialStore`, a user-scoped
+    JSON credential file at `~/.pi/agent/auth.json` by default, explicit
+    `AuthSession` serialization, owner-only POSIX permissions where supported,
+    default SDK runtime wiring, and tests that pin reload/delete behavior plus
+    no project-file writes.
   - auth status/logout APIs that can expose provider auth mode and plan metadata
     when the provider makes it available. Baseline status/logout are done;
     subscription plan metadata will arrive with OAuth/subscription login.
@@ -675,6 +678,15 @@ Tasks:
     provider login is test infrastructure only, not the product target. Done for
     the current API shape with a deterministic fake `SubscriptionLoginClient`;
     real OAuth transport tests remain later auth work.
+- Integrate resolved auth into provider-backed runtime creation. Done:
+  `CodingAgentRuntimeServices` can carry an `AiProviderRegistry`,
+  `CodingAgentSessionRuntime.prompt(...)` selects either the configured direct
+  `AiModelClient` or a provider/model from that registry, resolves provider auth
+  through `LoginService.resolveAuth(...)`, and creates a provider-backed
+  `AgentLoop` with request-scoped `AiResolvedAuth`. Tests pin API-key auth,
+  ChatGPT subscription-token auth, prompt model override, and the missing
+  client/registry failure path. Persistent credential storage is done; real
+  OAuth transport/polling remain later auth slices.
 - Add extension binding placeholders.
 - Add API docs and examples.
 - Re-check exact API names and lifecycle details against PI
@@ -690,8 +702,9 @@ Exit criteria:
   history outside the runtime boundary.
 - Login API supports real ChatGPT/Codex subscription login shape, including
   browser OAuth, device code, status, logout, persisted user credentials, and
-  resolved auth for provider-backed runtime creation. Fake-provider auth covers
-  the same contract in deterministic tests.
+  resolved auth for provider-backed runtime creation. The provider-backed
+  runtime creation boundary and persisted user credential store are done with
+  deterministic tests; real OAuth transport/polling remains later auth work.
 
 ## Phase 10: CLI Modes
 
