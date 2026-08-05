@@ -79,15 +79,15 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
             var model = request.model().orElseThrow();
             sessionManager.appendModelChange(model.providerId(), model.modelId());
         }
-        return new CodingAgentSession(
-                this,
-                sessionManager,
-                new AgentConversationContext(sessionManager.activeAgentMessages(), List.of()));
+        return newSession(sessionManager);
     }
 
     @Override
-    public AgentSession resumeSession(ResumeSessionRequest request) {
-        throw new UnsupportedOperationException("resumeSession is not implemented yet");
+    public AgentSession resumeSession(ResumeSessionRequest request) throws Exception {
+        Objects.requireNonNull(request, "request");
+        SessionManager sessionManager = SessionManager.open(request.sessionFile());
+        request.activeEntryId().ifPresent(sessionManager::navigateTo);
+        return newSession(sessionManager);
     }
 
     @Override
@@ -179,5 +179,12 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
 
     private static String turnId() {
         return "turn-" + UUID.randomUUID();
+    }
+
+    private CodingAgentSession newSession(SessionManager sessionManager) {
+        return new CodingAgentSession(
+                this,
+                sessionManager,
+                new AgentConversationContext(sessionManager.activeAgentMessages(), List.of()));
     }
 }

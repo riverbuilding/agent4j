@@ -616,7 +616,12 @@ Tasks:
   `CodingAgentSessionRuntime.createSession(...)` creates a PI-shaped JSONL
   session, appends optional session-info/model-change entries, initializes an
   empty session-owned `AgentConversationContext`, and returns a
-  `CodingAgentSession` handle. Resume/import/clone/fork remain later slices.
+  `CodingAgentSession` handle. Resume is done:
+  `CodingAgentSessionRuntime.resumeSession(...)` opens the JSONL session,
+  optionally navigates to a requested active entry, initializes the
+  session-owned context from `SessionManager.activeAgentMessages()`, and can
+  continue prompting without caller-rebuilt history. Import/clone/fork remain
+  later slices.
 - Add `AgentSession.prompt(...)`, which appends the user prompt, prepares
   resources/settings, runs `AgentLoop`, persists generated messages, refreshes
   session context, and returns SDK-facing prompt result metadata. Prompt

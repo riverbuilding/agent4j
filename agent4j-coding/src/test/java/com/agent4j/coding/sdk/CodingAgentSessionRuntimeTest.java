@@ -152,6 +152,68 @@ class CodingAgentSessionRuntimeTest {
                 .hasMessageContaining("model client");
     }
 
+    @Test
+    void resumeSessionRestoresActiveConversationAndCanContinuePrompting() throws Exception {
+        Path sessionFile = tempDir.resolve("resume.jsonl");
+        new CodingAgentSessionRuntime(new FakeModelClient()
+                        .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero())))
+                .createSession(new CreateSessionRequest(sessionFile, tempDir))
+                .prompt(new PromptRequest("first prompt"));
+        FakeModelClient resumedModel = new FakeModelClient()
+                .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero()));
+
+        AgentSession resumed = new CodingAgentSessionRuntime(resumedModel)
+                .resumeSession(new ResumeSessionRequest(sessionFile));
+
+        assertThat(resumed.sessionFile()).isEqualTo(sessionFile.toAbsolutePath().normalize());
+        assertThat(resumed.cwd()).isEqualTo(tempDir.toAbsolutePath().normalize());
+        assertThat(resumed.conversationContext().transcriptMessages()).extracting(AgentMessage::textContent)
+                .containsExactly("first prompt", "first answer");
+        assertThat(resumed.conversationContext().generatedMessages()).isEmpty();
+
+        resumed.prompt(new PromptRequest("second prompt"));
+
+        assertThat(resumedModel.requests()).hasSize(1);
+        assertThat(resumedModel.requests().getFirst().messages()).hasSize(3);
+        assertThat(text(resumedModel.requests().getFirst().messages().get(0))).isEqualTo("first prompt");
+        assertThat(text(resumedModel.requests().getFirst().messages().get(1))).isEqualTo("first answer");
+        assertThat(text(resumedModel.requests().getFirst().messages().get(2))).isEqualTo("second prompt");
+        assertThat(SessionManager.open(sessionFile).activeAgentMessages()).extracting(AgentMessage::textContent)
+                .containsExactly("first prompt", "first answer", "second prompt", "second answer");
+    }
+
+    @Test
+    void resumeSessionCanNavigateToSpecificActiveEntryBeforeContinuing() throws Exception {
+        Path sessionFile = tempDir.resolve("resume-branch.jsonl");
+        AgentSession session = new CodingAgentSessionRuntime(new FakeModelClient()
+                        .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero()))
+                        .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero())))
+                .createSession(new CreateSessionRequest(sessionFile, tempDir));
+        session.prompt(new PromptRequest("first prompt"));
+        String firstAssistantId = SessionManager.open(sessionFile).activeAgentMessages().get(1).id();
+        session.prompt(new PromptRequest("second prompt"));
+        FakeModelClient branchedModel = new FakeModelClient()
+                .enqueue(assistantText("assistant-3", "branched answer", AiUsage.zero()));
+
+        AgentSession resumed = new CodingAgentSessionRuntime(branchedModel)
+                .resumeSession(new ResumeSessionRequest(
+                        sessionFile,
+                        Optional.of(firstAssistantId),
+                        Optional.empty()));
+
+        assertThat(resumed.activeEntryId()).isEqualTo(firstAssistantId);
+        assertThat(resumed.conversationContext().transcriptMessages()).extracting(AgentMessage::textContent)
+                .containsExactly("first prompt", "first answer");
+
+        resumed.prompt(new PromptRequest("branched prompt"));
+
+        assertThat(branchedModel.requests()).hasSize(1);
+        assertThat(branchedModel.requests().getFirst().messages()).hasSize(3);
+        assertThat(text(branchedModel.requests().getFirst().messages().get(2))).isEqualTo("branched prompt");
+        assertThat(SessionManager.open(sessionFile).activeAgentMessages()).extracting(AgentMessage::textContent)
+                .containsExactly("first prompt", "first answer", "branched prompt", "branched answer");
+    }
+
     private static List<AiStreamEvent> assistantText(String messageId, String text, AiUsage usage) {
         return List.of(new AiStreamEvent.MessageCompleted(
                 messageId,
