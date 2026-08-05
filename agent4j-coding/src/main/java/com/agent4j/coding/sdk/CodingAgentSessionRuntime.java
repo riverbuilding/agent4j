@@ -110,6 +110,11 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
     }
 
     @Override
+    public LoginService loginService() {
+        return services.loginService();
+    }
+
+    @Override
     public EventSubscription subscribe(Consumer<AgentEvent> subscriber) {
         return services.eventBus().subscribe(subscriber);
     }

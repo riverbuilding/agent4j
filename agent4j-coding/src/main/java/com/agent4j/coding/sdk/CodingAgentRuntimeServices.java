@@ -22,7 +22,8 @@ public record CodingAgentRuntimeServices(
         Clock clock,
         CodingAgentLoopRequestFactory requestFactory,
         CodingSessionCompactor sessionCompactor,
-        CodingBranchSummarizer branchSummarizer
+        CodingBranchSummarizer branchSummarizer,
+        LoginService loginService
 ) {
     public CodingAgentRuntimeServices {
         Objects.requireNonNull(eventBus, "eventBus");
@@ -32,6 +33,7 @@ public record CodingAgentRuntimeServices(
         Objects.requireNonNull(requestFactory, "requestFactory");
         Objects.requireNonNull(sessionCompactor, "sessionCompactor");
         Objects.requireNonNull(branchSummarizer, "branchSummarizer");
+        Objects.requireNonNull(loginService, "loginService");
     }
 
     public static CodingAgentRuntimeServices defaults() {
@@ -59,6 +61,7 @@ public record CodingAgentRuntimeServices(
         private CodingAgentLoopRequestFactory requestFactory;
         private CodingSessionCompactor sessionCompactor;
         private CodingBranchSummarizer branchSummarizer;
+        private LoginService loginService;
 
         public Builder eventBus(AgentEventBus eventBus) {
             this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
@@ -100,9 +103,17 @@ public record CodingAgentRuntimeServices(
             return this;
         }
 
+        public Builder loginService(LoginService loginService) {
+            this.loginService = Objects.requireNonNull(loginService, "loginService");
+            return this;
+        }
+
         public CodingAgentRuntimeServices build() {
             AgentEventBus resolvedEventBus = eventBus == null ? new AgentEventBus() : eventBus;
             Clock resolvedClock = clock == null ? Clock.systemUTC() : clock;
+            LoginService resolvedLoginService = loginService == null
+                    ? new DefaultLoginService(new InMemoryAuthCredentialStore(), resolvedClock)
+                    : loginService;
             return new CodingAgentRuntimeServices(
                     resolvedEventBus,
                     modelClient,
@@ -111,7 +122,8 @@ public record CodingAgentRuntimeServices(
                     resolvedClock,
                     requestFactory == null ? new CodingAgentLoopRequestFactory() : requestFactory,
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
-                    branchSummarizer == null ? new CodingBranchSummarizer() : branchSummarizer);
+                    branchSummarizer == null ? new CodingBranchSummarizer() : branchSummarizer,
+                    resolvedLoginService);
         }
     }
 }

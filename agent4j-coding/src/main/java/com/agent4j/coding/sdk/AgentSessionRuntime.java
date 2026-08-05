@@ -20,6 +20,8 @@ public interface AgentSessionRuntime {
 
     AgentSession forkSession(ForkSessionRequest request) throws Exception;
 
+    LoginService loginService();
+
     EventSubscription subscribe(Consumer<AgentEvent> subscriber);
 
     default EventSubscription subscribeSession(String sessionId, Consumer<AgentEvent> subscriber) {

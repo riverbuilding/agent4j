@@ -220,6 +220,11 @@ class AgentSessionRuntimeInterfaceTest {
         }
 
         @Override
+        public LoginService loginService() {
+            return CodingAgentRuntimeServices.defaults().loginService();
+        }
+
+        @Override
         public EventSubscription subscribe(Consumer<AgentEvent> subscriber) {
             return eventBus.subscribe(subscriber);
         }

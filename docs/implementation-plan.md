@@ -648,17 +648,25 @@ Tasks:
   constructors now delegate into this container, and tests pin default services
   plus custom clock/event-bus usage through real prompt calls.
 - Add login/auth runtime API before CLI ownership:
-  - provider-neutral `LoginService`/`AuthSession` API
+  - provider-neutral `LoginService`/`AuthSession` API. Baseline is done with
+    `LoginService`, `AuthSession`, `AuthStatus`, `AuthCredentialStore`,
+    `InMemoryAuthCredentialStore`, and `DefaultLoginService`, exposed through
+    `AgentSessionRuntime.loginService()` and `CodingAgentRuntimeServices`.
   - ChatGPT/Codex subscription login flow, including browser OAuth and device
     code modes, so ChatGPT Plus/Pro/Team/Enterprise-style subscription access is
     a first-class runtime capability rather than a CLI-only concern
   - API-key login flow for OpenAI/Anthropic-compatible providers as the
-    usage-based alternative to subscription login
-  - access-token login flow for Codex/OpenAI-compatible automation and testing
+    usage-based alternative to subscription login. Done in `DefaultLoginService`
+    with resolved `AiResolvedAuth.apiKey(...)` storage.
+  - access-token login flow for Codex/OpenAI-compatible automation and testing.
+    Done in `DefaultLoginService` with expiry/metadata-aware
+    `AiResolvedAuth.accessToken(...)` storage.
   - local user credential store abstraction with explicit non-project-secret
-    storage boundary
+    storage boundary. Baseline is in-memory only; persistent user-scoped storage
+    remains a later auth slice.
   - auth status/logout APIs that can expose provider auth mode and plan metadata
-    when the provider makes it available
+    when the provider makes it available. Baseline status/logout are done;
+    subscription plan metadata will arrive with OAuth/subscription login.
   - tests with fake OAuth server/transport and in-memory credential store; fake
     provider login is test infrastructure only, not the product target
 - Add extension binding placeholders.
