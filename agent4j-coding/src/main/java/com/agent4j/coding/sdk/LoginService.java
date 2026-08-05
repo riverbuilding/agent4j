@@ -7,6 +7,12 @@ public interface LoginService {
 
     AuthSession loginAccessToken(AccessTokenLoginRequest request);
 
+    SubscriptionLoginStart startBrowserSubscriptionLogin(BrowserSubscriptionLoginRequest request);
+
+    SubscriptionLoginStart startDeviceCodeSubscriptionLogin(DeviceCodeSubscriptionLoginRequest request);
+
+    AuthSession completeSubscriptionLogin(SubscriptionLoginCompletion completion);
+
     AuthStatus status(String providerId);
 
     AiResolvedAuth resolveAuth(String providerId);

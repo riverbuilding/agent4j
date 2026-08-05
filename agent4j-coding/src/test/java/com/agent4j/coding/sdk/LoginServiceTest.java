@@ -4,9 +4,12 @@ import com.agent4j.ai.AiAuthMode;
 import com.agent4j.ai.AiResolvedAuth;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -87,6 +90,64 @@ class LoginServiceTest {
     }
 
     @Test
+    void subscriptionBrowserLoginShapeStartsAndCompletesChatGptSubscriptionSession() {
+        FakeSubscriptionLoginClient client = new FakeSubscriptionLoginClient();
+        LoginService service = new DefaultLoginService(new InMemoryAuthCredentialStore(), clock, client);
+
+        SubscriptionLoginStart start = service.startBrowserSubscriptionLogin(new BrowserSubscriptionLoginRequest(
+                "openai",
+                Optional.of("https://chatgpt.example.test"),
+                Map.of("audience", "codex")));
+        AuthSession session = service.completeSubscriptionLogin(new SubscriptionLoginCompletion(
+                "openai",
+                start.flowId(),
+                "subscription-token",
+                Optional.of("https://chatgpt.example.test"),
+                Optional.of(Instant.parse("2026-08-05T13:00:00Z")),
+                Map.of("plan", "plus")));
+
+        assertThat(start.mode()).isEqualTo(SubscriptionLoginMode.BROWSER);
+        assertThat(start.authorizationUri()).isEqualTo(URI.create("https://login.example.test/browser/fake-flow-1"));
+        assertThat(start.verificationUri()).isEmpty();
+        assertThat(start.userCode()).isEmpty();
+        assertThat(client.browserRequests()).hasSize(1);
+        assertThat(session.mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
+        assertThat(session.auth().accessToken()).contains("subscription-token");
+        assertThat(session.auth().baseUrl()).contains("https://chatgpt.example.test");
+        assertThat(session.auth().metadata()).containsEntry("plan", "plus");
+        assertThat(service.resolveAuth("openai")).isEqualTo(session.auth());
+        assertThat(service.status("openai").mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
+    }
+
+    @Test
+    void subscriptionDeviceCodeLoginShapeExposesVerificationAndUserCode() {
+        FakeSubscriptionLoginClient client = new FakeSubscriptionLoginClient();
+        LoginService service = new DefaultLoginService(new InMemoryAuthCredentialStore(), clock, client);
+
+        SubscriptionLoginStart start = service.startDeviceCodeSubscriptionLogin(
+                new DeviceCodeSubscriptionLoginRequest("openai"));
+
+        assertThat(start.mode()).isEqualTo(SubscriptionLoginMode.DEVICE_CODE);
+        assertThat(start.authorizationUri()).isEqualTo(URI.create("https://login.example.test/device/fake-flow-1"));
+        assertThat(start.verificationUri()).contains(URI.create("https://login.example.test/activate"));
+        assertThat(start.userCode()).contains("CODE-1");
+        assertThat(start.expiresAt()).contains(Instant.parse("2026-08-05T12:05:00Z"));
+        assertThat(client.deviceRequests()).hasSize(1);
+    }
+
+    @Test
+    void defaultSubscriptionLoginClientFailsClearlyUntilOauthTransportIsConfigured() {
+        LoginService service = service();
+
+        assertThatThrownBy(() -> service.startBrowserSubscriptionLogin(new BrowserSubscriptionLoginRequest("openai")))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("browser login");
+        assertThatThrownBy(() -> service.startDeviceCodeSubscriptionLogin(new DeviceCodeSubscriptionLoginRequest("openai")))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("device-code login");
+    }
+
+    @Test
     void runtimeServicesExposeDefaultAndConfiguredLoginService() {
         LoginService configured = service();
 
@@ -110,9 +171,67 @@ class LoginServiceTest {
         assertThatThrownBy(() -> new AccessTokenLoginRequest("openai", " "))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("accessToken");
+        assertThatThrownBy(() -> new BrowserSubscriptionLoginRequest(" "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("providerId");
+        assertThatThrownBy(() -> new DeviceCodeSubscriptionLoginRequest(" "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("providerId");
+        assertThatThrownBy(() -> new SubscriptionLoginCompletion(
+                        "openai",
+                        "flow",
+                        " ",
+                        Optional.empty(),
+                        Optional.empty(),
+                        Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("accessToken");
     }
 
     private LoginService service() {
         return new DefaultLoginService(new InMemoryAuthCredentialStore(), clock);
+    }
+
+    private static final class FakeSubscriptionLoginClient implements SubscriptionLoginClient {
+        private final List<BrowserSubscriptionLoginRequest> browserRequests = new ArrayList<>();
+        private final List<DeviceCodeSubscriptionLoginRequest> deviceRequests = new ArrayList<>();
+
+        @Override
+        public SubscriptionLoginStart startBrowserLogin(BrowserSubscriptionLoginRequest request, Instant now) {
+            browserRequests.add(request);
+            String flowId = "fake-flow-" + browserRequests.size();
+            return new SubscriptionLoginStart(
+                    request.providerId(),
+                    SubscriptionLoginMode.BROWSER,
+                    flowId,
+                    URI.create("https://login.example.test/browser/" + flowId),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(now.plusSeconds(300)),
+                    request.metadata());
+        }
+
+        @Override
+        public SubscriptionLoginStart startDeviceCodeLogin(DeviceCodeSubscriptionLoginRequest request, Instant now) {
+            deviceRequests.add(request);
+            String flowId = "fake-flow-" + deviceRequests.size();
+            return new SubscriptionLoginStart(
+                    request.providerId(),
+                    SubscriptionLoginMode.DEVICE_CODE,
+                    flowId,
+                    URI.create("https://login.example.test/device/" + flowId),
+                    Optional.of(URI.create("https://login.example.test/activate")),
+                    Optional.of("CODE-" + deviceRequests.size()),
+                    Optional.of(now.plusSeconds(300)),
+                    request.metadata());
+        }
+
+        private List<BrowserSubscriptionLoginRequest> browserRequests() {
+            return List.copyOf(browserRequests);
+        }
+
+        private List<DeviceCodeSubscriptionLoginRequest> deviceRequests() {
+            return List.copyOf(deviceRequests);
+        }
     }
 }

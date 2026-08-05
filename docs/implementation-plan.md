@@ -654,7 +654,11 @@ Tasks:
     `AgentSessionRuntime.loginService()` and `CodingAgentRuntimeServices`.
   - ChatGPT/Codex subscription login flow, including browser OAuth and device
     code modes, so ChatGPT Plus/Pro/Team/Enterprise-style subscription access is
-    a first-class runtime capability rather than a CLI-only concern
+    a first-class runtime capability rather than a CLI-only concern. API shape
+    is done with browser/device-code start requests, `SubscriptionLoginStart`,
+    `SubscriptionLoginCompletion`, `SubscriptionLoginClient`, and completion
+    into `AiResolvedAuth.chatGptSubscription(...)`. Real OAuth transport and
+    browser/device-code polling remain later auth implementation work.
   - API-key login flow for OpenAI/Anthropic-compatible providers as the
     usage-based alternative to subscription login. Done in `DefaultLoginService`
     with resolved `AiResolvedAuth.apiKey(...)` storage.
@@ -668,7 +672,9 @@ Tasks:
     when the provider makes it available. Baseline status/logout are done;
     subscription plan metadata will arrive with OAuth/subscription login.
   - tests with fake OAuth server/transport and in-memory credential store; fake
-    provider login is test infrastructure only, not the product target
+    provider login is test infrastructure only, not the product target. Done for
+    the current API shape with a deterministic fake `SubscriptionLoginClient`;
+    real OAuth transport tests remain later auth work.
 - Add extension binding placeholders.
 - Add API docs and examples.
 - Re-check exact API names and lifecycle details against PI
