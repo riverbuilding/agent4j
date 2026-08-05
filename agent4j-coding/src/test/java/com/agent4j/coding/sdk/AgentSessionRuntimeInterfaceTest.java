@@ -7,11 +7,14 @@ import com.agent4j.core.event.EventSubscription;
 import com.agent4j.core.runtime.AgentConversationContext;
 import com.agent4j.core.runtime.QueueMode;
 import com.agent4j.core.runtime.ToolExecutionMode;
+import com.agent4j.testkit.ai.FakeModelClient;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -155,6 +158,37 @@ class AgentSessionRuntimeInterfaceTest {
                 .singleElement()
                 .extracting(event -> ((AgentEvent.AgentStarted) event).turnId())
                 .isEqualTo("turn-2");
+    }
+
+    @Test
+    void runtimeServicesDefaultsProvideSharedCoreServices() {
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.defaults();
+
+        assertThat(services.eventBus()).isNotNull();
+        assertThat(services.optionalModelClient()).isEmpty();
+        assertThat(services.toolRegistry()).isNotNull();
+        assertThat(services.messageConverter()).isNotNull();
+        assertThat(services.clock()).isNotNull();
+        assertThat(services.requestFactory()).isNotNull();
+        assertThat(services.sessionCompactor()).isNotNull();
+        assertThat(services.branchSummarizer()).isNotNull();
+    }
+
+    @Test
+    void runtimeServicesBuilderCarriesConfiguredServices() {
+        AgentEventBus eventBus = new AgentEventBus();
+        FakeModelClient modelClient = new FakeModelClient();
+        Clock clock = Clock.fixed(Instant.parse("2026-08-05T12:00:00Z"), ZoneOffset.UTC);
+
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+                .eventBus(eventBus)
+                .modelClient(modelClient)
+                .clock(clock)
+                .build();
+
+        assertThat(services.eventBus()).isSameAs(eventBus);
+        assertThat(services.optionalModelClient()).containsSame(modelClient);
+        assertThat(services.clock()).isSameAs(clock);
     }
 
     private static final class TestRuntime implements AgentSessionRuntime {

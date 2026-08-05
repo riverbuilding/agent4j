@@ -1,7 +1,6 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiModelClient;
-import com.agent4j.coding.message.CodingAgentMessageConverter;
 import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionHeader;
 import com.agent4j.coding.session.SessionManager;
@@ -16,7 +15,6 @@ import com.agent4j.core.runtime.AgentLoop;
 import com.agent4j.core.runtime.AgentLoopRequest;
 import com.agent4j.core.runtime.AgentLoopResult;
 import com.agent4j.core.runtime.AgentMessageConverter;
-import com.agent4j.core.tool.InMemoryToolRegistry;
 import com.agent4j.core.tool.ToolRegistry;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 
@@ -31,27 +29,18 @@ import java.util.function.Consumer;
 public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
 
-    private final AgentEventBus eventBus;
-    private final AiModelClient modelClient;
-    private final ToolRegistry toolRegistry;
-    private final AgentMessageConverter messageConverter;
-    private final Clock clock;
+    private final CodingAgentRuntimeServices services;
 
     public CodingAgentSessionRuntime() {
-        this((AiModelClient) null);
+        this(CodingAgentRuntimeServices.defaults());
     }
 
     public CodingAgentSessionRuntime(AiModelClient modelClient) {
-        this(
-                new AgentEventBus(),
-                modelClient,
-                InMemoryToolRegistry.builder().build(),
-                CodingAgentMessageConverter.INSTANCE,
-                Clock.systemUTC());
+        this(CodingAgentRuntimeServices.withModelClient(modelClient));
     }
 
     public CodingAgentSessionRuntime(AgentEventBus eventBus) {
-        this(eventBus, null, InMemoryToolRegistry.builder().build(), CodingAgentMessageConverter.INSTANCE, Clock.systemUTC());
+        this(CodingAgentRuntimeServices.builder().eventBus(eventBus).build());
     }
 
     public CodingAgentSessionRuntime(
@@ -61,11 +50,17 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
             AgentMessageConverter messageConverter,
             Clock clock
     ) {
-        this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
-        this.modelClient = modelClient;
-        this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
-        this.messageConverter = Objects.requireNonNull(messageConverter, "messageConverter");
-        this.clock = Objects.requireNonNull(clock, "clock");
+        this(CodingAgentRuntimeServices.builder()
+                .eventBus(eventBus)
+                .modelClient(modelClient)
+                .toolRegistry(toolRegistry)
+                .messageConverter(messageConverter)
+                .clock(clock)
+                .build());
+    }
+
+    public CodingAgentSessionRuntime(CodingAgentRuntimeServices services) {
+        this.services = Objects.requireNonNull(services, "services");
     }
 
     @Override
@@ -116,28 +111,29 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
 
     @Override
     public EventSubscription subscribe(Consumer<AgentEvent> subscriber) {
-        return eventBus.subscribe(subscriber);
+        return services.eventBus().subscribe(subscriber);
     }
 
     PromptResult prompt(CodingAgentSession session, PromptRequest request) throws Exception {
         Objects.requireNonNull(session, "session");
         Objects.requireNonNull(request, "request");
-        if (modelClient == null) {
-            throw new IllegalStateException("model client is not configured");
-        }
+        AiModelClient modelClient = services.optionalModelClient()
+                .orElseThrow(() -> new IllegalStateException("model client is not configured"));
+        ToolRegistry toolRegistry = services.toolRegistry();
+        AgentMessageConverter messageConverter = services.messageConverter();
         SessionManager sessionManager = session.sessionManager();
         AgentMessage promptMessage = promptMessage(sessionManager, request);
         List<AgentMessage> messages = java.util.stream.Stream
                 .concat(sessionManager.activeAgentMessages().stream(), java.util.stream.Stream.of(promptMessage))
                 .toList();
-        AgentLoopResult loopResult = new AgentLoop(modelClient, toolRegistry, eventBus, messageConverter)
+        AgentLoopResult loopResult = new AgentLoop(modelClient, toolRegistry, services.eventBus(), messageConverter)
                 .runTurn(new AgentLoopRequest(
                         session.id(),
                         turnId(),
                         promptMessage.id(),
                         messages,
                         session.cwd(),
-                        clock,
+                        services.clock(),
                         request.abortSignal().orElseGet(() -> new AbortController().signal()),
                         request.toolAttributes(),
                         null,
@@ -176,7 +172,7 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
         return new AgentMessage(
                 messageId(),
                 sessionManager.activeEntryId(),
-                Instant.now(clock),
+                Instant.now(services.clock()),
                 AgentMessageRole.USER,
                 JSON.textNode(request.prompt()),
                 JSON.objectNode());

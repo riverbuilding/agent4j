@@ -641,6 +641,12 @@ Tasks:
   `subscribeSession(...)`, and tests pin prompt event delivery, event ordering,
   subscription close behavior, and session-id filtering through real
   `AgentSession.prompt(...)` calls.
+- Add runtime services container. Done with `CodingAgentRuntimeServices`, which
+  centralizes `AgentEventBus`, optional direct `AiModelClient`, `ToolRegistry`,
+  `AgentMessageConverter`, `Clock`, request preparation, session compaction,
+  and branch summarization services. Existing `CodingAgentSessionRuntime`
+  constructors now delegate into this container, and tests pin default services
+  plus custom clock/event-bus usage through real prompt calls.
 - Add login/auth runtime API before CLI ownership:
   - provider-neutral `LoginService`/`AuthSession` API
   - ChatGPT/Codex subscription login flow, including browser OAuth and device

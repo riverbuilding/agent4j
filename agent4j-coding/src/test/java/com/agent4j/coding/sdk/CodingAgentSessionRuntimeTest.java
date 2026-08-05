@@ -11,6 +11,7 @@ import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionEntryType;
 import com.agent4j.coding.session.SessionManager;
 import com.agent4j.core.event.AgentEvent;
+import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.event.EventSubscription;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
@@ -24,6 +25,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -349,6 +353,30 @@ class CodingAgentSessionRuntimeTest {
                         "MessageEnded",
                         "TurnEnded",
                         "AgentEnded");
+    }
+
+    @Test
+    void runtimeUsesConfiguredServicesContainerForPromptClockAndEvents() throws Exception {
+        Path sessionFile = tempDir.resolve("services.jsonl");
+        AgentEventBus eventBus = new AgentEventBus();
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(assistantText("assistant-1", "answer", AiUsage.zero()));
+        Clock clock = Clock.fixed(Instant.parse("2026-08-05T12:34:56Z"), ZoneOffset.UTC);
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+                .eventBus(eventBus)
+                .modelClient(model)
+                .clock(clock)
+                .build();
+        List<AgentEvent> events = new ArrayList<>();
+        eventBus.subscribe(events::add);
+        AgentSession session = new CodingAgentSessionRuntime(services)
+                .createSession(new CreateSessionRequest(sessionFile, tempDir));
+
+        PromptResult result = session.prompt(new PromptRequest("prompt"));
+
+        assertThat(result.persistedEntries().getFirst().timestamp()).isEqualTo(Instant.parse("2026-08-05T12:34:56Z"));
+        assertThat(events).isNotEmpty();
+        assertThat(events).allSatisfy(event -> assertThat(event.timestamp()).isEqualTo(Instant.parse("2026-08-05T12:34:56Z")));
     }
 
     private static List<AiStreamEvent> assistantText(String messageId, String text, AiUsage usage) {
