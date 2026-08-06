@@ -38,6 +38,12 @@ public final class BrowserSubscriptionLoginCallbackServer implements AutoCloseab
         return start(InetAddress.getLoopbackAddress(), 0, DEFAULT_PATH, null, loginService);
     }
 
+    public static BrowserSubscriptionLoginCallbackServer startDefaultBrowserCallback(
+            LoginService loginService
+    ) throws IOException {
+        return start(InetAddress.getLoopbackAddress(), 1455, DEFAULT_PATH, null, loginService);
+    }
+
     public static BrowserSubscriptionLoginCallbackServer start(
             InetAddress bindAddress,
             int port,

@@ -2,6 +2,7 @@ package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiResolvedAuth;
 
+import java.io.IOException;
 import java.util.Optional;
 
 public interface LoginService {
@@ -10,6 +11,13 @@ public interface LoginService {
     AuthSession loginAccessToken(AccessTokenLoginRequest request);
 
     SubscriptionLoginStart startBrowserSubscriptionLogin(BrowserSubscriptionLoginRequest request);
+
+    default BrowserSubscriptionLogin startBrowserSubscriptionLogin(
+            BrowserSubscriptionLoginRequest request,
+            BrowserLauncher launcher
+    ) throws IOException {
+        return BrowserSubscriptionLogin.start(this, request, launcher);
+    }
 
     SubscriptionLoginStart startDeviceCodeSubscriptionLogin(DeviceCodeSubscriptionLoginRequest request);
 

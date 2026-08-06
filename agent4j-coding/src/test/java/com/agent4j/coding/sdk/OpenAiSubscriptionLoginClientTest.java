@@ -70,6 +70,33 @@ class OpenAiSubscriptionLoginClientTest {
     }
 
     @Test
+    void browserLoginFlowStartsCallbackServerAndUsesItsRedirectUri() throws Exception {
+        FakeLoginTransport transport = new FakeLoginTransport();
+        LoginService service = new DefaultLoginService(
+                new InMemoryAuthCredentialStore(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new OpenAiSubscriptionLoginClient(options(), transport));
+        List<URI> opened = new ArrayList<>();
+
+        BrowserSubscriptionLogin login;
+        try {
+            login = service.startBrowserSubscriptionLogin(
+                    new BrowserSubscriptionLoginRequest("openai"), opened::add);
+        } catch (IOException e) {
+            Assumptions.assumeTrue(false, "local callback socket binding is not available: " + e.getMessage());
+            return;
+        }
+        try (login) {
+            assertThat(opened).containsExactly(login.start().authorizationUri());
+            assertThat(login.redirectUri()).isEqualTo(
+                    URI.create(queryValue(login.start().authorizationUri(), "redirect_uri")));
+            assertThat(login.redirectUri().getHost()).isEqualTo("localhost");
+            assertThat(login.redirectUri().getPath()).isEqualTo("/auth/callback");
+            assertThat(login.completion()).isNotNull();
+        }
+    }
+
+    @Test
     void codexDefaultsDescribeProductionChatGptLoginProfile() {
         OpenAiSubscriptionLoginClientOptions options = OpenAiSubscriptionLoginClientOptions.codexDefaults();
 
