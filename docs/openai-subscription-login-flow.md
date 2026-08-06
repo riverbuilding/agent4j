@@ -175,8 +175,8 @@ LoginService loginService = new DefaultLoginService(
 ```
 
 For SDK users, `CodingAgentRuntimeServices.withOpenAi(...)` wires the standard
-OpenAI Responses provider, provider registry, persistent auth store, and
-optional subscription login client:
+OpenAI Responses provider, provider registry, persistent auth store, and the
+standard Codex subscription login client:
 
 ```java
 AiModelReference model = new AiModelReference("openai", "gpt-5");
@@ -184,15 +184,13 @@ AiModelReference model = new AiModelReference("openai", "gpt-5");
 CodingAgentRuntimeServices services =
         CodingAgentRuntimeServices.withOpenAi(
                 OpenAiCodingRuntimeOptions.builder(model)
-                        .subscriptionLogin(subscriptionLoginOptions)
                         .build());
 
 AgentSessionRuntime runtime = new CodingAgentSessionRuntime(services);
 ```
 
-If `subscriptionLogin(...)` is omitted, the runtime still supports API-key and
-access-token login through `LoginService`, but browser/device subscription login
-stays unsupported until a subscription login client is configured. OAuth
+`OpenAiCodingRuntimeOptions` uses `OpenAiSubscriptionLoginClientOptions.codexDefaults()`
+unless a caller supplies a custom `subscriptionLogin(...)` profile. OAuth
 endpoints remain explicit in `OpenAiSubscriptionLoginClientOptions`.
 
 Component responsibilities:
@@ -209,15 +207,18 @@ Component responsibilities:
   headers, and provider base URL.
 - `OpenAiSubscriptionLoginHttpTransport`: sends form-encoded OAuth requests.
 
-Browser login starts with:
+The normal SDK API is one call:
 
 ```java
-SubscriptionLoginStart start =
-        loginService.startBrowserSubscriptionLogin(
-                new BrowserSubscriptionLoginRequest("openai"));
+AuthStatus status = loginService.loginOpenAiSubscription();
 ```
 
-`OpenAiSubscriptionLoginClient.startBrowserLogin(...)` generates:
+`DefaultLoginService.loginOpenAiSubscription()` binds the registered localhost
+callback URI, starts `OpenAiSubscriptionLoginClient`, opens the system browser,
+waits for the callback, persists the completed credential, closes the callback
+server, and returns the resulting `AuthStatus`.
+
+Internally, `OpenAiSubscriptionLoginClient.startBrowserLogin(...)` generates:
 
 - local `flowId`
 - OAuth `state`
@@ -227,12 +228,6 @@ SubscriptionLoginStart start =
 
 It stores a local `BrowserFlow` keyed by `flowId`, then returns a
 `SubscriptionLoginStart` containing `authorizationUri`.
-
-The caller opens:
-
-```java
-start.authorizationUri()
-```
 
 After browser sign-in, the callback returns `code` and `state`. The callback
 completion API is:
@@ -266,7 +261,8 @@ try (BrowserSubscriptionLoginCallbackServer callbackServer =
                     new BrowserSubscriptionLoginRequest(
                             "openai",
                             Optional.empty(),
-                            Map.of("redirectUri", callbackServer.redirectUri().toString())));
+                            Map.of(),
+                            Optional.of(callbackServer.redirectUri())));
 
     // Open start.authorizationUri() in a browser.
     SubscriptionLoginPollResult result = callbackServer.completion().join();

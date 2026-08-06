@@ -47,7 +47,8 @@ public record OpenAiCodingRuntimeOptions(
         private final AiModelReference defaultModel;
         private List<AiModel> models;
         private AuthCredentialStore credentialStore;
-        private OpenAiSubscriptionLoginClientOptions subscriptionLogin;
+        private OpenAiSubscriptionLoginClientOptions subscriptionLogin =
+                OpenAiSubscriptionLoginClientOptions.codexDefaults();
         private OpenAiSubscriptionLoginHttpTransport subscriptionLoginTransport;
         private OpenAiResponsesProviderOptions responsesProvider;
         private OpenAiTransport responsesTransport;

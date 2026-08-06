@@ -203,11 +203,11 @@ class AgentSessionRuntimeInterfaceTest {
     @Test
     void openAiRuntimeConvenienceBuildsProviderRegistryAndPersistentLoginService() {
         AiModelReference model = new AiModelReference("openai", "gpt-5");
+        OpenAiCodingRuntimeOptions options = OpenAiCodingRuntimeOptions.builder(model)
+                .credentialStore(new InMemoryAuthCredentialStore())
+                .build();
 
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
-                OpenAiCodingRuntimeOptions.builder(model)
-                        .credentialStore(new InMemoryAuthCredentialStore())
-                        .build());
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(options);
 
         assertThat(services.optionalModelClient()).isEmpty();
         assertThat(services.optionalProviderRegistry()).isPresent();
@@ -215,6 +215,7 @@ class AgentSessionRuntimeInterfaceTest {
                 .isEqualTo(model);
         assertThat(services.loginService().loginApiKey(new ApiKeyLoginRequest("openai", "sk-test")).auth().apiKey())
                 .contains("sk-test");
+        assertThat(options.subscriptionLogin()).contains(OpenAiSubscriptionLoginClientOptions.codexDefaults());
     }
 
     @Test

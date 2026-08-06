@@ -5,7 +5,7 @@ import java.net.URI;
 
 /** Opens an OAuth authorization URI in a user-agent. */
 @FunctionalInterface
-public interface BrowserLauncher {
+interface BrowserLauncher {
     void open(URI uri) throws IOException;
 
     static BrowserLauncher system() {

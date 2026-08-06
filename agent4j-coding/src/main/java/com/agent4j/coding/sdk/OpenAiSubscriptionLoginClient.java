@@ -40,10 +40,8 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
     public SubscriptionLoginStart startBrowserLogin(BrowserSubscriptionLoginRequest request, Instant now) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(now, "now");
-        URI redirectUri = request.metadata().containsKey("redirectUri")
-                ? URI.create(request.metadata().get("redirectUri"))
-                : options.redirectUri().orElseThrow(() ->
-                        new IllegalStateException("redirectUri is required for browser subscription login"));
+        URI redirectUri = request.redirectUri().or(() -> options.redirectUri()).orElseThrow(() ->
+                new IllegalStateException("redirectUri is required for browser subscription login"));
         String flowId = token(24);
         String verifier = token(48);
         String state = token(24);

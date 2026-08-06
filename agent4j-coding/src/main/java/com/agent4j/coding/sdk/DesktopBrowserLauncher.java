@@ -6,7 +6,7 @@ import java.net.URI;
 import java.util.Objects;
 
 /** Uses the host operating system's default browser. */
-public final class DesktopBrowserLauncher implements BrowserLauncher {
+final class DesktopBrowserLauncher implements BrowserLauncher {
     @Override
     public void open(URI uri) throws IOException {
         Objects.requireNonNull(uri, "uri");

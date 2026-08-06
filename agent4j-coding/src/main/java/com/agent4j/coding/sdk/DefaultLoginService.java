@@ -5,18 +5,21 @@ import com.agent4j.ai.AiResolvedAuth;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 public final class DefaultLoginService implements LoginService {
+    private static final String OPENAI_PROVIDER_ID = "openai";
     private static final Optional<String> SOURCE = Optional.of("sdk-login");
 
     private final AuthCredentialStore credentialStore;
     private final Clock clock;
     private final SubscriptionLoginClient subscriptionLoginClient;
+    private final BrowserLauncher browserLauncher;
 
     public DefaultLoginService(AuthCredentialStore credentialStore, Clock clock) {
-        this(credentialStore, clock, SubscriptionLoginClient.unsupported());
+        this(credentialStore, clock, SubscriptionLoginClient.unsupported(), BrowserLauncher.system());
     }
 
     public DefaultLoginService(
@@ -24,9 +27,19 @@ public final class DefaultLoginService implements LoginService {
             Clock clock,
             SubscriptionLoginClient subscriptionLoginClient
     ) {
+        this(credentialStore, clock, subscriptionLoginClient, BrowserLauncher.system());
+    }
+
+    DefaultLoginService(
+            AuthCredentialStore credentialStore,
+            Clock clock,
+            SubscriptionLoginClient subscriptionLoginClient,
+            BrowserLauncher browserLauncher
+    ) {
         this.credentialStore = Objects.requireNonNull(credentialStore, "credentialStore");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.subscriptionLoginClient = Objects.requireNonNull(subscriptionLoginClient, "subscriptionLoginClient");
+        this.browserLauncher = Objects.requireNonNull(browserLauncher, "browserLauncher");
     }
 
     @Override
@@ -62,6 +75,21 @@ public final class DefaultLoginService implements LoginService {
     public SubscriptionLoginStart startBrowserSubscriptionLogin(BrowserSubscriptionLoginRequest request) {
         Objects.requireNonNull(request, "request");
         return subscriptionLoginClient.startBrowserLogin(request, now());
+    }
+
+    @Override
+    public AuthStatus loginOpenAiSubscription() throws java.io.IOException {
+        try (BrowserSubscriptionLoginCallbackServer callbackServer =
+                     BrowserSubscriptionLoginCallbackServer.startDefaultBrowserCallback(this)) {
+            SubscriptionLoginStart start = startBrowserSubscriptionLogin(new BrowserSubscriptionLoginRequest(
+                    OPENAI_PROVIDER_ID, Optional.empty(), Map.of(), Optional.of(callbackServer.redirectUri())));
+            browserLauncher.open(start.authorizationUri());
+            SubscriptionLoginPollResult result = callbackServer.completion().join();
+            if (result.status() != SubscriptionLoginStatus.COMPLETED) {
+                throw new IllegalStateException(result.error().orElse("OpenAI subscription login failed"));
+            }
+            return status(OPENAI_PROVIDER_ID);
+        }
     }
 
     @Override

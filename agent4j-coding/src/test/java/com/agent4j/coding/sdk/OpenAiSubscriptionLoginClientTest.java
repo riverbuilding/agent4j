@@ -70,30 +70,47 @@ class OpenAiSubscriptionLoginClientTest {
     }
 
     @Test
-    void browserLoginFlowStartsCallbackServerAndUsesItsRedirectUri() throws Exception {
-        FakeLoginTransport transport = new FakeLoginTransport();
+    void loginOpenAiSubscriptionLaunchesBrowserCompletesCallbackAndReturnsPersistedStatus() throws Exception {
+        FakeLoginTransport transport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("access_token", "browser-token")
+                        .put("expires_in", 1800)
+                        .put("plan", "plus"));
+        List<URI> opened = new ArrayList<>();
+        BrowserLauncher browserLauncher = uri -> {
+            opened.add(uri);
+            URI callback = URI.create(queryValue(uri, "redirect_uri")
+                    + "?code=browser-code&state=" + queryValue(uri, "state"));
+            try {
+                HttpClient.newHttpClient().send(
+                        HttpRequest.newBuilder(callback).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("callback request interrupted", e);
+            }
+        };
         LoginService service = new DefaultLoginService(
                 new InMemoryAuthCredentialStore(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                new OpenAiSubscriptionLoginClient(options(), transport));
-        List<URI> opened = new ArrayList<>();
+                new OpenAiSubscriptionLoginClient(options(), transport),
+                browserLauncher);
 
-        BrowserSubscriptionLogin login;
+        BrowserSubscriptionLoginCallbackServer probe;
         try {
-            login = service.startBrowserSubscriptionLogin(
-                    new BrowserSubscriptionLoginRequest("openai"), opened::add);
+            probe = BrowserSubscriptionLoginCallbackServer.startDefaultBrowserCallback(service);
         } catch (IOException e) {
             Assumptions.assumeTrue(false, "local callback socket binding is not available: " + e.getMessage());
             return;
         }
-        try (login) {
-            assertThat(opened).containsExactly(login.start().authorizationUri());
-            assertThat(login.redirectUri()).isEqualTo(
-                    URI.create(queryValue(login.start().authorizationUri(), "redirect_uri")));
-            assertThat(login.redirectUri().getHost()).isEqualTo("localhost");
-            assertThat(login.redirectUri().getPath()).isEqualTo("/auth/callback");
-            assertThat(login.completion()).isNotNull();
-        }
+        probe.close();
+        AuthStatus status = service.loginOpenAiSubscription();
+
+        assertThat(opened).hasSize(1);
+        assertThat(status.providerId()).isEqualTo("openai");
+        assertThat(status.authenticated()).isTrue();
+        assertThat(status.mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
+        assertThat(service.resolveAuth("openai").accessToken()).contains("browser-token");
     }
 
     @Test
@@ -452,7 +469,8 @@ class OpenAiSubscriptionLoginClientTest {
             SubscriptionLoginStart start = service.startBrowserSubscriptionLogin(new BrowserSubscriptionLoginRequest(
                     "openai",
                     Optional.empty(),
-                    Map.of("redirectUri", callbackServer.redirectUri().toString())));
+                    Map.of(),
+                    Optional.of(callbackServer.redirectUri())));
             String state = queryValue(start.authorizationUri(), "state");
             URI callbackUri = URI.create(callbackServer.redirectUri() + "?code=browser-code&state=" + state);
 

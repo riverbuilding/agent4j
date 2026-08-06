@@ -12,12 +12,7 @@ public interface LoginService {
 
     SubscriptionLoginStart startBrowserSubscriptionLogin(BrowserSubscriptionLoginRequest request);
 
-    default BrowserSubscriptionLogin startBrowserSubscriptionLogin(
-            BrowserSubscriptionLoginRequest request,
-            BrowserLauncher launcher
-    ) throws IOException {
-        return BrowserSubscriptionLogin.start(this, request, launcher);
-    }
+    AuthStatus loginOpenAiSubscription() throws IOException;
 
     SubscriptionLoginStart startDeviceCodeSubscriptionLogin(DeviceCodeSubscriptionLoginRequest request);
 

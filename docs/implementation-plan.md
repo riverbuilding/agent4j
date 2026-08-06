@@ -672,10 +672,10 @@ Tasks:
     `OpenAiSubscriptionLoginClientOptions.codexDefaults()`, which defines the
     current Codex client ID, auth/token/device endpoints, localhost callback,
     connector scopes, ChatGPT Codex API base URL, and authorization
-    parameters. Browser launching is done with the injectable `BrowserLauncher`,
-    desktop implementation, loopback callback orchestration, and an
-    auto-closeable `BrowserSubscriptionLogin` flow using the registered
-    localhost callback port. Live refresh validation and
+    parameters. `OpenAiCodingRuntimeOptions` enables that profile by default.
+    `LoginService.loginOpenAiSubscription()` owns browser launching, loopback
+    callback orchestration on the registered localhost port, credential
+    persistence, cleanup, and the resulting `AuthStatus`. Live refresh validation and
     the exact production device-code protocol remain later auth work.
   - SDK convenience wiring for standard OpenAI runtime setup. Done with
     `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
