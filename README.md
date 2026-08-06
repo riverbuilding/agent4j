@@ -20,3 +20,8 @@ See [implementation plan](docs/implementation-plan.md).
 ## Tool Results
 
 See [tool result contract](docs/tool-result-contract.md).
+
+## OpenAI SDK
+
+See the [OpenAI SDK guide](docs/openai-sdk-guide.md) for runtime setup,
+subscription login, credential lifecycle, and session usage.

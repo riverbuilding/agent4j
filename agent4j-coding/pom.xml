@@ -52,6 +52,40 @@
 
     <profiles>
         <profile>
+            <id>run-openai-sdk-example</id>
+            <activation>
+                <property>
+                    <name>agent4j.runOpenAiExample</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <agent4j.openAiExample.args>help</agent4j.openAiExample.args>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.6.3</version>
+                        <executions>
+                            <execution>
+                                <id>run-openai-sdk-example</id>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>java</goal>
+                                </goals>
+                                <configuration>
+                                    <mainClass>com.agent4j.coding.sdk.example.OpenAiSubscriptionSdkExample</mainClass>
+                                    <commandlineArgs>${agent4j.openAiExample.args}</commandlineArgs>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
             <id>live-openai</id>
             <activation>
                 <property>

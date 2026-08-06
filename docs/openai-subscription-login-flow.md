@@ -346,12 +346,8 @@ Later, `AgentSession.prompt(...)` uses stored auth through:
 
 ## Current Design Gaps
 
-The current implementation deliberately keeps OAuth endpoints configurable
-because the public Codex docs describe the login flow but do not publish enough
-endpoint-level token contract to hard-code OpenAI defaults safely.
-
-Known gaps before the browser-login UX is complete:
-
-- Opening the system browser is not implemented yet.
-- Exact OpenAI endpoint defaults are not pinned yet.
-- Live integration tests are not implemented yet.
+The browser OAuth path, production profile, lifecycle hardening, token
+validation, and opt-in live test are implemented. The remaining known gap is
+the exact production OpenAI/Codex device-code protocol. The generic device-code
+API is retained for configurable OpenAI-compatible profiles, but should not be
+treated as the production Codex subscription path yet.

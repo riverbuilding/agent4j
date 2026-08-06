@@ -689,6 +689,9 @@ Tasks:
     private credential file and enabled model ID. It covers interactive browser
     login, persisted/reloaded credentials, refresh, resolved provider auth, and
     a real provider-backed prompt; it is excluded from normal CI discovery.
+    SDK setup/login/device-code/status/logout/refresh/session usage is documented
+    in `docs/openai-sdk-guide.md`, with a runnable
+    `OpenAiSubscriptionSdkExample` that avoids printing credential secrets.
   - SDK convenience wiring for standard OpenAI runtime setup. Done with
     `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
     which assemble `OpenAiResponsesProvider`, `AiProviderRegistry`,
