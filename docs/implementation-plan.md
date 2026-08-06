@@ -723,7 +723,8 @@ Tasks:
     callback-server shutdown,
     device-code pending/slow-down/expired/failure responses, refresh-token grant
     success/failure, persistent refresh-token roundtrip, and SDK convenience
-    validation. Live OAuth tests remain later auth work.
+    validation. The opt-in `OpenAiSubscriptionLiveIT` is implemented; its
+    successful production execution remains the Phase 9 closure gate.
 - Integrate resolved auth into provider-backed runtime creation. Done:
   `CodingAgentRuntimeServices` can carry an `AiProviderRegistry`,
   `CodingAgentSessionRuntime.prompt(...)` selects either the configured direct
@@ -734,8 +735,8 @@ Tasks:
   client/registry failure path. Persistent credential storage is done; real
   OpenAI OAuth mechanics are implemented behind configurable endpoints; browser
   callback hosting, browser launching, refresh/status, and SDK convenience
-  wiring are implemented. Live OAuth tests and the exact production device-code
-  protocol remain later auth slices.
+  wiring are implemented. The opt-in live OAuth test is implemented; exact
+  production device-code protocol parity remains later auth work.
 - Add extension binding placeholders.
 - Add API docs and examples.
 - Re-check exact API names and lifecycle details against PI
@@ -758,8 +759,21 @@ Exit criteria:
   binding is available. Token refresh/status is covered with fake-transport
   tests, SDK convenience wiring is covered with fake-transport tests, and
   auth edge cases are covered with deterministic failure-path tests. Browser
-  launching and endpoint defaults are implemented; live tests and the exact
-  production device-code protocol remain later auth work.
+  launching and endpoint defaults are implemented; exact production device-code
+  protocol parity remains later auth work.
+- Before Phase 9 is marked closed, verify the configured production OAuth
+  endpoints against the current OpenAI/Codex flow and run
+  `OpenAiSubscriptionLiveIT` successfully with a real ChatGPT subscription.
+  Neither has been performed in this repository environment yet; deterministic
+  tests and the opt-in live-test harness are not equivalent evidence.
+
+### Phase 9 Closeout Status
+
+Implementation slices 1 through 7 are complete. Phase 9 remains
+**verification-pending** until both production endpoint verification and a
+successful live browser-login, refresh, resolved-auth, and provider-backed
+prompt run are recorded. Do not mark this phase or the subscription-login
+parity gap closed based solely on fake-transport coverage.
 
 ## Phase 10: CLI Modes
 
