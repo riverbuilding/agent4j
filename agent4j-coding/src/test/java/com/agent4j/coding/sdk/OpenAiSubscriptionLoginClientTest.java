@@ -196,6 +196,45 @@ class OpenAiSubscriptionLoginClientTest {
     }
 
     @Test
+    void tokenResponseRejectsBlankAccessTokenAndRemovesBrowserFlow() {
+        FakeLoginTransport transport = new FakeLoginTransport()
+                .enqueue(object().put("access_token", " "));
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), transport);
+        SubscriptionLoginStart start = client.startBrowserLogin(new BrowserSubscriptionLoginRequest("openai"), NOW);
+        String state = queryValue(start.authorizationUri(), "state");
+
+        assertThatThrownBy(() -> client.completeBrowserLoginCallback("browser-code", state, NOW.plusSeconds(1)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("access_token");
+        assertThat(client.completeBrowserLoginCallback("browser-code", state, NOW.plusSeconds(2)).status())
+                .isEqualTo(SubscriptionLoginStatus.FAILED);
+    }
+
+    @Test
+    void tokenResponseRejectsInvalidExpiryAndTokenType() {
+        FakeLoginTransport expiredTransport = new FakeLoginTransport()
+                .enqueue(object().put("access_token", "token").put("expires_in", 0));
+        OpenAiSubscriptionLoginClient expiredClient = new OpenAiSubscriptionLoginClient(options(), expiredTransport);
+        SubscriptionLoginStart expiredStart = expiredClient.startBrowserLogin(new BrowserSubscriptionLoginRequest("openai"), NOW);
+
+        assertThatThrownBy(() -> expiredClient.completeBrowserLoginCallback(
+                "browser-code", queryValue(expiredStart.authorizationUri(), "state"), NOW.plusSeconds(1)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("expires_in");
+
+        FakeLoginTransport tokenTypeTransport = new FakeLoginTransport()
+                .enqueue(object().put("access_token", "token").put("token_type", "MAC"));
+        OpenAiSubscriptionLoginClient tokenTypeClient = new OpenAiSubscriptionLoginClient(options(), tokenTypeTransport);
+        SubscriptionLoginStart tokenTypeStart = tokenTypeClient.startBrowserLogin(
+                new BrowserSubscriptionLoginRequest("openai"), NOW);
+
+        assertThatThrownBy(() -> tokenTypeClient.completeBrowserLoginCallback(
+                "browser-code", queryValue(tokenTypeStart.authorizationUri(), "state"), NOW.plusSeconds(1)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("token_type");
+    }
+
+    @Test
     void browserLoginErrorAndCancellationRemoveTemporaryFlowState() {
         OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), new FakeLoginTransport());
         SubscriptionLoginStart errorStart = client.startBrowserLogin(new BrowserSubscriptionLoginRequest("openai"), NOW);
@@ -437,6 +476,29 @@ class OpenAiSubscriptionLoginClientTest {
 
         assertThat(client.refreshLogin(expired, NOW)).isEmpty();
         assertThat(transport.requests().getFirst().form()).containsEntry("grant_type", "refresh_token");
+    }
+
+    @Test
+    void refreshLoginRejectsBlankRotatedRefreshToken() {
+        FakeLoginTransport transport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("access_token", "refreshed-token")
+                        .put("refresh_token", " "));
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), transport);
+        AuthSession expired = new AuthSession(
+                "openai",
+                AiAuthMode.CHATGPT_SUBSCRIPTION,
+                AiResolvedAuth.chatGptSubscription(
+                        "expired-token",
+                        Optional.empty(),
+                        Optional.of("sdk-login"),
+                        Optional.of(NOW.minusSeconds(1)),
+                        Map.of("refreshToken", "previous-refresh-token")),
+                NOW.minusSeconds(3600));
+
+        assertThatThrownBy(() -> client.refreshLogin(expired, NOW))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("refresh_token");
     }
 
     @Test

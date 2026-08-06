@@ -145,9 +145,11 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
                 }
             };
         }
-        SubscriptionLoginCompletion completion = completion(flowId, device, body, now);
-        removeFlow(flowId, flow);
-        return SubscriptionLoginPollResult.completed(completion);
+        try {
+            return SubscriptionLoginPollResult.completed(completion(flowId, device, body, now));
+        } finally {
+            removeFlow(flowId, flow);
+        }
     }
 
     @Override
@@ -221,9 +223,11 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
             removeFlow(flowId, flow);
             return SubscriptionLoginPollResult.failed(text(body, "error_description").orElse(error.orElseThrow()));
         }
-        SubscriptionLoginCompletion completion = completion(flowId, browser, body, now);
-        removeFlow(flowId, flow);
-        return SubscriptionLoginPollResult.completed(completion);
+        try {
+            return SubscriptionLoginPollResult.completed(completion(flowId, browser, body, now));
+        } finally {
+            removeFlow(flowId, flow);
+        }
     }
 
     @Override
@@ -277,15 +281,19 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
     }
 
     private SubscriptionLoginCompletion completion(String flowId, Flow flow, JsonNode body, Instant now) {
-        String accessToken = requiredText(body, "access_token");
-        Optional<String> baseUrl = text(body, "base_url").or(flow::baseUrl);
-        Optional<Instant> expiresAt = longValue(body, "expires_in")
+        String accessToken = requiredNonBlankText(body, "access_token");
+        Optional<String> baseUrl = optionalNonBlankText(body, "base_url").or(flow::baseUrl);
+        Optional<Long> expiresIn = positiveLongValue(body, "expires_in");
+        Optional<Instant> absoluteExpiresAt = expiryInstant(body, now);
+        Optional<Instant> expiresAt = expiresIn
                 .map(now::plusSeconds)
-                .or(() -> text(body, "expires_at").map(Instant::parse));
+                .or(() -> absoluteExpiresAt);
         Map<String, String> metadata = new LinkedHashMap<>(flow.metadata());
-        text(body, "refresh_token").ifPresent(value -> metadata.put("refreshToken", value));
-        text(body, "token_type").ifPresent(value -> metadata.put("tokenType", value));
-        text(body, "scope").ifPresent(value -> metadata.put("scope", value));
+        optionalNonBlankText(body, "refresh_token").ifPresent(value -> metadata.put("refreshToken", value));
+        Optional<String> tokenType = optionalNonBlankText(body, "token_type");
+        tokenType.ifPresent(this::requireBearerTokenType);
+        tokenType.ifPresent(value -> metadata.put("tokenType", value));
+        optionalNonBlankText(body, "scope").ifPresent(value -> metadata.put("scope", value));
         text(body, "plan").ifPresent(value -> metadata.put("plan", value));
         text(body, "plan_type").ifPresent(value -> metadata.put("plan", value));
         text(body, "account_id").ifPresent(value -> metadata.put("accountId", value));
@@ -315,6 +323,22 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
                 .orElseThrow(() -> new IllegalStateException("OpenAI subscription login response is missing " + field));
     }
 
+    private static String requiredNonBlankText(JsonNode body, String field) {
+        String value = requiredText(body, field);
+        if (value.isBlank()) {
+            throw new IllegalStateException("OpenAI subscription login response field must not be blank: " + field);
+        }
+        return value;
+    }
+
+    private static Optional<String> optionalNonBlankText(JsonNode body, String field) {
+        Optional<String> value = text(body, field);
+        if (value.isPresent() && value.orElseThrow().isBlank()) {
+            throw new IllegalStateException("OpenAI subscription login response field must not be blank: " + field);
+        }
+        return value;
+    }
+
     private static Optional<String> text(JsonNode body, String field) {
         JsonNode value = body.get(field);
         if (value == null || value.isNull()) {
@@ -335,6 +359,38 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
             throw new IllegalStateException("OpenAI subscription login response field must be numeric: " + field);
         }
         return Optional.of(value.asLong());
+    }
+
+    private static Optional<Long> positiveLongValue(JsonNode body, String field) {
+        JsonNode rawValue = body.get(field);
+        if (rawValue != null && !rawValue.isNull() && !rawValue.isIntegralNumber()) {
+            throw new IllegalStateException("OpenAI subscription login response field must be an integer: " + field);
+        }
+        Optional<Long> value = longValue(body, field);
+        if (value.isPresent() && value.orElseThrow() <= 0) {
+            throw new IllegalStateException("OpenAI subscription login response field must be positive: " + field);
+        }
+        return value;
+    }
+
+    private static Optional<Instant> expiryInstant(JsonNode body, Instant now) {
+        return optionalNonBlankText(body, "expires_at").map(value -> {
+            try {
+                Instant expiresAt = Instant.parse(value);
+                if (!expiresAt.isAfter(now)) {
+                    throw new IllegalStateException("OpenAI subscription login response expires_at must be in the future");
+                }
+                return expiresAt;
+            } catch (java.time.format.DateTimeParseException e) {
+                throw new IllegalStateException("OpenAI subscription login response expires_at is invalid", e);
+            }
+        });
+    }
+
+    private void requireBearerTokenType(String tokenType) {
+        if (!"bearer".equalsIgnoreCase(tokenType)) {
+            throw new IllegalStateException("OpenAI subscription login response token_type must be Bearer");
+        }
     }
 
     private static String codeChallenge(String verifier) {

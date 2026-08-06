@@ -225,6 +225,14 @@ every case. An OAuth `error` callback removes the matching flow by `state`.
 The callback server returns `409` for duplicate callbacks and completes a
 pending wait with a failed result when it is shut down.
 
+Token responses are validated before credentials are persisted. `access_token`
+must be nonblank; a present `refresh_token` must be nonblank; `token_type`, when
+present, must be `Bearer`; and `expires_in`/`expires_at`, when present, must be
+valid future expiry values. Refresh responses retain the existing refresh token
+when no replacement is supplied and replace it only with a valid rotated token.
+Malformed browser or device token payloads are rejected and remove their
+temporary flow state.
+
 Internally, `OpenAiSubscriptionLoginClient.startBrowserLogin(...)` generates:
 
 - local `flowId`

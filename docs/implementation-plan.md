@@ -680,6 +680,10 @@ Tasks:
     duplicate callbacks, and server shutdown; all one-call exit paths remove
     temporary flow state and close the callback server. Live refresh validation and
     the exact production device-code protocol remain later auth work.
+    Production token-response validation is done: access/refresh tokens must be
+    nonblank, present token types must be bearer, expiry values must be valid,
+    rotated refresh tokens replace prior values, and malformed browser/device
+    payloads are rejected after temporary-flow cleanup.
   - SDK convenience wiring for standard OpenAI runtime setup. Done with
     `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
     which assemble `OpenAiResponsesProvider`, `AiProviderRegistry`,
