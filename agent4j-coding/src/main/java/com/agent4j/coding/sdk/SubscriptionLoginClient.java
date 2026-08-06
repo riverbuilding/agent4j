@@ -7,6 +7,14 @@ public interface SubscriptionLoginClient {
 
     SubscriptionLoginStart startDeviceCodeLogin(DeviceCodeSubscriptionLoginRequest request, Instant now);
 
+    default SubscriptionLoginPollResult pollLogin(String flowId, Instant now) {
+        throw new UnsupportedOperationException("subscription login polling is not configured");
+    }
+
+    default SubscriptionLoginPollResult completeBrowserLoginCallback(String code, String state, Instant now) {
+        throw new UnsupportedOperationException("subscription browser callback login is not configured");
+    }
+
     static SubscriptionLoginClient unsupported() {
         return new SubscriptionLoginClient() {
             @Override

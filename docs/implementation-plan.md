@@ -657,8 +657,15 @@ Tasks:
     a first-class runtime capability rather than a CLI-only concern. API shape
     is done with browser/device-code start requests, `SubscriptionLoginStart`,
     `SubscriptionLoginCompletion`, `SubscriptionLoginClient`, and completion
-    into `AiResolvedAuth.chatGptSubscription(...)`. Real OAuth transport and
-    browser/device-code polling remain later auth implementation work.
+    into `AiResolvedAuth.chatGptSubscription(...)`. OpenAI subscription login
+    client mechanics are done with configurable OAuth endpoints, PKCE browser
+    authorization-code exchange, device-code start, token polling, fake
+    transport tests, and `DefaultLoginService.pollSubscriptionLogin(...)`
+    persistence of completed credentials. Browser callback flow is done with
+    `state -> flowId` mapping, service-level callback completion, completed
+    credential persistence, and `BrowserSubscriptionLoginCallbackServer` for
+    local callback hosting. Exact OpenAI endpoint defaults, browser launching,
+    and token refresh remain later auth work.
   - API-key login flow for OpenAI/Anthropic-compatible providers as the
     usage-based alternative to subscription login. Done in `DefaultLoginService`
     with resolved `AiResolvedAuth.apiKey(...)` storage.
@@ -676,8 +683,9 @@ Tasks:
     subscription plan metadata will arrive with OAuth/subscription login.
   - tests with fake OAuth server/transport and in-memory credential store; fake
     provider login is test infrastructure only, not the product target. Done for
-    the current API shape with a deterministic fake `SubscriptionLoginClient`;
-    real OAuth transport tests remain later auth work.
+    the current API shape with a deterministic fake `SubscriptionLoginClient`
+    plus OpenAI OAuth transport contract tests; live OAuth tests remain later
+    auth work.
 - Integrate resolved auth into provider-backed runtime creation. Done:
   `CodingAgentRuntimeServices` can carry an `AiProviderRegistry`,
   `CodingAgentSessionRuntime.prompt(...)` selects either the configured direct
@@ -686,7 +694,9 @@ Tasks:
   `AgentLoop` with request-scoped `AiResolvedAuth`. Tests pin API-key auth,
   ChatGPT subscription-token auth, prompt model override, and the missing
   client/registry failure path. Persistent credential storage is done; real
-  OAuth transport/polling remain later auth slices.
+  OpenAI OAuth mechanics are implemented behind configurable endpoints; browser
+  callback hosting is implemented. Exact endpoint defaults, browser launching,
+  refresh, and live tests remain later auth slices.
 - Add extension binding placeholders.
 - Add API docs and examples.
 - Re-check exact API names and lifecycle details against PI
@@ -704,7 +714,10 @@ Exit criteria:
   browser OAuth, device code, status, logout, persisted user credentials, and
   resolved auth for provider-backed runtime creation. The provider-backed
   runtime creation boundary and persisted user credential store are done with
-  deterministic tests; real OAuth transport/polling remains later auth work.
+  deterministic tests; OpenAI OAuth start/exchange/poll mechanics are covered by
+  fake-transport tests, and callback hosting is covered where local socket
+  binding is available. Browser launching, exact endpoint defaults, refresh, and
+  live tests remain later auth work.
 
 ## Phase 10: CLI Modes
 

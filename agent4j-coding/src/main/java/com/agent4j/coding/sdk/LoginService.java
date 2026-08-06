@@ -13,6 +13,10 @@ public interface LoginService {
 
     AuthSession completeSubscriptionLogin(SubscriptionLoginCompletion completion);
 
+    SubscriptionLoginPollResult pollSubscriptionLogin(String flowId);
+
+    SubscriptionLoginPollResult completeBrowserSubscriptionLoginCallback(String code, String state);
+
     AuthStatus status(String providerId);
 
     AiResolvedAuth resolveAuth(String providerId);

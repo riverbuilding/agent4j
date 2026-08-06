@@ -88,6 +88,23 @@ public final class DefaultLoginService implements LoginService {
     }
 
     @Override
+    public SubscriptionLoginPollResult pollSubscriptionLogin(String flowId) {
+        Objects.requireNonNull(flowId, "flowId");
+        SubscriptionLoginPollResult result = subscriptionLoginClient.pollLogin(flowId, now());
+        result.completion().ifPresent(this::completeSubscriptionLogin);
+        return result;
+    }
+
+    @Override
+    public SubscriptionLoginPollResult completeBrowserSubscriptionLoginCallback(String code, String state) {
+        Objects.requireNonNull(code, "code");
+        Objects.requireNonNull(state, "state");
+        SubscriptionLoginPollResult result = subscriptionLoginClient.completeBrowserLoginCallback(code, state, now());
+        result.completion().ifPresent(this::completeSubscriptionLogin);
+        return result;
+    }
+
+    @Override
     public AuthStatus status(String providerId) {
         Objects.requireNonNull(providerId, "providerId");
         return credentialStore.find(providerId)
