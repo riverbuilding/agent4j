@@ -684,6 +684,11 @@ Tasks:
     nonblank, present token types must be bearer, expiry values must be valid,
     rotated refresh tokens replace prior values, and malformed browser/device
     payloads are rejected after temporary-flow cleanup.
+    A separate `OpenAiSubscriptionLiveIT` is opt-in through
+    `-Dagent4j.liveOpenAi=true` plus explicit environment variables for a
+    private credential file and enabled model ID. It covers interactive browser
+    login, persisted/reloaded credentials, refresh, resolved provider auth, and
+    a real provider-backed prompt; it is excluded from normal CI discovery.
   - SDK convenience wiring for standard OpenAI runtime setup. Done with
     `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
     which assemble `OpenAiResponsesProvider`, `AiProviderRegistry`,

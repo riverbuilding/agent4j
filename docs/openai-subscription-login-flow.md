@@ -233,6 +233,29 @@ when no replacement is supplied and replace it only with a valid rotated token.
 Malformed browser or device token payloads are rejected and remove their
 temporary flow state.
 
+## Opt-In Live Test
+
+`OpenAiSubscriptionLiveIT` is intentionally excluded from normal Maven and CI
+test discovery. It opens a real browser, writes credentials only to the path
+you provide, refreshes the resulting subscription credential, resolves provider
+auth, and sends one real model request.
+
+Set these values in a private terminal session. Keep the credential file outside
+the repository and do not place tokens in Maven properties, source files, or CI
+secrets for this test.
+
+```text
+AGENT4J_LIVE_OPENAI=true
+AGENT4J_LIVE_OPENAI_AUTH_FILE=/absolute/private/path/auth.json
+AGENT4J_LIVE_OPENAI_MODEL=<enabled-model-id>
+```
+
+Run it explicitly:
+
+```bash
+mvn -pl agent4j-coding -am test -Dagent4j.liveOpenAi=true
+```
+
 Internally, `OpenAiSubscriptionLoginClient.startBrowserLogin(...)` generates:
 
 - local `flowId`
