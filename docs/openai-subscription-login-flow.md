@@ -58,6 +58,19 @@ The token endpoint then returns fields such as `access_token`, `expires_in`,
 `refresh_token`, `token_type`, `scope`, and plan/account metadata when
 available.
 
+When a refresh token is available, the client can later refresh an expired
+session without opening a browser:
+
+```text
+grant_type=refresh_token
+refresh_token=<stored-refresh-token>
+client_id=<client-id>
+```
+
+The token endpoint returns a new `access_token` and expiry. If it also returns a
+new `refresh_token`, the stored credential rotates to the new value. If it does
+not return one, the previous refresh token is retained in metadata.
+
 ## OAuth URI Roles
 
 The browser login implementation uses several different URI values. They are
@@ -252,6 +265,17 @@ SubscriptionLoginPollResult result =
 When polling returns `COMPLETED`, `DefaultLoginService` stores the resulting
 `AiResolvedAuth.chatGptSubscription(...)`.
 
+For token refresh, `DefaultLoginService` exposes:
+
+```java
+Optional<AuthSession> refreshed = loginService.refreshAuth("openai");
+```
+
+It also attempts refresh automatically when `status("openai")` or
+`resolveAuth("openai")` sees an expired ChatGPT subscription session with a
+stored refresh token. `AuthStatus.metadata()` exposes provider metadata such as
+`plan`, `accountId`, and `refreshToken` when available.
+
 Later, `AgentSession.prompt(...)` uses stored auth through:
 
 1. `CodingAgentSessionRuntime` resolves the provider/model.
@@ -273,5 +297,4 @@ Known gaps before the browser-login UX is complete:
 
 - Opening the system browser is not implemented yet.
 - Exact OpenAI endpoint defaults are not pinned yet.
-- Refresh-token behavior is not implemented yet.
 - Live integration tests are not implemented yet.

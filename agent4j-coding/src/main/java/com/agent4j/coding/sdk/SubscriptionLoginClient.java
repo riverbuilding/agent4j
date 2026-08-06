@@ -1,6 +1,7 @@
 package com.agent4j.coding.sdk;
 
 import java.time.Instant;
+import java.util.Optional;
 
 public interface SubscriptionLoginClient {
     SubscriptionLoginStart startBrowserLogin(BrowserSubscriptionLoginRequest request, Instant now);
@@ -13,6 +14,10 @@ public interface SubscriptionLoginClient {
 
     default SubscriptionLoginPollResult completeBrowserLoginCallback(String code, String state, Instant now) {
         throw new UnsupportedOperationException("subscription browser callback login is not configured");
+    }
+
+    default Optional<SubscriptionLoginCompletion> refreshLogin(AuthSession session, Instant now) {
+        throw new UnsupportedOperationException("subscription token refresh is not configured");
     }
 
     static SubscriptionLoginClient unsupported() {

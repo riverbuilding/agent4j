@@ -105,16 +105,25 @@ public final class DefaultLoginService implements LoginService {
     }
 
     @Override
+    public Optional<AuthSession> refreshAuth(String providerId) {
+        Objects.requireNonNull(providerId, "providerId");
+        return credentialStore.find(providerId)
+                .flatMap(this::refreshSession);
+    }
+
+    @Override
     public AuthStatus status(String providerId) {
         Objects.requireNonNull(providerId, "providerId");
         return credentialStore.find(providerId)
+                .map(this::refreshIfExpired)
                 .map(session -> new AuthStatus(
                         session.providerId(),
                         session.mode(),
                         true,
                         session.expired(now()),
                         session.expiresAt(),
-                        session.auth().source()))
+                        session.auth().source(),
+                        session.auth().metadata()))
                 .orElseGet(() -> AuthStatus.unauthenticated(providerId));
     }
 
@@ -122,6 +131,7 @@ public final class DefaultLoginService implements LoginService {
     public AiResolvedAuth resolveAuth(String providerId) {
         Objects.requireNonNull(providerId, "providerId");
         return credentialStore.find(providerId)
+                .map(this::refreshIfExpired)
                 .filter(session -> !session.expired(now()))
                 .map(AuthSession::auth)
                 .orElseGet(AiResolvedAuth::none);
@@ -135,5 +145,24 @@ public final class DefaultLoginService implements LoginService {
 
     private Instant now() {
         return Instant.now(clock);
+    }
+
+    private AuthSession refreshIfExpired(AuthSession session) {
+        if (!session.expired(now())) {
+            return session;
+        }
+        return refreshSession(session).orElse(session);
+    }
+
+    private Optional<AuthSession> refreshSession(AuthSession session) {
+        if (session.mode() != AiAuthMode.CHATGPT_SUBSCRIPTION) {
+            return Optional.empty();
+        }
+        try {
+            return subscriptionLoginClient.refreshLogin(session, now())
+                    .map(this::completeSubscriptionLogin);
+        } catch (UnsupportedOperationException ignored) {
+            return Optional.empty();
+        }
     }
 }

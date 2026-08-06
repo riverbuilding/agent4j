@@ -198,6 +198,33 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
         return SubscriptionLoginPollResult.completed(completion);
     }
 
+    @Override
+    public Optional<SubscriptionLoginCompletion> refreshLogin(AuthSession session, Instant now) {
+        Objects.requireNonNull(session, "session");
+        Objects.requireNonNull(now, "now");
+        Optional<String> refreshToken = Optional.ofNullable(session.auth().metadata().get("refreshToken"))
+                .filter(value -> !value.isBlank());
+        if (refreshToken.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<String, String> form = new LinkedHashMap<>();
+        form.put("grant_type", "refresh_token");
+        form.put("refresh_token", refreshToken.orElseThrow());
+        form.put("client_id", options.clientId());
+        putIfPresent(form, "scope", Optional.of(options.scope()).filter(value -> !value.isBlank()));
+        JsonNode body = postForm(options.tokenEndpoint(), form);
+        Optional<String> error = text(body, "error");
+        if (error.isPresent()) {
+            return Optional.empty();
+        }
+        RefreshFlow flow = new RefreshFlow(
+                session.providerId(),
+                session.auth().baseUrl(),
+                session.auth().metadata(),
+                session.expiresAt().orElse(now));
+        return Optional.of(completion("refresh-" + session.providerId(), flow, body, now));
+    }
+
     private void removeFlow(String flowId, Flow flow) {
         flows.remove(flowId);
         if (flow instanceof BrowserFlow browser) {
@@ -313,7 +340,7 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    private sealed interface Flow permits BrowserFlow, DeviceFlow {
+    private sealed interface Flow permits BrowserFlow, DeviceFlow, RefreshFlow {
         String providerId();
 
         Optional<String> baseUrl();
@@ -346,6 +373,17 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
             Instant expiresAt
     ) implements Flow {
         private DeviceFlow {
+            metadata = Map.copyOf(metadata);
+        }
+    }
+
+    private record RefreshFlow(
+            String providerId,
+            Optional<String> baseUrl,
+            Map<String, String> metadata,
+            Instant expiresAt
+    ) implements Flow {
+        private RefreshFlow {
             metadata = Map.copyOf(metadata);
         }
     }

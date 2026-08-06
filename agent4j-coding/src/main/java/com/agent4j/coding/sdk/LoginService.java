@@ -2,6 +2,8 @@ package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiResolvedAuth;
 
+import java.util.Optional;
+
 public interface LoginService {
     AuthSession loginApiKey(ApiKeyLoginRequest request);
 
@@ -16,6 +18,8 @@ public interface LoginService {
     SubscriptionLoginPollResult pollSubscriptionLogin(String flowId);
 
     SubscriptionLoginPollResult completeBrowserSubscriptionLoginCallback(String code, String state);
+
+    Optional<AuthSession> refreshAuth(String providerId);
 
     AuthStatus status(String providerId);
 

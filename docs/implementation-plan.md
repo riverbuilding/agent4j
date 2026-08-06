@@ -664,8 +664,12 @@ Tasks:
     persistence of completed credentials. Browser callback flow is done with
     `state -> flowId` mapping, service-level callback completion, completed
     credential persistence, and `BrowserSubscriptionLoginCallbackServer` for
-    local callback hosting. Exact OpenAI endpoint defaults, browser launching,
-    and token refresh remain later auth work.
+    local callback hosting. Token refresh/status is done with
+    `SubscriptionLoginClient.refreshLogin(...)`, OpenAI refresh-token grant
+    support, `LoginService.refreshAuth(...)`, auto-refresh on
+    `status(...)`/`resolveAuth(...)` for expired subscription sessions, and
+    auth status metadata exposure. Exact OpenAI endpoint defaults, browser
+    launching, and live refresh validation remain later auth work.
   - API-key login flow for OpenAI/Anthropic-compatible providers as the
     usage-based alternative to subscription login. Done in `DefaultLoginService`
     with resolved `AiResolvedAuth.apiKey(...)` storage.
@@ -695,8 +699,8 @@ Tasks:
   ChatGPT subscription-token auth, prompt model override, and the missing
   client/registry failure path. Persistent credential storage is done; real
   OpenAI OAuth mechanics are implemented behind configurable endpoints; browser
-  callback hosting is implemented. Exact endpoint defaults, browser launching,
-  refresh, and live tests remain later auth slices.
+  callback hosting and refresh/status are implemented. Exact endpoint defaults,
+  browser launching, and live tests remain later auth slices.
 - Add extension binding placeholders.
 - Add API docs and examples.
 - Re-check exact API names and lifecycle details against PI
@@ -716,8 +720,9 @@ Exit criteria:
   runtime creation boundary and persisted user credential store are done with
   deterministic tests; OpenAI OAuth start/exchange/poll mechanics are covered by
   fake-transport tests, and callback hosting is covered where local socket
-  binding is available. Browser launching, exact endpoint defaults, refresh, and
-  live tests remain later auth work.
+  binding is available. Token refresh/status is covered with fake-transport
+  tests. Browser launching, exact endpoint defaults, and live tests remain later
+  auth work.
 
 ## Phase 10: CLI Modes
 

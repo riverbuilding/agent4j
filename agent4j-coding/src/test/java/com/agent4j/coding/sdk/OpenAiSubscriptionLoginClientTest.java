@@ -1,6 +1,7 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiAuthMode;
+import com.agent4j.ai.AiResolvedAuth;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -156,6 +157,97 @@ class OpenAiSubscriptionLoginClientTest {
         assertThat(service.status("openai").mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
         assertThat(service.resolveAuth("openai").accessToken()).contains("device-token");
         assertThat(service.resolveAuth("openai").metadata()).containsEntry("plan", "plus");
+    }
+
+    @Test
+    void refreshLoginExchangesStoredRefreshTokenAndPreservesMetadata() {
+        FakeLoginTransport transport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("access_token", "refreshed-token")
+                        .put("expires_in", 3600)
+                        .put("token_type", "Bearer"));
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), transport);
+        AuthSession expired = new AuthSession(
+                "openai",
+                AiAuthMode.CHATGPT_SUBSCRIPTION,
+                AiResolvedAuth.chatGptSubscription(
+                        "expired-token",
+                        Optional.of("https://codex.openai.com/api"),
+                        Optional.of("sdk-login"),
+                        Optional.of(NOW.minusSeconds(1)),
+                        Map.of("refreshToken", "refresh-token", "plan", "plus")),
+                NOW.minusSeconds(3600));
+
+        Optional<SubscriptionLoginCompletion> refreshed = client.refreshLogin(expired, NOW);
+
+        assertThat(refreshed).isPresent();
+        assertThat(refreshed.orElseThrow().accessToken()).isEqualTo("refreshed-token");
+        assertThat(refreshed.orElseThrow().expiresAt()).contains(NOW.plusSeconds(3600));
+        assertThat(refreshed.orElseThrow().baseUrl()).contains("https://codex.openai.com/api");
+        assertThat(refreshed.orElseThrow().metadata()).containsEntry("refreshToken", "refresh-token");
+        assertThat(refreshed.orElseThrow().metadata()).containsEntry("plan", "plus");
+        assertThat(transport.requests()).hasSize(1);
+        assertThat(transport.requests().getFirst().form()).containsEntry("grant_type", "refresh_token");
+        assertThat(transport.requests().getFirst().form()).containsEntry("refresh_token", "refresh-token");
+    }
+
+    @Test
+    void defaultLoginServiceRefreshesExpiredSubscriptionBeforeResolvingAuthAndStatus() {
+        FakeLoginTransport transport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("access_token", "refreshed-token")
+                        .put("expires_in", 3600)
+                        .put("refresh_token", "rotated-refresh-token")
+                        .put("plan_type", "team"));
+        InMemoryAuthCredentialStore store = new InMemoryAuthCredentialStore();
+        store.save(new AuthSession(
+                "openai",
+                AiAuthMode.CHATGPT_SUBSCRIPTION,
+                AiResolvedAuth.chatGptSubscription(
+                        "expired-token",
+                        Optional.of("https://codex.openai.com/api"),
+                        Optional.of("sdk-login"),
+                        Optional.of(NOW.minusSeconds(1)),
+                        Map.of("refreshToken", "refresh-token", "plan", "plus")),
+                NOW.minusSeconds(3600)));
+        LoginService service = new DefaultLoginService(
+                store,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new OpenAiSubscriptionLoginClient(options(), transport));
+
+        AiResolvedAuth auth = service.resolveAuth("openai");
+        AuthStatus status = service.status("openai");
+
+        assertThat(auth.accessToken()).contains("refreshed-token");
+        assertThat(auth.expiresAt()).contains(NOW.plusSeconds(3600));
+        assertThat(auth.metadata()).containsEntry("refreshToken", "rotated-refresh-token");
+        assertThat(auth.metadata()).containsEntry("plan", "team");
+        assertThat(status.expired()).isFalse();
+        assertThat(status.metadata()).containsEntry("plan", "team");
+        assertThat(status.metadata()).containsEntry("refreshToken", "rotated-refresh-token");
+        assertThat(transport.requests()).hasSize(1);
+    }
+
+    @Test
+    void explicitRefreshAuthReturnsEmptyWhenRefreshTokenIsUnavailable() {
+        InMemoryAuthCredentialStore store = new InMemoryAuthCredentialStore();
+        store.save(new AuthSession(
+                "openai",
+                AiAuthMode.CHATGPT_SUBSCRIPTION,
+                AiResolvedAuth.chatGptSubscription(
+                        "expired-token",
+                        Optional.empty(),
+                        Optional.of("sdk-login"),
+                        Optional.of(NOW.minusSeconds(1)),
+                        Map.of("plan", "plus")),
+                NOW.minusSeconds(3600)));
+        LoginService service = new DefaultLoginService(
+                store,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new OpenAiSubscriptionLoginClient(options(), new FakeLoginTransport()));
+
+        assertThat(service.refreshAuth("openai")).isEmpty();
+        assertThat(service.resolveAuth("openai")).isEqualTo(AiResolvedAuth.none());
     }
 
     @Test
