@@ -18,7 +18,8 @@ public record OpenAiSubscriptionLoginClientOptions(
         boolean useHostedLoginSuccessPage,
         String appBrand,
         Duration defaultBrowserFlowTtl,
-        Map<String, String> headers
+        Map<String, String> headers,
+        Map<String, String> authorizationParameters
 ) {
     public OpenAiSubscriptionLoginClientOptions {
         Objects.requireNonNull(clientId, "clientId");
@@ -31,6 +32,7 @@ public record OpenAiSubscriptionLoginClientOptions(
         appBrand = appBrand == null || appBrand.isBlank() ? "chatgpt" : appBrand;
         defaultBrowserFlowTtl = defaultBrowserFlowTtl == null ? Duration.ofMinutes(10) : defaultBrowserFlowTtl;
         headers = headers == null ? Map.of() : Map.copyOf(headers);
+        authorizationParameters = authorizationParameters == null ? Map.of() : Map.copyOf(authorizationParameters);
         if (clientId.isBlank()) {
             throw new IllegalArgumentException("clientId must not be blank");
         }
@@ -41,6 +43,31 @@ public record OpenAiSubscriptionLoginClientOptions(
 
     public static Builder builder(String clientId, URI authorizationEndpoint, URI tokenEndpoint) {
         return new Builder(clientId, authorizationEndpoint, tokenEndpoint);
+    }
+
+    /** Defaults matching the current Codex ChatGPT subscription login profile. */
+    public static OpenAiSubscriptionLoginClientOptions codexDefaults() {
+        return builder(
+                        "app_EMoamEEZ73f0CkXaXp7hrann",
+                        URI.create("https://auth.openai.com/oauth/authorize"),
+                        URI.create("https://auth.openai.com/oauth/token"))
+                .deviceAuthorizationEndpoint(URI.create("https://auth.openai.com/api/accounts/deviceauth/usercode"))
+                .redirectUri(URI.create("http://localhost:1455/auth/callback"))
+                .scopes(List.of(
+                        "openid",
+                        "profile",
+                        "email",
+                        "offline_access",
+                        "api.connectors.read",
+                        "api.connectors.invoke"))
+                .baseUrl("https://chatgpt.com/backend-api/codex")
+                .useHostedLoginSuccessPage(false)
+                .appBrand("codex")
+                .authorizationParameters(Map.of(
+                        "id_token_add_organizations", "true",
+                        "codex_cli_simplified_flow", "true",
+                        "originator", "codex_cli_rs"))
+                .build();
     }
 
     public String scope() {
@@ -59,6 +86,7 @@ public record OpenAiSubscriptionLoginClientOptions(
         private String appBrand = "chatgpt";
         private Duration defaultBrowserFlowTtl = Duration.ofMinutes(10);
         private Map<String, String> headers = Map.of();
+        private Map<String, String> authorizationParameters = Map.of();
 
         private Builder(String clientId, URI authorizationEndpoint, URI tokenEndpoint) {
             this.clientId = Objects.requireNonNull(clientId, "clientId");
@@ -106,6 +134,12 @@ public record OpenAiSubscriptionLoginClientOptions(
             return this;
         }
 
+        public Builder authorizationParameters(Map<String, String> authorizationParameters) {
+            this.authorizationParameters = Map.copyOf(Objects.requireNonNull(
+                    authorizationParameters, "authorizationParameters"));
+            return this;
+        }
+
         public OpenAiSubscriptionLoginClientOptions build() {
             return new OpenAiSubscriptionLoginClientOptions(
                     clientId,
@@ -118,7 +152,8 @@ public record OpenAiSubscriptionLoginClientOptions(
                     useHostedLoginSuccessPage,
                     appBrand,
                     defaultBrowserFlowTtl,
-                    headers);
+                    headers,
+                    authorizationParameters);
         }
     }
 }

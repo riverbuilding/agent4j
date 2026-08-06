@@ -257,6 +257,18 @@ class AgentSessionRuntimeInterfaceTest {
                         URI.create("https://auth.example.test/token"));
     }
 
+    @Test
+    void openAiRuntimeOptionsRejectDefaultModelOutsideModelList() {
+        AiModelReference defaultModel = new AiModelReference("openai", "gpt-5");
+        AiModelReference otherModel = new AiModelReference("openai", "gpt-4.1");
+
+        assertThatThrownBy(() -> OpenAiCodingRuntimeOptions.builder(defaultModel)
+                .models(List.of(new com.agent4j.ai.AiModel(otherModel, "GPT 4.1")))
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("defaultModel");
+    }
+
     private static ObjectNode object() {
         return MAPPER.createObjectNode();
     }

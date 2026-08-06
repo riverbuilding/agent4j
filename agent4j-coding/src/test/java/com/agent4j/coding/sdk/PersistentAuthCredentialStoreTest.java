@@ -60,7 +60,7 @@ class PersistentAuthCredentialStoreTest {
                         Optional.of("https://codex.openai.com/api"),
                         Optional.of("sdk-login"),
                         Optional.of(expiresAt),
-                        Map.of("plan", "plus", "accountId", "acct-1")),
+                        Map.of("plan", "plus", "accountId", "acct-1", "refreshToken", "refresh-token")),
                 Instant.parse("2026-08-05T12:00:00Z"));
 
         store.save(session);
@@ -72,6 +72,7 @@ class PersistentAuthCredentialStoreTest {
         assertThat(found.auth().expiresAt()).contains(expiresAt);
         assertThat(found.auth().metadata()).containsEntry("plan", "plus");
         assertThat(found.auth().metadata()).containsEntry("accountId", "acct-1");
+        assertThat(found.auth().metadata()).containsEntry("refreshToken", "refresh-token");
     }
 
     @Test

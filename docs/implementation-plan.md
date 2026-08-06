@@ -668,8 +668,12 @@ Tasks:
     `SubscriptionLoginClient.refreshLogin(...)`, OpenAI refresh-token grant
     support, `LoginService.refreshAuth(...)`, auto-refresh on
     `status(...)`/`resolveAuth(...)` for expired subscription sessions, and
-    auth status metadata exposure. Exact OpenAI endpoint defaults, browser
-    launching, and live refresh validation remain later auth work.
+    auth status metadata exposure. Production OAuth configuration is done with
+    `OpenAiSubscriptionLoginClientOptions.codexDefaults()`, which defines the
+    current Codex client ID, auth/token/device endpoints, localhost callback,
+    connector scopes, ChatGPT Codex API base URL, and authorization
+    parameters. Browser launching and live refresh validation remain later
+    auth work.
   - SDK convenience wiring for standard OpenAI runtime setup. Done with
     `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
     which assemble `OpenAiResponsesProvider`, `AiProviderRegistry`,
@@ -695,8 +699,11 @@ Tasks:
   - tests with fake OAuth server/transport and in-memory credential store; fake
     provider login is test infrastructure only, not the product target. Done for
     the current API shape with a deterministic fake `SubscriptionLoginClient`
-    plus OpenAI OAuth transport contract tests; live OAuth tests remain later
-    auth work.
+    plus OpenAI OAuth transport contract tests. Test hardening is done for
+    callback completion through `LoginService`, expired browser state cleanup,
+    device-code pending/slow-down/expired/failure responses, refresh-token grant
+    success/failure, persistent refresh-token roundtrip, and SDK convenience
+    validation. Live OAuth tests remain later auth work.
 - Integrate resolved auth into provider-backed runtime creation. Done:
   `CodingAgentRuntimeServices` can carry an `AiProviderRegistry`,
   `CodingAgentSessionRuntime.prompt(...)` selects either the configured direct
@@ -729,9 +736,9 @@ Exit criteria:
   deterministic tests; OpenAI OAuth start/exchange/poll mechanics are covered by
   fake-transport tests, and callback hosting is covered where local socket
   binding is available. Token refresh/status is covered with fake-transport
-  tests, and SDK convenience wiring is covered with fake-transport tests.
-  Browser launching, exact endpoint defaults, and live tests remain later auth
-  work.
+  tests, SDK convenience wiring is covered with fake-transport tests, and
+  auth edge cases are covered with deterministic failure-path tests. Browser
+  launching, exact endpoint defaults, and live tests remain later auth work.
 
 ## Phase 10: CLI Modes
 

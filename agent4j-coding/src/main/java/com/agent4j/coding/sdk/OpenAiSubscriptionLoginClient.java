@@ -243,6 +243,7 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
         putIfPresent(query, "scope", Optional.of(options.scope()).filter(value -> !value.isBlank()));
         query.put("use_hosted_login_success_page", Boolean.toString(options.useHostedLoginSuccessPage()));
         query.put("app_brand", options.appBrand());
+        options.authorizationParameters().forEach(query::putIfAbsent);
         request.metadata().forEach((key, value) -> query.put("metadata_" + key, value));
         return URI.create(options.authorizationEndpoint() + "?" + encode(query));
     }

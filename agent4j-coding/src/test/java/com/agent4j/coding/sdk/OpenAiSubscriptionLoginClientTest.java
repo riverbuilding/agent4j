@@ -70,6 +70,39 @@ class OpenAiSubscriptionLoginClientTest {
     }
 
     @Test
+    void codexDefaultsDescribeProductionChatGptLoginProfile() {
+        OpenAiSubscriptionLoginClientOptions options = OpenAiSubscriptionLoginClientOptions.codexDefaults();
+
+        assertThat(options.clientId()).isEqualTo("app_EMoamEEZ73f0CkXaXp7hrann");
+        assertThat(options.authorizationEndpoint())
+                .isEqualTo(URI.create("https://auth.openai.com/oauth/authorize"));
+        assertThat(options.tokenEndpoint())
+                .isEqualTo(URI.create("https://auth.openai.com/oauth/token"));
+        assertThat(options.deviceAuthorizationEndpoint()).contains(
+                URI.create("https://auth.openai.com/api/accounts/deviceauth/usercode"));
+        assertThat(options.redirectUri()).contains(URI.create("http://localhost:1455/auth/callback"));
+        assertThat(options.baseUrl()).contains("https://chatgpt.com/backend-api/codex");
+        assertThat(options.scopes()).containsExactly(
+                "openid", "profile", "email", "offline_access",
+                "api.connectors.read", "api.connectors.invoke");
+    }
+
+    @Test
+    void codexDefaultsAddProductionAuthorizationParameters() {
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(
+                OpenAiSubscriptionLoginClientOptions.codexDefaults(),
+                new FakeLoginTransport());
+
+        SubscriptionLoginStart start = client.startBrowserLogin(
+                new BrowserSubscriptionLoginRequest("openai"), NOW);
+
+        assertThat(start.authorizationUri().getRawQuery())
+                .contains("id_token_add_organizations=true")
+                .contains("codex_cli_simplified_flow=true")
+                .contains("originator=codex_cli_rs");
+    }
+
+    @Test
     void browserLoginRejectsUnknownOrMismatchedState() {
         FakeLoginTransport transport = new FakeLoginTransport();
         OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), transport);
@@ -89,6 +122,28 @@ class OpenAiSubscriptionLoginClientTest {
         assertThat(unknown.error()).contains("unknown browser subscription login state");
         assertThat(mismatched.status()).isEqualTo(SubscriptionLoginStatus.FAILED);
         assertThat(mismatched.error().orElseThrow()).contains("state mismatch");
+        assertThat(transport.requests()).isEmpty();
+    }
+
+    @Test
+    void expiredBrowserLoginRemovesStateMapping() {
+        FakeLoginTransport transport = new FakeLoginTransport();
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), transport);
+        SubscriptionLoginStart start = client.startBrowserLogin(new BrowserSubscriptionLoginRequest("openai"), NOW);
+        String state = queryValue(start.authorizationUri(), "state");
+
+        SubscriptionLoginPollResult expired = client.completeBrowserLoginCallback(
+                "auth-code",
+                state,
+                start.expiresAt().orElseThrow().plusSeconds(1));
+        SubscriptionLoginPollResult second = client.completeBrowserLoginCallback(
+                "auth-code",
+                state,
+                start.expiresAt().orElseThrow().plusSeconds(2));
+
+        assertThat(expired.status()).isEqualTo(SubscriptionLoginStatus.EXPIRED);
+        assertThat(second.status()).isEqualTo(SubscriptionLoginStatus.FAILED);
+        assertThat(second.error()).contains("unknown browser subscription login state");
         assertThat(transport.requests()).isEmpty();
     }
 
@@ -160,6 +215,29 @@ class OpenAiSubscriptionLoginClientTest {
     }
 
     @Test
+    void defaultLoginServiceBrowserCallbackStoresCompletedSubscriptionSession() {
+        FakeLoginTransport transport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("access_token", "browser-token")
+                        .put("expires_in", 1800)
+                        .put("plan", "plus"));
+        LoginService service = new DefaultLoginService(
+                new InMemoryAuthCredentialStore(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new OpenAiSubscriptionLoginClient(options(), transport));
+
+        SubscriptionLoginStart start = service.startBrowserSubscriptionLogin(new BrowserSubscriptionLoginRequest("openai"));
+        SubscriptionLoginPollResult result = service.completeBrowserSubscriptionLoginCallback(
+                "browser-code",
+                queryValue(start.authorizationUri(), "state"));
+
+        assertThat(result.status()).isEqualTo(SubscriptionLoginStatus.COMPLETED);
+        assertThat(service.status("openai").mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
+        assertThat(service.resolveAuth("openai").accessToken()).contains("browser-token");
+        assertThat(service.status("openai").metadata()).containsEntry("plan", "plus");
+    }
+
+    @Test
     void refreshLoginExchangesStoredRefreshTokenAndPreservesMetadata() {
         FakeLoginTransport transport = new FakeLoginTransport()
                 .enqueue(object()
@@ -189,6 +267,28 @@ class OpenAiSubscriptionLoginClientTest {
         assertThat(transport.requests()).hasSize(1);
         assertThat(transport.requests().getFirst().form()).containsEntry("grant_type", "refresh_token");
         assertThat(transport.requests().getFirst().form()).containsEntry("refresh_token", "refresh-token");
+    }
+
+    @Test
+    void refreshLoginReturnsEmptyWhenTokenEndpointRejectsRefreshToken() {
+        FakeLoginTransport transport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("error", "invalid_grant")
+                        .put("error_description", "refresh token revoked"));
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), transport);
+        AuthSession expired = new AuthSession(
+                "openai",
+                AiAuthMode.CHATGPT_SUBSCRIPTION,
+                AiResolvedAuth.chatGptSubscription(
+                        "expired-token",
+                        Optional.empty(),
+                        Optional.of("sdk-login"),
+                        Optional.of(NOW.minusSeconds(1)),
+                        Map.of("refreshToken", "refresh-token")),
+                NOW.minusSeconds(3600));
+
+        assertThat(client.refreshLogin(expired, NOW)).isEmpty();
+        assertThat(transport.requests().getFirst().form()).containsEntry("grant_type", "refresh_token");
     }
 
     @Test
@@ -248,6 +348,58 @@ class OpenAiSubscriptionLoginClientTest {
 
         assertThat(service.refreshAuth("openai")).isEmpty();
         assertThat(service.resolveAuth("openai")).isEqualTo(AiResolvedAuth.none());
+    }
+
+    @Test
+    void deviceCodePollHandlesSlowDownExpiredAndFailureResponses() {
+        FakeLoginTransport slowDownTransport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("device_code", "device-code")
+                        .put("user_code", "ABCD-1234")
+                        .put("verification_uri", "https://auth.openai.com/codex/device")
+                        .put("expires_in", 600)
+                        .put("interval", 7))
+                .enqueue(object().put("error", "slow_down"));
+        OpenAiSubscriptionLoginClient slowDown = new OpenAiSubscriptionLoginClient(options(), slowDownTransport);
+        SubscriptionLoginStart slowDownStart = slowDown.startDeviceCodeLogin(new DeviceCodeSubscriptionLoginRequest("openai"), NOW);
+
+        SubscriptionLoginPollResult slowDownResult = slowDown.pollLogin(slowDownStart.flowId(), NOW.plusSeconds(1));
+
+        assertThat(slowDownResult.status()).isEqualTo(SubscriptionLoginStatus.PENDING);
+        assertThat(slowDownResult.retryAfter()).contains(NOW.plusSeconds(13));
+
+        FakeLoginTransport expiredTransport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("device_code", "device-code")
+                        .put("user_code", "ABCD-1234")
+                        .put("verification_uri", "https://auth.openai.com/codex/device")
+                        .put("expires_in", 600))
+                .enqueue(object().put("error", "expired_token"));
+        OpenAiSubscriptionLoginClient expired = new OpenAiSubscriptionLoginClient(options(), expiredTransport);
+        SubscriptionLoginStart expiredStart = expired.startDeviceCodeLogin(new DeviceCodeSubscriptionLoginRequest("openai"), NOW);
+
+        SubscriptionLoginPollResult expiredResult = expired.pollLogin(expiredStart.flowId(), NOW.plusSeconds(1));
+        SubscriptionLoginPollResult secondExpiredPoll = expired.pollLogin(expiredStart.flowId(), NOW.plusSeconds(2));
+
+        assertThat(expiredResult.status()).isEqualTo(SubscriptionLoginStatus.EXPIRED);
+        assertThat(secondExpiredPoll.status()).isEqualTo(SubscriptionLoginStatus.FAILED);
+
+        FakeLoginTransport failureTransport = new FakeLoginTransport()
+                .enqueue(object()
+                        .put("device_code", "device-code")
+                        .put("user_code", "ABCD-1234")
+                        .put("verification_uri", "https://auth.openai.com/codex/device")
+                        .put("expires_in", 600))
+                .enqueue(object()
+                        .put("error", "access_denied")
+                        .put("error_description", "user denied"));
+        OpenAiSubscriptionLoginClient failure = new OpenAiSubscriptionLoginClient(options(), failureTransport);
+        SubscriptionLoginStart failureStart = failure.startDeviceCodeLogin(new DeviceCodeSubscriptionLoginRequest("openai"), NOW);
+
+        SubscriptionLoginPollResult failureResult = failure.pollLogin(failureStart.flowId(), NOW.plusSeconds(1));
+
+        assertThat(failureResult.status()).isEqualTo(SubscriptionLoginStatus.FAILED);
+        assertThat(failureResult.error()).contains("user denied");
     }
 
     @Test
