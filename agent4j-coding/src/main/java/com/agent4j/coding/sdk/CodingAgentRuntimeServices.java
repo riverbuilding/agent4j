@@ -2,6 +2,7 @@ package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiModelClient;
 import com.agent4j.ai.AiProviderRegistry;
+import com.agent4j.ai.openai.OpenAiResponsesProvider;
 import com.agent4j.coding.message.CodingAgentMessageConverter;
 import com.agent4j.coding.runtime.CodingAgentLoopRequestFactory;
 import com.agent4j.coding.runtime.CodingBranchSummarizer;
@@ -44,6 +45,10 @@ public record CodingAgentRuntimeServices(
 
     public static CodingAgentRuntimeServices withModelClient(AiModelClient modelClient) {
         return builder().modelClient(modelClient).build();
+    }
+
+    public static CodingAgentRuntimeServices withOpenAi(OpenAiCodingRuntimeOptions options) {
+        return builder().openAi(options).build();
     }
 
     public static Builder builder() {
@@ -117,6 +122,25 @@ public record CodingAgentRuntimeServices(
 
         public Builder loginService(LoginService loginService) {
             this.loginService = Objects.requireNonNull(loginService, "loginService");
+            return this;
+        }
+
+        public Builder openAi(OpenAiCodingRuntimeOptions options) {
+            Objects.requireNonNull(options, "options");
+            providerRegistry(AiProviderRegistry.builder()
+                    .add(new OpenAiResponsesProvider(options.responsesProvider(), options.responsesTransport()))
+                    .defaultModel(options.defaultModel())
+                    .build());
+            LoginService resolvedLoginService = options.subscriptionLogin()
+                    .<LoginService>map(subscriptionOptions -> new DefaultLoginService(
+                            options.credentialStore(),
+                            options.clock(),
+                            new OpenAiSubscriptionLoginClient(
+                                    subscriptionOptions,
+                                    options.subscriptionLoginTransport())))
+                    .orElseGet(() -> new DefaultLoginService(options.credentialStore(), options.clock()));
+            loginService(resolvedLoginService);
+            clock(options.clock());
             return this;
         }
 

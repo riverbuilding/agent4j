@@ -174,11 +174,34 @@ LoginService loginService = new DefaultLoginService(
         new OpenAiSubscriptionLoginClient(options));
 ```
 
+For SDK users, `CodingAgentRuntimeServices.withOpenAi(...)` wires the standard
+OpenAI Responses provider, provider registry, persistent auth store, and
+optional subscription login client:
+
+```java
+AiModelReference model = new AiModelReference("openai", "gpt-5");
+
+CodingAgentRuntimeServices services =
+        CodingAgentRuntimeServices.withOpenAi(
+                OpenAiCodingRuntimeOptions.builder(model)
+                        .subscriptionLogin(subscriptionLoginOptions)
+                        .build());
+
+AgentSessionRuntime runtime = new CodingAgentSessionRuntime(services);
+```
+
+If `subscriptionLogin(...)` is omitted, the runtime still supports API-key and
+access-token login through `LoginService`, but browser/device subscription login
+stays unsupported until a subscription login client is configured. OAuth
+endpoints remain explicit in `OpenAiSubscriptionLoginClientOptions`.
+
 Component responsibilities:
 
 - `DefaultLoginService`: exposes SDK login APIs and persists completed auth.
 - `PersistentAuthCredentialStore`: stores final `AuthSession` records outside
   the project at `~/.pi/agent/auth.json` by default.
+- `OpenAiCodingRuntimeOptions`: SDK convenience options for the standard OpenAI
+  runtime wiring.
 - `OpenAiSubscriptionLoginClient`: owns OAuth mechanics for browser and
   device-code login.
 - `OpenAiSubscriptionLoginClientOptions`: supplies client ID, authorization

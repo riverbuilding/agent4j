@@ -670,6 +670,13 @@ Tasks:
     `status(...)`/`resolveAuth(...)` for expired subscription sessions, and
     auth status metadata exposure. Exact OpenAI endpoint defaults, browser
     launching, and live refresh validation remain later auth work.
+  - SDK convenience wiring for standard OpenAI runtime setup. Done with
+    `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
+    which assemble `OpenAiResponsesProvider`, `AiProviderRegistry`,
+    `PersistentAuthCredentialStore`, and an optional
+    `OpenAiSubscriptionLoginClient` from one SDK-facing options object.
+    Deterministic tests cover provider-registry defaults, API-key login, and
+    subscription login transport wiring.
   - API-key login flow for OpenAI/Anthropic-compatible providers as the
     usage-based alternative to subscription login. Done in `DefaultLoginService`
     with resolved `AiResolvedAuth.apiKey(...)` storage.
@@ -699,8 +706,9 @@ Tasks:
   ChatGPT subscription-token auth, prompt model override, and the missing
   client/registry failure path. Persistent credential storage is done; real
   OpenAI OAuth mechanics are implemented behind configurable endpoints; browser
-  callback hosting and refresh/status are implemented. Exact endpoint defaults,
-  browser launching, and live tests remain later auth slices.
+  callback hosting, refresh/status, and SDK convenience wiring are implemented.
+  Exact endpoint defaults, browser launching, and live tests remain later auth
+  slices.
 - Add extension binding placeholders.
 - Add API docs and examples.
 - Re-check exact API names and lifecycle details against PI
@@ -721,8 +729,9 @@ Exit criteria:
   deterministic tests; OpenAI OAuth start/exchange/poll mechanics are covered by
   fake-transport tests, and callback hosting is covered where local socket
   binding is available. Token refresh/status is covered with fake-transport
-  tests. Browser launching, exact endpoint defaults, and live tests remain later
-  auth work.
+  tests, and SDK convenience wiring is covered with fake-transport tests.
+  Browser launching, exact endpoint defaults, and live tests remain later auth
+  work.
 
 ## Phase 10: CLI Modes
 

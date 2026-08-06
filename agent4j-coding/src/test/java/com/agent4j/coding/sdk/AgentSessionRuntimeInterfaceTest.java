@@ -8,22 +8,31 @@ import com.agent4j.core.runtime.AgentConversationContext;
 import com.agent4j.core.runtime.QueueMode;
 import com.agent4j.core.runtime.ToolExecutionMode;
 import com.agent4j.testkit.ai.FakeModelClient;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentSessionRuntimeInterfaceTest {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     @Test
     void createSessionRequestNormalizesPathsAndDefaultsOptionalFields() {
         CreateSessionRequest request = new CreateSessionRequest(Path.of("sessions/a.jsonl"), Path.of("."));
@@ -191,6 +200,67 @@ class AgentSessionRuntimeInterfaceTest {
         assertThat(services.clock()).isSameAs(clock);
     }
 
+    @Test
+    void openAiRuntimeConvenienceBuildsProviderRegistryAndPersistentLoginService() {
+        AiModelReference model = new AiModelReference("openai", "gpt-5");
+
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
+                OpenAiCodingRuntimeOptions.builder(model)
+                        .credentialStore(new InMemoryAuthCredentialStore())
+                        .build());
+
+        assertThat(services.optionalModelClient()).isEmpty();
+        assertThat(services.optionalProviderRegistry()).isPresent();
+        assertThat(services.optionalProviderRegistry().orElseThrow().requireDefault().model().reference())
+                .isEqualTo(model);
+        assertThat(services.loginService().loginApiKey(new ApiKeyLoginRequest("openai", "sk-test")).auth().apiKey())
+                .contains("sk-test");
+    }
+
+    @Test
+    void openAiRuntimeConvenienceWiresSubscriptionLoginClient() {
+        AiModelReference model = new AiModelReference("openai", "gpt-5");
+        FakeSubscriptionTransport transport = new FakeSubscriptionTransport()
+                .enqueue(object()
+                        .put("device_code", "device-code")
+                        .put("user_code", "ABCD-1234")
+                        .put("verification_uri", "https://auth.openai.com/codex/device")
+                        .put("expires_in", 600))
+                .enqueue(object()
+                        .put("access_token", "subscription-token")
+                        .put("expires_in", 1800)
+                        .put("plan", "plus"));
+        OpenAiSubscriptionLoginClientOptions loginOptions = OpenAiSubscriptionLoginClientOptions.builder(
+                        "codex-client",
+                        URI.create("https://auth.example.test/authorize"),
+                        URI.create("https://auth.example.test/token"))
+                .deviceAuthorizationEndpoint(URI.create("https://auth.example.test/device"))
+                .build();
+
+        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
+                OpenAiCodingRuntimeOptions.builder(model)
+                        .credentialStore(new InMemoryAuthCredentialStore())
+                        .subscriptionLogin(loginOptions)
+                        .subscriptionLoginTransport(transport)
+                        .build());
+
+        SubscriptionLoginStart start = services.loginService()
+                .startDeviceCodeSubscriptionLogin(new DeviceCodeSubscriptionLoginRequest("openai"));
+        SubscriptionLoginPollResult result = services.loginService().pollSubscriptionLogin(start.flowId());
+
+        assertThat(result.status()).isEqualTo(SubscriptionLoginStatus.COMPLETED);
+        assertThat(services.loginService().resolveAuth("openai").accessToken()).contains("subscription-token");
+        assertThat(services.loginService().status("openai").metadata()).containsEntry("plan", "plus");
+        assertThat(transport.requests()).extracting(Request::endpoint)
+                .containsExactly(
+                        URI.create("https://auth.example.test/device"),
+                        URI.create("https://auth.example.test/token"));
+    }
+
+    private static ObjectNode object() {
+        return MAPPER.createObjectNode();
+    }
+
     private static final class TestRuntime implements AgentSessionRuntime {
         private final AgentEventBus eventBus = new AgentEventBus();
 
@@ -231,6 +301,36 @@ class AgentSessionRuntimeInterfaceTest {
 
         void publish(AgentEvent event) {
             eventBus.publish(event);
+        }
+    }
+
+    private record Request(URI endpoint, Map<String, String> form, Map<String, String> headers) {
+        private Request {
+            form = Map.copyOf(form);
+            headers = Map.copyOf(headers);
+        }
+    }
+
+    private static final class FakeSubscriptionTransport implements OpenAiSubscriptionLoginHttpTransport {
+        private final Queue<JsonNode> responses = new ArrayDeque<>();
+        private final List<Request> requests = new ArrayList<>();
+
+        private FakeSubscriptionTransport enqueue(JsonNode response) {
+            responses.add(response);
+            return this;
+        }
+
+        @Override
+        public JsonNode postForm(URI endpoint, Map<String, String> form, Map<String, String> headers) {
+            requests.add(new Request(endpoint, form, headers));
+            if (responses.isEmpty()) {
+                throw new AssertionError("no fake response queued");
+            }
+            return responses.remove();
+        }
+
+        private List<Request> requests() {
+            return List.copyOf(requests);
         }
     }
 
