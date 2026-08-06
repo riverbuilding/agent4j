@@ -15,6 +15,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class BrowserSubscriptionLoginCallbackServer implements AutoCloseable {
     private static final String DEFAULT_PATH = "/auth/callback";
@@ -22,6 +23,7 @@ public final class BrowserSubscriptionLoginCallbackServer implements AutoCloseab
     private final HttpServer server;
     private final String callbackPath;
     private final CompletableFuture<SubscriptionLoginPollResult> completion = new CompletableFuture<>();
+    private final AtomicBoolean terminal = new AtomicBoolean();
 
     private BrowserSubscriptionLoginCallbackServer(
             HttpServer server,
@@ -74,6 +76,9 @@ public final class BrowserSubscriptionLoginCallbackServer implements AutoCloseab
 
     @Override
     public void close() {
+        if (terminal.compareAndSet(false, true)) {
+            completion.complete(SubscriptionLoginPollResult.failed("browser login callback server shut down"));
+        }
         server.stop(0);
     }
 
@@ -83,11 +88,16 @@ public final class BrowserSubscriptionLoginCallbackServer implements AutoCloseab
                 send(exchange, 405, "Method not allowed");
                 return;
             }
+            if (!terminal.compareAndSet(false, true)) {
+                send(exchange, 409, "Login callback was already handled. You can close this window.");
+                return;
+            }
             Map<String, String> query = query(exchange.getRequestURI());
             Optional<String> error = Optional.ofNullable(query.get("error"));
             if (error.isPresent()) {
-                SubscriptionLoginPollResult result = SubscriptionLoginPollResult.failed(
-                        Optional.ofNullable(query.get("error_description")).orElse(error.orElseThrow()));
+                SubscriptionLoginPollResult result = loginService.completeBrowserSubscriptionLoginErrorCallback(
+                        Optional.ofNullable(query.get("error_description")).orElse(error.orElseThrow()),
+                        Optional.ofNullable(query.get("state")));
                 completion.complete(result);
                 send(exchange, 400, "Login failed. You can close this window.");
                 return;

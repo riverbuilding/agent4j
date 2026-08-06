@@ -16,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
@@ -24,6 +25,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -189,6 +193,106 @@ class OpenAiSubscriptionLoginClientTest {
         assertThat(second.status()).isEqualTo(SubscriptionLoginStatus.FAILED);
         assertThat(second.error()).contains("unknown browser subscription login state");
         assertThat(transport.requests()).isEmpty();
+    }
+
+    @Test
+    void browserLoginErrorAndCancellationRemoveTemporaryFlowState() {
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), new FakeLoginTransport());
+        SubscriptionLoginStart errorStart = client.startBrowserLogin(new BrowserSubscriptionLoginRequest("openai"), NOW);
+        String errorState = queryValue(errorStart.authorizationUri(), "state");
+
+        SubscriptionLoginPollResult error = client.completeBrowserLoginErrorCallback(
+                "access denied", Optional.of(errorState), NOW.plusSeconds(1));
+        SubscriptionLoginPollResult afterError = client.completeBrowserLoginCallback(
+                "browser-code", errorState, NOW.plusSeconds(2));
+
+        SubscriptionLoginStart cancelledStart = client.startBrowserLogin(new BrowserSubscriptionLoginRequest("openai"), NOW);
+        String cancelledState = queryValue(cancelledStart.authorizationUri(), "state");
+        boolean cancelled = client.cancelLogin(cancelledStart.flowId(), NOW.plusSeconds(1));
+        SubscriptionLoginPollResult afterCancellation = client.completeBrowserLoginCallback(
+                "browser-code", cancelledState, NOW.plusSeconds(2));
+
+        assertThat(error.status()).isEqualTo(SubscriptionLoginStatus.FAILED);
+        assertThat(afterError.status()).isEqualTo(SubscriptionLoginStatus.FAILED);
+        assertThat(cancelled).isTrue();
+        assertThat(afterCancellation.status()).isEqualTo(SubscriptionLoginStatus.FAILED);
+    }
+
+    @Test
+    void oneCallBrowserLoginTimesOutAndRemovesTemporaryFlowState() throws Exception {
+        OpenAiSubscriptionLoginClientOptions timeoutOptions = OpenAiSubscriptionLoginClientOptions.builder(
+                        "codex-client",
+                        URI.create("https://auth.example.test/authorize"),
+                        URI.create("https://auth.example.test/token"))
+                .redirectUri(URI.create("http://localhost:1455/auth/callback"))
+                .defaultBrowserFlowTtl(Duration.ofMillis(25))
+                .build();
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(timeoutOptions, new FakeLoginTransport());
+        List<URI> opened = new ArrayList<>();
+        LoginService service = new DefaultLoginService(
+                new InMemoryAuthCredentialStore(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                client,
+                opened::add);
+
+        BrowserSubscriptionLoginCallbackServer probe;
+        try {
+            probe = BrowserSubscriptionLoginCallbackServer.startDefaultBrowserCallback(service);
+        } catch (IOException e) {
+            Assumptions.assumeTrue(false, "local callback socket binding is not available: " + e.getMessage());
+            return;
+        }
+        probe.close();
+
+        assertThatThrownBy(service::loginOpenAiSubscription)
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("timed out");
+        String state = queryValue(opened.getFirst(), "state");
+        assertThat(client.completeBrowserLoginCallback("browser-code", state, NOW.plusSeconds(1)).status())
+                .isEqualTo(SubscriptionLoginStatus.FAILED);
+    }
+
+    @Test
+    void oneCallBrowserLoginInterruptionCancelsAndRemovesTemporaryFlowState() throws Exception {
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(options(), new FakeLoginTransport());
+        List<URI> opened = new ArrayList<>();
+        CountDownLatch launched = new CountDownLatch(1);
+        LoginService service = new DefaultLoginService(
+                new InMemoryAuthCredentialStore(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                client,
+                uri -> {
+                    opened.add(uri);
+                    launched.countDown();
+                });
+
+        BrowserSubscriptionLoginCallbackServer probe;
+        try {
+            probe = BrowserSubscriptionLoginCallbackServer.startDefaultBrowserCallback(service);
+        } catch (IOException e) {
+            Assumptions.assumeTrue(false, "local callback socket binding is not available: " + e.getMessage());
+            return;
+        }
+        probe.close();
+
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread thread = new Thread(() -> {
+            try {
+                service.loginOpenAiSubscription();
+            } catch (Throwable e) {
+                failure.set(e);
+            }
+        });
+        thread.start();
+        assertThat(launched.await(1, TimeUnit.SECONDS)).isTrue();
+        thread.interrupt();
+        thread.join(1_000);
+
+        assertThat(thread.isAlive()).isFalse();
+        assertThat(failure.get()).isInstanceOf(IOException.class).hasMessageContaining("cancelled");
+        String state = queryValue(opened.getFirst(), "state");
+        assertThat(client.completeBrowserLoginCallback("browser-code", state, NOW.plusSeconds(1)).status())
+                .isEqualTo(SubscriptionLoginStatus.FAILED);
     }
 
     @Test
@@ -476,17 +580,63 @@ class OpenAiSubscriptionLoginClientTest {
 
             HttpResponse<String> response = HttpClient.newHttpClient()
                     .send(HttpRequest.newBuilder(callbackUri).GET().build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> duplicateResponse = HttpClient.newHttpClient()
+                    .send(HttpRequest.newBuilder(callbackUri).GET().build(), HttpResponse.BodyHandlers.ofString());
             SubscriptionLoginPollResult result = callbackServer.completion().join();
 
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.body()).contains("Login complete");
+            assertThat(duplicateResponse.statusCode()).isEqualTo(409);
             assertThat(result.status()).isEqualTo(SubscriptionLoginStatus.COMPLETED);
             assertThat(service.status("openai").mode()).isEqualTo(AiAuthMode.CHATGPT_SUBSCRIPTION);
             assertThat(service.resolveAuth("openai").accessToken()).contains("browser-token");
             assertThat(transport.requests().getFirst().form()).containsEntry("code", "browser-code");
             assertThat(transport.requests().getFirst().form())
                     .containsEntry("redirect_uri", callbackServer.redirectUri().toString());
+            assertThat(transport.requests()).hasSize(1);
         }
+    }
+
+    @Test
+    void callbackServerHandlesOauthErrorsAndShutdownAsTerminalResults() throws Exception {
+        OpenAiSubscriptionLoginClient client = new OpenAiSubscriptionLoginClient(optionsWithoutRedirect(), new FakeLoginTransport());
+        LoginService service = new DefaultLoginService(
+                new InMemoryAuthCredentialStore(),
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                client);
+
+        BrowserSubscriptionLoginCallbackServer callbackServer;
+        try {
+            callbackServer = BrowserSubscriptionLoginCallbackServer.start(service);
+        } catch (IOException e) {
+            Assumptions.assumeTrue(false, "local callback socket binding is not available: " + e.getMessage());
+            return;
+        }
+        try (callbackServer) {
+            SubscriptionLoginStart start = service.startBrowserSubscriptionLogin(new BrowserSubscriptionLoginRequest(
+                    "openai", Optional.empty(), Map.of(), Optional.of(callbackServer.redirectUri())));
+            String state = queryValue(start.authorizationUri(), "state");
+            URI errorUri = URI.create(callbackServer.redirectUri()
+                    + "?error=access_denied&error_description=user+denied&state=" + state);
+
+            HttpResponse<String> response = HttpClient.newHttpClient()
+                    .send(HttpRequest.newBuilder(errorUri).GET().build(), HttpResponse.BodyHandlers.ofString());
+
+            assertThat(response.statusCode()).isEqualTo(400);
+            assertThat(callbackServer.completion().join().status()).isEqualTo(SubscriptionLoginStatus.FAILED);
+            assertThat(client.completeBrowserLoginCallback("browser-code", state, NOW.plusSeconds(1)).status())
+                    .isEqualTo(SubscriptionLoginStatus.FAILED);
+        }
+
+        BrowserSubscriptionLoginCallbackServer shutdownServer;
+        try {
+            shutdownServer = BrowserSubscriptionLoginCallbackServer.start(service);
+        } catch (IOException e) {
+            Assumptions.assumeTrue(false, "local callback socket binding is not available: " + e.getMessage());
+            return;
+        }
+        shutdownServer.close();
+        assertThat(shutdownServer.completion().join().status()).isEqualTo(SubscriptionLoginStatus.FAILED);
     }
 
     @Test

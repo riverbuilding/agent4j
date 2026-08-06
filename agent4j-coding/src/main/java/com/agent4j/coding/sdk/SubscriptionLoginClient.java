@@ -16,6 +16,18 @@ public interface SubscriptionLoginClient {
         throw new UnsupportedOperationException("subscription browser callback login is not configured");
     }
 
+    default SubscriptionLoginPollResult completeBrowserLoginErrorCallback(
+            String error,
+            Optional<String> state,
+            Instant now
+    ) {
+        return SubscriptionLoginPollResult.failed(error);
+    }
+
+    default boolean cancelLogin(String flowId, Instant now) {
+        return false;
+    }
+
     default Optional<SubscriptionLoginCompletion> refreshLogin(AuthSession session, Instant now) {
         throw new UnsupportedOperationException("subscription token refresh is not configured");
     }

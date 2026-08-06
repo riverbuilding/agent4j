@@ -22,6 +22,13 @@ public interface LoginService {
 
     SubscriptionLoginPollResult completeBrowserSubscriptionLoginCallback(String code, String state);
 
+    SubscriptionLoginPollResult completeBrowserSubscriptionLoginErrorCallback(
+            String error,
+            Optional<String> state
+    );
+
+    boolean cancelSubscriptionLogin(String flowId);
+
     Optional<AuthSession> refreshAuth(String providerId);
 
     AuthStatus status(String providerId);

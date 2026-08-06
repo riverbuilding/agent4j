@@ -162,6 +162,36 @@ public final class OpenAiSubscriptionLoginClient implements SubscriptionLoginCli
         return completeBrowserLogin(flowId, code, state, now);
     }
 
+    @Override
+    public SubscriptionLoginPollResult completeBrowserLoginErrorCallback(
+            String error,
+            Optional<String> state,
+            Instant now
+    ) {
+        Objects.requireNonNull(error, "error");
+        Objects.requireNonNull(state, "state");
+        Objects.requireNonNull(now, "now");
+        state.map(browserFlowIdsByState::get).ifPresent(flowId -> {
+            Flow flow = flows.get(flowId);
+            if (flow != null) {
+                removeFlow(flowId, flow);
+            }
+        });
+        return SubscriptionLoginPollResult.failed(error);
+    }
+
+    @Override
+    public boolean cancelLogin(String flowId, Instant now) {
+        Objects.requireNonNull(flowId, "flowId");
+        Objects.requireNonNull(now, "now");
+        Flow flow = flows.get(flowId);
+        if (flow == null) {
+            return false;
+        }
+        removeFlow(flowId, flow);
+        return true;
+    }
+
     public SubscriptionLoginPollResult completeBrowserLogin(String flowId, String code, String state, Instant now) {
         Objects.requireNonNull(flowId, "flowId");
         Objects.requireNonNull(code, "code");

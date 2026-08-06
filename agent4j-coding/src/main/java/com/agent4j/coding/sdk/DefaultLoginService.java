@@ -3,14 +3,20 @@ package com.agent4j.coding.sdk;
 import com.agent4j.ai.AiAuthMode;
 import com.agent4j.ai.AiResolvedAuth;
 
+import java.io.IOException;
+import java.time.Duration;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public final class DefaultLoginService implements LoginService {
     private static final String OPENAI_PROVIDER_ID = "openai";
+    private static final Duration DEFAULT_BROWSER_LOGIN_TIMEOUT = Duration.ofMinutes(10);
     private static final Optional<String> SOURCE = Optional.of("sdk-login");
 
     private final AuthCredentialStore credentialStore;
@@ -78,17 +84,23 @@ public final class DefaultLoginService implements LoginService {
     }
 
     @Override
-    public AuthStatus loginOpenAiSubscription() throws java.io.IOException {
+    public AuthStatus loginOpenAiSubscription() throws IOException {
+        String flowId = null;
         try (BrowserSubscriptionLoginCallbackServer callbackServer =
                      BrowserSubscriptionLoginCallbackServer.startDefaultBrowserCallback(this)) {
             SubscriptionLoginStart start = startBrowserSubscriptionLogin(new BrowserSubscriptionLoginRequest(
                     OPENAI_PROVIDER_ID, Optional.empty(), Map.of(), Optional.of(callbackServer.redirectUri())));
+            flowId = start.flowId();
             browserLauncher.open(start.authorizationUri());
-            SubscriptionLoginPollResult result = callbackServer.completion().join();
+            SubscriptionLoginPollResult result = awaitBrowserLogin(callbackServer, start);
             if (result.status() != SubscriptionLoginStatus.COMPLETED) {
                 throw new IllegalStateException(result.error().orElse("OpenAI subscription login failed"));
             }
             return status(OPENAI_PROVIDER_ID);
+        } finally {
+            if (flowId != null) {
+                cancelSubscriptionLogin(flowId);
+            }
         }
     }
 
@@ -133,6 +145,22 @@ public final class DefaultLoginService implements LoginService {
     }
 
     @Override
+    public SubscriptionLoginPollResult completeBrowserSubscriptionLoginErrorCallback(
+            String error,
+            Optional<String> state
+    ) {
+        Objects.requireNonNull(error, "error");
+        Objects.requireNonNull(state, "state");
+        return subscriptionLoginClient.completeBrowserLoginErrorCallback(error, state, now());
+    }
+
+    @Override
+    public boolean cancelSubscriptionLogin(String flowId) {
+        Objects.requireNonNull(flowId, "flowId");
+        return subscriptionLoginClient.cancelLogin(flowId, now());
+    }
+
+    @Override
     public Optional<AuthSession> refreshAuth(String providerId) {
         Objects.requireNonNull(providerId, "providerId");
         return credentialStore.find(providerId)
@@ -173,6 +201,24 @@ public final class DefaultLoginService implements LoginService {
 
     private Instant now() {
         return Instant.now(clock);
+    }
+
+    private SubscriptionLoginPollResult awaitBrowserLogin(
+            BrowserSubscriptionLoginCallbackServer callbackServer,
+            SubscriptionLoginStart start
+    ) throws IOException {
+        Instant expiresAt = start.expiresAt().orElseGet(() -> now().plus(DEFAULT_BROWSER_LOGIN_TIMEOUT));
+        long timeoutMillis = Math.max(1, Duration.between(now(), expiresAt).toMillis());
+        try {
+            return callbackServer.completion().get(timeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            throw new IOException("OpenAI subscription login timed out", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("OpenAI subscription login was cancelled", e);
+        } catch (ExecutionException e) {
+            throw new IOException("OpenAI subscription login callback failed", e.getCause());
+        }
     }
 
     private AuthSession refreshIfExpired(AuthSession session) {

@@ -675,7 +675,10 @@ Tasks:
     parameters. `OpenAiCodingRuntimeOptions` enables that profile by default.
     `LoginService.loginOpenAiSubscription()` owns browser launching, loopback
     callback orchestration on the registered localhost port, credential
-    persistence, cleanup, and the resulting `AuthStatus`. Live refresh validation and
+    persistence, cleanup, and the resulting `AuthStatus`. Callback lifecycle
+    hardening is done for timeout, interruption/cancellation, OAuth error and
+    duplicate callbacks, and server shutdown; all one-call exit paths remove
+    temporary flow state and close the callback server. Live refresh validation and
     the exact production device-code protocol remain later auth work.
   - SDK convenience wiring for standard OpenAI runtime setup. Done with
     `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
@@ -704,6 +707,8 @@ Tasks:
     the current API shape with a deterministic fake `SubscriptionLoginClient`
     plus OpenAI OAuth transport contract tests. Test hardening is done for
     callback completion through `LoginService`, expired browser state cleanup,
+    timeout/cancellation cleanup, OAuth error/duplicate callback handling,
+    callback-server shutdown,
     device-code pending/slow-down/expired/failure responses, refresh-token grant
     success/failure, persistent refresh-token roundtrip, and SDK convenience
     validation. Live OAuth tests remain later auth work.

@@ -218,6 +218,13 @@ callback URI, starts `OpenAiSubscriptionLoginClient`, opens the system browser,
 waits for the callback, persists the completed credential, closes the callback
 server, and returns the resulting `AuthStatus`.
 
+The one-call path is single-use and lifecycle-bounded: it waits only until the
+OAuth flow expiry, removes its temporary flow state on success, timeout,
+browser-launch failure, or thread interruption, and closes the local server in
+every case. An OAuth `error` callback removes the matching flow by `state`.
+The callback server returns `409` for duplicate callbacks and completes a
+pending wait with a failed result when it is shut down.
+
 Internally, `OpenAiSubscriptionLoginClient.startBrowserLogin(...)` generates:
 
 - local `flowId`
