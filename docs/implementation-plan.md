@@ -775,32 +775,73 @@ successful live browser-login, refresh, resolved-auth, and provider-backed
 prompt run are recorded. Do not mark this phase or the subscription-login
 parity gap closed based solely on fake-transport coverage.
 
+#### Remaining Phase 9 Gaps
+
+1. Verify the `codexDefaults()` authorization, token, device-code, callback,
+   and model API endpoint configuration against the current production
+   OpenAI/Codex flow.
+2. Execute `OpenAiSubscriptionLiveIT` successfully using a real ChatGPT
+   subscription and retain the non-secret verification result.
+3. Establish exact production device-code protocol parity. The current generic
+   device-code client is covered by contract tests but must not be represented
+   as verified ChatGPT/Codex production login until that protocol is confirmed.
+
 ## Phase 10: CLI Modes
 
 Goal: provide process entrypoints before investing in terminal UI.
 
-Tasks:
+Implementation slices:
 
-- Mirror PI CLI mode semantics and JSON/RPC payloads before adding new flags.
-- Add picocli argument parser.
-- Implement `--mode json`.
-- Implement `--print`.
-- Implement `--mode rpc`.
-- Add session flags:
-  - continue
-  - resume
-  - no-session
-  - session path/id
-  - fork
-  - name
-- Add model and tool selection flags.
-- Add `login`, `logout`, and auth-status commands as thin CLI wrappers over the
-  Phase 9 login/auth API.
+1. **PI CLI Shape Audit**
+   - Map PI command names, mode selection, argument precedence, stdin/stdout,
+     exit codes, and JSON/RPC event envelopes to `agent4j-cli`.
+   - Record intentional Java divergences before adding commands.
+   - Done in `docs/pi-cli-shape-audit.md`, pinned to PI `0.82.1`. It records
+     mode/flag precedence, process I/O and exit contracts, JSON/RPC boundaries,
+     and the scoped Java divergences that later slices must close or preserve.
+2. **CLI Bootstrap And Runtime Factory**
+   - Add the Picocli root command and a test-injectable runtime factory.
+   - Resolve settings, workspace, provider/model, tools, and credential store
+     through the Phase 9 runtime services rather than duplicating loop setup.
+3. **Print Mode**
+   - Implement a non-interactive prompt command that writes assistant output to
+     stdout and diagnostics to stderr.
+   - Cover success, tool use, provider failures, and cancellation with a fake
+     provider.
+4. **JSON Event Mode**
+   - Implement JSONL output from `AgentEvent` with stable event envelopes,
+     sequencing, and no human-oriented stdout noise.
+   - Pin serialization and error/abort behavior with fixtures.
+5. **RPC Mode**
+   - Define the stdin request / stdout response-event protocol from PI's
+     observable contract.
+   - Support request correlation, malformed input handling, and orderly
+     shutdown before adding interactive controls.
+6. **Session Lifecycle Flags**
+   - Add new, continue, resume, no-session, explicit session path/ID, fork, and
+     name behavior as thin mappings to `AgentSessionRuntime`.
+   - Test persistence, active-path selection, and mutually exclusive flags.
+7. **Model And Tool Selection**
+   - Add provider/model selection, tool enable/disable selection, and argument
+     validation using the established settings/resource boundaries.
+8. **Auth Commands**
+   - Add `login`, `logout`, auth status, and refresh as thin wrappers over
+     `LoginService`, including browser-login invocation without token output.
+   - Keep production endpoint verification and live-login evidence owned by
+     the Phase 9 gaps above.
+9. **CLI Contract Closeout**
+   - Run fake-provider end-to-end coverage for print, JSON, RPC, session,
+     selection, and auth commands.
+   - Re-audit PI command names, event payloads, output streams, and exit codes;
+     update the ADR before Phase 11 begins.
 
 Exit criteria:
 
 - CLI modes run against fake provider in tests.
 - JSON mode emits stable JSONL events.
+- Print and RPC modes have pinned stdout/stderr and exit-code contracts.
+- CLI commands delegate to the Phase 9 SDK/runtime rather than constructing
+  independent sessions, loops, or auth state.
 
 ## Phase 11: Extension SPI
 
