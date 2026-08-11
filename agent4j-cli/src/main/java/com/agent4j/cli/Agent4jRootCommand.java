@@ -21,6 +21,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     private final CliRuntimeFactory runtimeFactory;
     private final CliEnvironment environment;
     private final PrintModeRunner printModeRunner;
+    private final JsonEventModeRunner jsonEventModeRunner;
 
     @Spec
     private CommandSpec commandSpec;
@@ -48,18 +49,37 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     private List<String> messages = List.of();
 
     Agent4jRootCommand(CliRuntimeFactory runtimeFactory, CliEnvironment environment) {
-        this(runtimeFactory, environment, new PrintModeRunner());
+        this(runtimeFactory, environment, new PrintModeRunner(), new JsonEventModeRunner());
     }
 
     Agent4jRootCommand(CliRuntimeFactory runtimeFactory, CliEnvironment environment, PrintModeRunner printModeRunner) {
+        this(runtimeFactory, environment, printModeRunner, new JsonEventModeRunner());
+    }
+
+    Agent4jRootCommand(
+            CliRuntimeFactory runtimeFactory,
+            CliEnvironment environment,
+            PrintModeRunner printModeRunner,
+            JsonEventModeRunner jsonEventModeRunner
+    ) {
         this.runtimeFactory = runtimeFactory;
         this.environment = environment;
         this.printModeRunner = printModeRunner;
+        this.jsonEventModeRunner = jsonEventModeRunner;
     }
 
     @Override
     public Integer call() throws Exception {
         CliRuntime runtime = runtimeFactory.create(runtimeRequest());
+        if (mode() == CliMode.JSON) {
+            return jsonEventModeRunner.run(
+                    runtime,
+                    environment,
+                    messages,
+                    Optional.empty(),
+                    commandSpec.commandLine().getOut(),
+                    commandSpec.commandLine().getErr());
+        }
         if (print) {
             return printModeRunner.run(
                     runtime,

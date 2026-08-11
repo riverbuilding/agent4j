@@ -826,6 +826,13 @@ Implementation slices:
    - Implement JSONL output from `AgentEvent` with stable event envelopes,
      sequencing, and no human-oriented stdout noise.
    - Pin serialization and error/abort behavior with fixtures.
+   - Done with `JsonEventModeRunner` and `JsonEventSerializer`: `--mode json`
+     creates an isolated temporary SDK session, prints its persisted PI session
+     header, then subscribes to that session's `AgentEvent` stream before
+     prompting. The serializer explicitly maps public PI event and field names;
+     it does not expose Java record names, timestamps, session IDs, or default
+     Jackson polymorphism. Tests pin header-first ordering, stream deltas,
+     provider-failure diagnostics, abort events, and temporary-session cleanup.
 5. **RPC Mode**
    - Define the stdin request / stdout response-event protocol from PI's
      observable contract.

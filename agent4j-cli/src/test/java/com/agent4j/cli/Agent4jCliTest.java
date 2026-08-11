@@ -92,6 +92,31 @@ class Agent4jCliTest {
         assertThat(stderr.toString()).isEmpty();
     }
 
+    @Test
+    void jsonModeTakesPrecedenceOverPrintAndWritesOnlyJsonLines() throws Exception {
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(new AiStreamEvent.MessageCompleted(
+                "assistant-1",
+                new AiAssistantMessage(
+                        List.of(new AiTextContent("command answer")),
+                        AiStopReason.STOP,
+                        AiUsage.zero()))));
+        StringWriter stdout = new StringWriter();
+        StringWriter stderr = new StringWriter();
+
+        int exitCode = Agent4jCli.execute(
+                request -> runtime(model),
+                environment(),
+                new PrintWriter(stdout),
+                new PrintWriter(stderr),
+                "-p", "--mode", "json", "say hello");
+
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString().lines().allMatch(line -> line.startsWith("{"))).isTrue();
+        assertThat(stdout.toString()).contains("\"type\":\"session\"", "\"type\":\"agent_end\"");
+        assertThat(stdout.toString()).doesNotContain("command answer\n");
+        assertThat(stderr.toString()).isEmpty();
+    }
+
     private CliEnvironment environment() {
         return new CliEnvironment(temporaryDirectory.resolve("workspace"), temporaryDirectory.resolve("home"));
     }

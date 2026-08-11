@@ -1,0 +1,2 @@
+{"type":"agent_aborted","reason":"cancelled"}
+{"type":"tool_execution_start","toolCallId":"call-1","toolName":"read","args":{"path":"README.md"}}

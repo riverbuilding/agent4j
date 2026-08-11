@@ -29,7 +29,7 @@ PI has three process modes:
 | --- | --- | --- |
 | `pi` | Interactive terminal session | Defer terminal UI to Phase 12. Phase 10 supplies only the root parsing and runtime boundary it will use. |
 | `pi -p <prompt>` / non-TTY invocation | Run prompt(s), write final assistant text, then exit | Implemented for explicit `-p` in Slice 3. Non-TTY auto-selection arrives with JSON/process I/O work. |
-| `pi --mode json <prompt>` | One-shot run that writes a session header and events as JSONL | Implement in Slice 4. |
+| `pi --mode json <prompt>` | One-shot run that writes a session header and events as JSONL | Implemented in Slice 4. |
 | `pi --mode rpc` | Long-lived JSONL command/event process | Implement in Slice 5. |
 
 PI also has package-management commands (`install`, `remove`, `uninstall`,
@@ -102,9 +102,9 @@ JSON mode writes a session header before events for persistent sessions. Its
 event stream uses PI event names such as `agent_start`, `turn_start`,
 `message_start`, `message_update`, `message_end`, `tool_execution_start`,
 `tool_execution_update`, `tool_execution_end`, `turn_end`, and `agent_end`.
-`message_update` is deliberately delta-only: it omits the cumulative message
-snapshot and any provider partial snapshot. `message_end` holds the authoritative
-completed message.
+`message_update` contains the current reconstructed assistant message plus its
+delta-only `assistantMessageEvent`; it does not expose a provider-specific
+partial snapshot. `message_end` holds the authoritative completed message.
 
 Agent4j has an internal `AgentEvent` hierarchy, but its final compaction and
 branch-summary payload audit is still open in ADR 0002. Slice 4 must add a
@@ -144,13 +144,14 @@ structured unsuccessful response, never a silent drop or a process crash.
 | No interactive terminal/TUI or `--resume` picker in Phase 10 | PI's resume picker and project-crossing confirmation require the Phase 12 terminal UI. | Phase 10 supports explicit `--session` and noninteractive lifecycle operations; Phase 12 owns picker parity. |
 | No package-management commands or extension-defined CLI flags | `agent4j` does not yet implement PI package management or extension discovery/execution. | Phase 11 and later package parity work. |
 | Initial RPC subset | Several PI RPC commands depend on model catalog mutation, session tree UI semantics, direct bash, and extensions. | Slice 5 establishes framing and core session/prompt commands, then expand from audited PI commands. |
-| JSON/RPC and implicit non-TTY selection are not runnable yet | Slice 3 implements explicit `-p`; the remaining modes still report an unsupported-mode diagnostic. | Slices 4-5 add JSON/RPC runners and complete mode selection. |
+| RPC and implicit non-TTY selection are not runnable yet | Slice 4 implements explicit `--mode json`; RPC and implicit non-TTY selection still report an unsupported-mode diagnostic. | Slice 5 adds RPC; Slice 6 closes process/session lifecycle selection. |
 | Print mode uses a temporary session | PI persists print-mode sessions by default, while session path, continue, resume, fork, and no-session flags are not implemented yet. | Slice 6 must replace temporary storage with PI-compatible session lifecycle selection. |
 
 ## Slice 1 Result
 
-Slices 1-3 are complete. The root command, injectable I/O, runtime factory, and
-print runner pin lowercase mode parsing, repeated-mode last-value acceptance,
-settings model resolution, ephemeral `--api-key` behavior, final-text stdout,
-tool rounds, provider failures, cancellation, and temporary-session cleanup.
+Slices 1-4 are complete. The root command, injectable I/O, runtime factory,
+print runner, and JSON runner pin lowercase mode parsing, repeated-mode
+last-value acceptance, settings model resolution, ephemeral `--api-key`
+behavior, final-text stdout, PI-shaped JSONL header/event ordering, streaming
+deltas, provider failures, cancellation, and temporary-session cleanup.
 Slice 4 can now map the same SDK events into the PI JSONL event envelope.
