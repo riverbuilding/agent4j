@@ -144,14 +144,16 @@ structured unsuccessful response, never a silent drop or a process crash.
 | No interactive terminal/TUI or `--resume` picker in Phase 10 | PI's resume picker and project-crossing confirmation require the Phase 12 terminal UI. | Phase 10 supports explicit `--session` and noninteractive lifecycle operations; Phase 12 owns picker parity. |
 | No package-management commands or extension-defined CLI flags | `agent4j` does not yet implement PI package management or extension discovery/execution. | Phase 11 and later package parity work. |
 | Initial RPC subset | Several PI RPC commands depend on model catalog mutation, session tree UI semantics, direct bash, and extensions. | Slice 5 establishes framing and core session/prompt commands, then expand from audited PI commands. |
-| RPC and implicit non-TTY selection are not runnable yet | Slice 4 implements explicit `--mode json`; RPC and implicit non-TTY selection still report an unsupported-mode diagnostic. | Slice 5 adds RPC; Slice 6 closes process/session lifecycle selection. |
+| RPC steering/follow-up delivery occurs after the active SDK prompt rather than inside its live AgentLoop queue | `AgentSession` currently accepts queues only when a prompt starts, while PI mutates the active session queue during streaming. | Add runtime-owned live queue operations before Phase 10 closeout. |
+| Implicit non-TTY selection is not runnable yet | Slices 3-5 implement explicit print, JSON, and RPC modes; automatic process-mode selection remains absent. | Slice 6 closes process/session lifecycle selection. |
 | Print mode uses a temporary session | PI persists print-mode sessions by default, while session path, continue, resume, fork, and no-session flags are not implemented yet. | Slice 6 must replace temporary storage with PI-compatible session lifecycle selection. |
 
 ## Slice 1 Result
 
-Slices 1-4 are complete. The root command, injectable I/O, runtime factory,
-print runner, and JSON runner pin lowercase mode parsing, repeated-mode
-last-value acceptance, settings model resolution, ephemeral `--api-key`
-behavior, final-text stdout, PI-shaped JSONL header/event ordering, streaming
-deltas, provider failures, cancellation, and temporary-session cleanup.
-Slice 4 can now map the same SDK events into the PI JSONL event envelope.
+Slices 1-5 are complete. The root command, injectable I/O, runtime factory,
+print runner, JSON runner, and RPC runner pin lowercase mode parsing,
+repeated-mode last-value acceptance, settings model resolution, ephemeral
+`--api-key` behavior, final-text stdout, PI-shaped JSONL event ordering,
+streaming deltas, correlated protocol responses, malformed-input recovery,
+orderly shutdown, provider failures, cancellation, and temporary-session
+cleanup.

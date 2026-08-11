@@ -6,6 +6,7 @@ import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Spec;
 
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +23,8 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     private final CliEnvironment environment;
     private final PrintModeRunner printModeRunner;
     private final JsonEventModeRunner jsonEventModeRunner;
+    private final RpcModeRunner rpcModeRunner;
+    private final Reader input;
 
     @Spec
     private CommandSpec commandSpec;
@@ -49,28 +52,42 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     private List<String> messages = List.of();
 
     Agent4jRootCommand(CliRuntimeFactory runtimeFactory, CliEnvironment environment) {
-        this(runtimeFactory, environment, new PrintModeRunner(), new JsonEventModeRunner());
+        this(runtimeFactory, environment, new PrintModeRunner(), new JsonEventModeRunner(), new RpcModeRunner(),
+                new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8));
     }
 
     Agent4jRootCommand(CliRuntimeFactory runtimeFactory, CliEnvironment environment, PrintModeRunner printModeRunner) {
-        this(runtimeFactory, environment, printModeRunner, new JsonEventModeRunner());
+        this(runtimeFactory, environment, printModeRunner, new JsonEventModeRunner(), new RpcModeRunner(),
+                new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8));
     }
 
     Agent4jRootCommand(
             CliRuntimeFactory runtimeFactory,
             CliEnvironment environment,
             PrintModeRunner printModeRunner,
-            JsonEventModeRunner jsonEventModeRunner
+            JsonEventModeRunner jsonEventModeRunner,
+            RpcModeRunner rpcModeRunner,
+            Reader input
     ) {
         this.runtimeFactory = runtimeFactory;
         this.environment = environment;
         this.printModeRunner = printModeRunner;
         this.jsonEventModeRunner = jsonEventModeRunner;
+        this.rpcModeRunner = rpcModeRunner;
+        this.input = input;
     }
 
     @Override
     public Integer call() throws Exception {
         CliRuntime runtime = runtimeFactory.create(runtimeRequest());
+        if (mode() == CliMode.RPC) {
+            return rpcModeRunner.run(
+                    runtime,
+                    environment,
+                    input,
+                    commandSpec.commandLine().getOut(),
+                    commandSpec.commandLine().getErr());
+        }
         if (mode() == CliMode.JSON) {
             return jsonEventModeRunner.run(
                     runtime,

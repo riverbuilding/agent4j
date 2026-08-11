@@ -3,6 +3,9 @@ package com.agent4j.cli;
 import picocli.CommandLine;
 
 import java.io.PrintWriter;
+import java.io.Reader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 
 public final class Agent4jCli {
     private Agent4jCli() {
@@ -27,7 +30,19 @@ public final class Agent4jCli {
             PrintWriter err,
             String... args
     ) {
-        Agent4jRootCommand command = new Agent4jRootCommand(runtimeFactory, environment);
+        return execute(runtimeFactory, environment, new InputStreamReader(System.in, StandardCharsets.UTF_8), out, err, args);
+    }
+
+    static int execute(
+            CliRuntimeFactory runtimeFactory,
+            CliEnvironment environment,
+            Reader input,
+            PrintWriter out,
+            PrintWriter err,
+            String... args
+    ) {
+        Agent4jRootCommand command = new Agent4jRootCommand(
+                runtimeFactory, environment, new PrintModeRunner(), new JsonEventModeRunner(), new RpcModeRunner(), input);
         CommandLine commandLine = new CommandLine(command);
         commandLine.setOut(out);
         commandLine.setErr(err);

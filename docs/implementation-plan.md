@@ -838,6 +838,16 @@ Implementation slices:
      observable contract.
    - Support request correlation, malformed input handling, and orderly
      shutdown before adding interactive controls.
+   - Done with `RpcModeRunner`: `--mode rpc` reads LF-delimited JSON objects,
+     writes correlated `response` records and mapped runtime events on stdout,
+     continues after malformed or unsupported input, and shuts down in order on
+     `shutdown` or EOF. It supports `prompt`, `steer`, `follow_up`, `abort`,
+     `new_session`, `get_state`, `get_messages`, `set_session_name`, and
+     `shutdown`. Prompt acceptance is acknowledged before the asynchronous
+     worker emits events. Because the current SDK exposes queues only on a
+     `PromptRequest`, queued steering/follow-up messages are drained in PI
+     precedence order after the active SDK prompt completes; live in-turn queue
+     injection remains a Phase 10 parity gap.
 6. **Session Lifecycle Flags**
    - Add new, continue, resume, no-session, explicit session path/ID, fork, and
      name behavior as thin mappings to `AgentSessionRuntime`.
