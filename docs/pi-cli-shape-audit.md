@@ -13,10 +13,13 @@ Primary references:
 - [JSON event-stream contract](https://github.com/earendil-works/pi/blob/v0.82.1/packages/coding-agent/docs/json.md)
 - [RPC protocol](https://github.com/earendil-works/pi/blob/v0.82.1/packages/coding-agent/docs/rpc.md)
 
-`agent4j-cli` currently contains only the Maven module and its dependencies on
-`agent4j-coding` and Picocli. It has no command classes, main class, process I/O
-adapter, or tests. The Phase 9 `AgentSessionRuntime` and `LoginService` are the
-only allowed owners of session and authentication behavior.
+`agent4j-cli` now has `Agent4jCli`, `Agent4jRootCommand`, and an injectable
+`CliRuntimeFactory`. `DefaultCliRuntimeFactory` discovers resources/settings,
+builds `CodingAgentRuntimeServices` with `CodingTools`, resolves the configured
+OpenAI model, and returns `CodingAgentSessionRuntime`. It does not construct an
+agent loop or provider execution path in the CLI module. The Phase 9
+`AgentSessionRuntime` and `LoginService` remain the only owners of session and
+authentication behavior.
 
 ## PI Command Surface
 
@@ -141,10 +144,12 @@ structured unsuccessful response, never a silent drop or a process crash.
 | No interactive terminal/TUI or `--resume` picker in Phase 10 | PI's resume picker and project-crossing confirmation require the Phase 12 terminal UI. | Phase 10 supports explicit `--session` and noninteractive lifecycle operations; Phase 12 owns picker parity. |
 | No package-management commands or extension-defined CLI flags | `agent4j` does not yet implement PI package management or extension discovery/execution. | Phase 11 and later package parity work. |
 | Initial RPC subset | Several PI RPC commands depend on model catalog mutation, session tree UI semantics, direct bash, and extensions. | Slice 5 establishes framing and core session/prompt commands, then expand from audited PI commands. |
+| Bootstrap command does not yet run a selected mode | Slice 2 validates and constructs a runtime, then reports that no runnable mode exists. | Slices 3-5 replace this placeholder with print, JSON, and RPC runners. |
 
 ## Slice 1 Result
 
-Slice 1 is complete when this audit remains the source of truth for subsequent
-CLI slices. Slice 2 must implement only the audit's bootstrap boundary and add
-tests for mode precedence, flag precedence, and unsupported-option failures
-before adding a real provider-backed command.
+Slice 1 is complete and Slice 2 now supplies the root command, injectable I/O,
+and runtime factory. Its tests pin lowercase mode parsing, repeated-mode
+last-value acceptance, injected runtime creation, settings model resolution,
+and ephemeral `--api-key` behavior. Slice 3 may now add print-mode execution
+without taking ownership of sessions, tools, provider transport, or credentials.

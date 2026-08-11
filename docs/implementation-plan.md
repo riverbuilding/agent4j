@@ -803,6 +803,14 @@ Implementation slices:
    - Add the Picocli root command and a test-injectable runtime factory.
    - Resolve settings, workspace, provider/model, tools, and credential store
      through the Phase 9 runtime services rather than duplicating loop setup.
+   - Done for the bootstrap boundary in `agent4j-cli`: `Agent4jCli` and
+     `Agent4jRootCommand` parse PI-shaped baseline options, while
+     `DefaultCliRuntimeFactory` discovers global/project resources, resolves
+     the configured OpenAI model, installs `CodingTools` in
+     `CodingAgentRuntimeServices`, and returns a `CodingAgentSessionRuntime`.
+     A command-line API key is held only by an in-memory runtime credential
+     store; the default path uses Phase 9's persistent credential store. Print,
+     JSON, and RPC execution remain the following slices.
 3. **Print Mode**
    - Implement a non-interactive prompt command that writes assistant output to
      stdout and diagnostics to stderr.
