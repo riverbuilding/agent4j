@@ -28,7 +28,7 @@ PI has three process modes:
 | PI invocation | Semantics | Phase 10 target |
 | --- | --- | --- |
 | `pi` | Interactive terminal session | Defer terminal UI to Phase 12. Phase 10 supplies only the root parsing and runtime boundary it will use. |
-| `pi -p <prompt>` / non-TTY invocation | Run prompt(s), write final assistant text, then exit | Implement in Slice 3. |
+| `pi -p <prompt>` / non-TTY invocation | Run prompt(s), write final assistant text, then exit | Implemented for explicit `-p` in Slice 3. Non-TTY auto-selection arrives with JSON/process I/O work. |
 | `pi --mode json <prompt>` | One-shot run that writes a session header and events as JSONL | Implement in Slice 4. |
 | `pi --mode rpc` | Long-lived JSONL command/event process | Implement in Slice 5. |
 
@@ -144,12 +144,13 @@ structured unsuccessful response, never a silent drop or a process crash.
 | No interactive terminal/TUI or `--resume` picker in Phase 10 | PI's resume picker and project-crossing confirmation require the Phase 12 terminal UI. | Phase 10 supports explicit `--session` and noninteractive lifecycle operations; Phase 12 owns picker parity. |
 | No package-management commands or extension-defined CLI flags | `agent4j` does not yet implement PI package management or extension discovery/execution. | Phase 11 and later package parity work. |
 | Initial RPC subset | Several PI RPC commands depend on model catalog mutation, session tree UI semantics, direct bash, and extensions. | Slice 5 establishes framing and core session/prompt commands, then expand from audited PI commands. |
-| Bootstrap command does not yet run a selected mode | Slice 2 validates and constructs a runtime, then reports that no runnable mode exists. | Slices 3-5 replace this placeholder with print, JSON, and RPC runners. |
+| JSON/RPC and implicit non-TTY selection are not runnable yet | Slice 3 implements explicit `-p`; the remaining modes still report an unsupported-mode diagnostic. | Slices 4-5 add JSON/RPC runners and complete mode selection. |
+| Print mode uses a temporary session | PI persists print-mode sessions by default, while session path, continue, resume, fork, and no-session flags are not implemented yet. | Slice 6 must replace temporary storage with PI-compatible session lifecycle selection. |
 
 ## Slice 1 Result
 
-Slice 1 is complete and Slice 2 now supplies the root command, injectable I/O,
-and runtime factory. Its tests pin lowercase mode parsing, repeated-mode
-last-value acceptance, injected runtime creation, settings model resolution,
-and ephemeral `--api-key` behavior. Slice 3 may now add print-mode execution
-without taking ownership of sessions, tools, provider transport, or credentials.
+Slices 1-3 are complete. The root command, injectable I/O, runtime factory, and
+print runner pin lowercase mode parsing, repeated-mode last-value acceptance,
+settings model resolution, ephemeral `--api-key` behavior, final-text stdout,
+tool rounds, provider failures, cancellation, and temporary-session cleanup.
+Slice 4 can now map the same SDK events into the PI JSONL event envelope.

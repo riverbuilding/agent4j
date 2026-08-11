@@ -816,6 +816,12 @@ Implementation slices:
      stdout and diagnostics to stderr.
    - Cover success, tool use, provider failures, and cancellation with a fake
      provider.
+   - Done with `PrintModeRunner`: `agent4j -p <prompt>` creates an isolated
+     temporary SDK session, runs through `AgentSessionRuntime`, writes the final
+     assistant text to stdout, and writes failures/aborts to stderr with a
+     nonzero exit code. Fake-model tests cover text, a tool-call round, provider
+     failure, cancellation, temporary-session cleanup, and root-command wiring.
+     Persistent session selection remains Slice 6 work.
 4. **JSON Event Mode**
    - Implement JSONL output from `AgentEvent` with stable event envelopes,
      sequencing, and no human-oriented stdout noise.

@@ -3,6 +3,8 @@ package com.agent4j.cli;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Spec;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +20,10 @@ import java.util.concurrent.Callable;
 public final class Agent4jRootCommand implements Callable<Integer> {
     private final CliRuntimeFactory runtimeFactory;
     private final CliEnvironment environment;
+    private final PrintModeRunner printModeRunner;
+
+    @Spec
+    private CommandSpec commandSpec;
 
     @Option(
             names = "--mode",
@@ -42,14 +48,28 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     private List<String> messages = List.of();
 
     Agent4jRootCommand(CliRuntimeFactory runtimeFactory, CliEnvironment environment) {
+        this(runtimeFactory, environment, new PrintModeRunner());
+    }
+
+    Agent4jRootCommand(CliRuntimeFactory runtimeFactory, CliEnvironment environment, PrintModeRunner printModeRunner) {
         this.runtimeFactory = runtimeFactory;
         this.environment = environment;
+        this.printModeRunner = printModeRunner;
     }
 
     @Override
     public Integer call() throws Exception {
-        runtimeFactory.create(runtimeRequest());
-        throw new IllegalStateException("no runnable CLI mode is implemented yet; Phase 10 Slice 3 adds print mode");
+        CliRuntime runtime = runtimeFactory.create(runtimeRequest());
+        if (print) {
+            return printModeRunner.run(
+                    runtime,
+                    environment,
+                    messages,
+                    Optional.empty(),
+                    commandSpec.commandLine().getOut(),
+                    commandSpec.commandLine().getErr());
+        }
+        throw new IllegalStateException("requested CLI mode is not implemented yet; Phase 10 Slices 4-5 add JSON and RPC modes");
     }
 
     CliRuntimeRequest runtimeRequest() {
