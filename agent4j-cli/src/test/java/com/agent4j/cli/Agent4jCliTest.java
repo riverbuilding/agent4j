@@ -147,6 +147,24 @@ class Agent4jCliTest {
     }
 
     @Test
+    void invalidSessionFlagsFailBeforeRuntimeBootstrap() {
+        StringWriter stderr = new StringWriter();
+        CliRuntimeFactory factory = request -> {
+            throw new AssertionError("invalid session flags must not construct a runtime");
+        };
+
+        int exitCode = Agent4jCli.execute(
+                factory,
+                environment(),
+                new PrintWriter(new StringWriter()),
+                new PrintWriter(stderr),
+                "--print", "--fork", "source", "--continue", "hello");
+
+        assertThat(exitCode).isEqualTo(1);
+        assertThat(stderr.toString()).contains("--fork cannot be combined");
+    }
+
+    @Test
     void authCommandsDelegateToLoginServiceWithoutPrintingSecrets() throws Exception {
         FakeLoginService login = new FakeLoginService();
         CliRuntimeFactory factory = request -> runtime(null, login);

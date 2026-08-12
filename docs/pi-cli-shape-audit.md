@@ -28,9 +28,9 @@ PI has three process modes:
 | PI invocation | Semantics | Phase 10 target |
 | --- | --- | --- |
 | `pi` | Interactive terminal session | Defer terminal UI to Phase 12. Phase 10 supplies only the root parsing and runtime boundary it will use. |
-| `pi -p <prompt>` / non-TTY invocation | Run prompt(s), write final assistant text, then exit | Implemented for explicit `-p` in Slice 3. Non-TTY auto-selection arrives with JSON/process I/O work. |
+| `pi -p <prompt>` / non-TTY invocation | Run prompt(s), write final assistant text, then exit | Implemented for explicit `-p` in Slice 3. Automatic non-TTY selection remains a recorded divergence. |
 | `pi --mode json <prompt>` | One-shot run that writes a session header and events as JSONL | Implemented in Slice 4. |
-| `pi --mode rpc` | Long-lived JSONL command/event process | Implement in Slice 5. |
+| `pi --mode rpc` | Long-lived JSONL command/event process | Implemented in Slice 5. |
 
 PI also has package-management commands (`install`, `remove`, `uninstall`,
 `update`, `list`, `config`). They depend on PI package and extension machinery.
@@ -64,7 +64,7 @@ already implemented in agent4j:
 
 | PI flags | Required behavior | Planned slice |
 | --- | --- | --- |
-| `--provider`, `--model`, `--api-key`, `--thinking` | CLI runtime overrides; API keys are runtime-only and never written to session or credential files | Provider/model/API-key selection implemented for the current OpenAI bootstrap; thinking remains Slice 7 follow-up. |
+| `--provider`, `--model`, `--api-key`, `--thinking` | CLI runtime overrides; API keys are runtime-only and never written to session or credential files | Provider/model/API-key selection implemented for the current OpenAI bootstrap; `--thinking` remains unsupported. |
 | `--print` / `-p`, `--mode json`, `--mode rpc` | Mode selection above | 2 through 5 |
 | `--continue` / `-c`, `--session <path|id>`, `--session-id <id>`, `--fork <path|id>`, `--session-dir`, `--no-session`, `--name` / `-n` | Delegates to `AgentSessionRuntime` and `SessionManager` | Implemented in Slice 6. |
 | `--tools` / `-t`, `--exclude-tools` / `-xt`, `--no-tools` / `-nt`, `--no-builtin-tools` / `-nbt` | Validate and construct a tool selection; do not recreate tools inside the CLI mode runner | Implemented in Slice 7. |
@@ -144,17 +144,17 @@ structured unsuccessful response, never a silent drop or a process crash.
 | No interactive terminal/TUI or `--resume` picker in Phase 10 | PI's resume picker and project-crossing confirmation require the Phase 12 terminal UI. | Phase 10 supports explicit `--session` and noninteractive lifecycle operations; Phase 12 owns picker parity. |
 | No package-management commands or extension-defined CLI flags | `agent4j` does not yet implement PI package management or extension discovery/execution. | Phase 11 and later package parity work. |
 | Initial RPC subset | Several PI RPC commands depend on model catalog mutation, session tree UI semantics, direct bash, and extensions. | Slice 5 establishes framing and core session/prompt commands, then expand from audited PI commands. |
-| RPC steering/follow-up delivery occurs after the active SDK prompt rather than inside its live AgentLoop queue | `AgentSession` currently accepts queues only when a prompt starts, while PI mutates the active session queue during streaming. | Add runtime-owned live queue operations before Phase 10 closeout. |
-| Implicit non-TTY selection is not runnable yet | Slices 3-5 implement explicit print, JSON, and RPC modes; automatic process-mode selection remains absent. | Slice 6 closes process/session lifecycle selection. |
+| RPC steering/follow-up delivery occurs after the active SDK prompt rather than inside its live AgentLoop queue | `AgentSession` currently accepts queues only when a prompt starts, while PI mutates the active session queue during streaming. | Add runtime-owned live queue operations in a later runtime/CLI parity slice. |
+| Implicit non-TTY selection is not runnable yet | Agent4j requires explicit `--print`, `--mode json`, or `--mode rpc`; PI auto-selects print when stdin or stdout is non-TTY. | Add process TTY detection and PI prompt-input handling in a later CLI parity slice. |
 | `--resume` selects the most recent local session | PI presents an interactive local/global session picker; Phase 10 has no terminal UI. | Phase 12 owns picker parity. |
 | Session ID search is local to the selected session directory | PI falls back to global project search and requests confirmation before cross-project forking. | Add global session discovery with Phase 12 interaction policy. |
 | Current CLI runtime factory constructs OpenAI only | The provider abstraction supports more providers, but CLI provider registry wiring has not expanded beyond Phase 9's OpenAI baseline. | Add configured Anthropic and future-provider bootstrap paths with their provider settings. |
 | CLI auth commands expose the Phase 9 OpenAI browser flow but do not prove production endpoints | Browser/OAuth transport correctness needs a real subscription interaction outside CI. | Keep Phase 9's opt-in live test and production endpoint verification as the closure evidence. |
-| Print mode uses a temporary session | PI persists print-mode sessions by default, while session path, continue, resume, fork, and no-session flags are not implemented yet. | Slice 6 must replace temporary storage with PI-compatible session lifecycle selection. |
+| Agent4j session filenames use random UUIDs | PI names new session files with a timestamp and session ID. Both are JSONL sessions under the same cwd-derived directory, but the file artifact is not identical. | Align naming only after session ID/file-name compatibility is explicitly tested. |
 
-## Slice 1 Result
+## Phase 10 Closeout
 
-Slices 1-8 are complete. The root command, injectable I/O, runtime factory,
+Slices 1-9 are complete. The root command, injectable I/O, runtime factory,
 print runner, JSON runner, and RPC runner pin lowercase mode parsing,
 repeated-mode last-value acceptance, settings model resolution, ephemeral
 `--api-key` behavior, final-text stdout, PI-shaped JSONL event ordering,
@@ -163,4 +163,15 @@ orderly shutdown, provider failures, cancellation, and temporary-session
 cleanup. Session lifecycle flags now delegate to SDK operations, and typed tool
 selection filters the runtime-owned registry with strict argument validation.
 Auth subcommands delegate to Phase 9 `LoginService` without token-bearing
-stdout output.
+stdout output. The closeout suite covers print success/tool/failure/abort,
+JSON event serialization/failure/abort, RPC framing/recovery/shutdown/session
+commands, session create/resume/fork/continue/conflict handling, tool selection,
+and sanitized auth commands. Session conflicts are validated before runtime
+creation, matching PI bootstrap ordering.
+
+The Phase 10 implementation is complete, but it does not claim the recorded
+divergences above are closed. In particular, live RPC queue mutation, automatic
+non-TTY selection, the interactive resume picker, global session discovery,
+multi-provider CLI construction, package/extension commands, and the remaining
+RPC command set belong to their respective later phases. Phase 9 production
+OAuth verification also remains independent of this CLI closeout.

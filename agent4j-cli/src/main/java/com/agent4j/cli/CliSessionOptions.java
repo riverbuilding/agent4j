@@ -24,4 +24,18 @@ record CliSessionOptions(
     static CliSessionOptions defaults() {
         return new CliSessionOptions(false, false, false, Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
     }
+
+    static void validate(CliSessionOptions options) {
+        if (options.fork().isPresent() && (options.session().isPresent() || options.continueSession() || options.resume() || options.noSession())) {
+            throw new IllegalArgumentException("--fork cannot be combined with --session, --continue, --resume, or --no-session");
+        }
+        if (options.sessionId().isPresent() && (options.session().isPresent() || options.continueSession() || options.resume())) {
+            throw new IllegalArgumentException("--session-id cannot be combined with --session, --continue, or --resume");
+        }
+        options.name().ifPresent(name -> {
+            if (name.isBlank()) {
+                throw new IllegalArgumentException("--name requires a non-empty value");
+            }
+        });
+    }
 }

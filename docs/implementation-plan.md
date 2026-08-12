@@ -890,6 +890,14 @@ Implementation slices:
      selection, and auth commands.
    - Re-audit PI command names, event payloads, output streams, and exit codes;
      update the ADR before Phase 11 begins.
+   - Done. `agent4j-cli` now has fake-provider contract coverage across print,
+     JSON, RPC, session lifecycle, model/tool selection, and sanitized auth
+     commands. The closeout re-audit confirms PI-shaped command names, JSONL
+     events, stdout/stderr separation, and nonzero failure behavior for the
+     implemented subset. Session conflicts are rejected before runtime
+     construction, matching PI bootstrap ordering. Remaining differences are
+     explicitly retained in `docs/pi-cli-shape-audit.md` and ADR 0002 rather
+     than represented as complete parity.
 
 Exit criteria:
 
@@ -898,6 +906,15 @@ Exit criteria:
 - Print and RPC modes have pinned stdout/stderr and exit-code contracts.
 - CLI commands delegate to the Phase 9 SDK/runtime rather than constructing
   independent sessions, loops, or auth state.
+
+### Phase 10 Closeout Status
+
+Phase 10 implementation is complete for its scoped print, JSON, RPC, session,
+selection, and auth command surface. The current CLI is not yet full PI CLI
+parity: live RPC queue mutation, automatic non-TTY mode selection, interactive
+resume/global session selection, multi-provider construction, package and
+extension commands, and the broader RPC protocol remain tracked divergences.
+Phase 9 production OAuth verification remains separately pending.
 
 ## Phase 11: Extension SPI
 

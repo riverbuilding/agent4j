@@ -101,8 +101,10 @@ public final class Agent4jRootCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        CliSessionOptions sessionOptions = sessionOptions();
+        CliSessionOptions.validate(sessionOptions);
         CliRuntime runtime = runtimeFactory.create(runtimeRequest());
-        CliSessionLifecycle sessions = new CliSessionLifecycle(runtime, environment, sessionOptions());
+        CliSessionLifecycle sessions = new CliSessionLifecycle(runtime, environment, sessionOptions);
         try {
             if (mode() == CliMode.RPC) {
                 return rpcModeRunner.run(runtime, environment, input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
@@ -113,7 +115,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
             if (print) {
                 return printModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
-            throw new IllegalStateException("requested CLI mode is not implemented yet; Phase 10 Slice 6 adds session lifecycle selection");
+            throw new IllegalStateException("interactive text mode is not implemented; use --print, --mode json, or --mode rpc");
         } finally {
             sessions.close();
         }

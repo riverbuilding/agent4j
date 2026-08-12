@@ -25,7 +25,7 @@ final class CliSessionLifecycle implements AutoCloseable {
         this.runtime = runtime;
         this.environment = environment;
         this.options = options;
-        validate();
+        CliSessionOptions.validate(options);
     }
 
     AgentSession open() throws Exception {
@@ -130,20 +130,6 @@ final class CliSessionLifecycle implements AutoCloseable {
 
     private Path newSessionFile() {
         return directory().resolve(UUID.randomUUID() + ".jsonl");
-    }
-
-    private void validate() {
-        if (options.fork().isPresent() && (options.session().isPresent() || options.continueSession() || options.resume() || options.noSession())) {
-            throw new IllegalArgumentException("--fork cannot be combined with --session, --continue, --resume, or --no-session");
-        }
-        if (options.sessionId().isPresent() && (options.session().isPresent() || options.continueSession() || options.resume())) {
-            throw new IllegalArgumentException("--session-id cannot be combined with --session, --continue, or --resume");
-        }
-        options.name().ifPresent(name -> {
-            if (name.isBlank()) {
-                throw new IllegalArgumentException("--name requires a non-empty value");
-            }
-        });
     }
 
     @Override
