@@ -876,6 +876,15 @@ Implementation slices:
      `LoginService`, including browser-login invocation without token output.
    - Keep production endpoint verification and live-login evidence owned by
      the Phase 9 gaps above.
+   - Done with Picocli subcommands: `login`, `logout`, `auth-status`, and
+     `refresh` delegate to `AgentSessionRuntime.loginService()`. `login`
+     invokes the one-call OpenAI browser subscription flow. Status output is
+     restricted to provider, authentication mode/state, and expiry: it never
+     prints `AuthStatus.metadata()`, access tokens, API keys, or refresh
+     tokens. Auth-only bootstrap supplies an internal OpenAI model reference
+     when no model is configured, solely to assemble existing runtime services;
+     it never issues a model request. Production endpoint verification and the
+     opt-in live browser-login evidence remain Phase 9 closure work.
 9. **CLI Contract Closeout**
    - Run fake-provider end-to-end coverage for print, JSON, RPC, session,
      selection, and auth commands.

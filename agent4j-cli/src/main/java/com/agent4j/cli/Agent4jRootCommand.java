@@ -16,7 +16,13 @@ import java.util.concurrent.Callable;
         name = "agent4j",
         mixinStandardHelpOptions = true,
         version = "agent4j 0.1.0-SNAPSHOT",
-        description = "Java PI-compatible coding agent."
+        description = "Java PI-compatible coding agent.",
+        subcommands = {
+                AuthCommands.LoginCommand.class,
+                AuthCommands.LogoutCommand.class,
+                AuthCommands.StatusCommand.class,
+                AuthCommands.RefreshCommand.class
+        }
 )
 public final class Agent4jRootCommand implements Callable<Integer> {
     private final CliRuntimeFactory runtimeFactory;
@@ -125,6 +131,25 @@ public final class Agent4jRootCommand implements Callable<Integer> {
                         excludedTools,
                         noTools,
                         noBuiltinTools));
+    }
+
+    CliRuntimeFactory runtimeFactory() {
+        return runtimeFactory;
+    }
+
+    CliRuntimeRequest authRuntimeRequest(String authProviderId) {
+        Optional<String> resolvedProvider = Optional.ofNullable(authProviderId).or(() -> Optional.ofNullable(provider));
+        Optional<String> resolvedModel = Optional.ofNullable(model);
+        if (resolvedProvider.filter("openai"::equals).isPresent() && resolvedModel.isEmpty()) {
+            // Authentication does not call the model; this only satisfies the current OpenAI runtime assembly boundary.
+            resolvedModel = Optional.of("gpt-5");
+        }
+        return new CliRuntimeRequest(environment.cwd(), environment.homeDirectory(), resolvedProvider, resolvedModel,
+                Optional.ofNullable(apiKey), CliToolSelection.defaults());
+    }
+
+    CommandSpec commandSpec() {
+        return commandSpec;
     }
 
     CliMode mode() {
