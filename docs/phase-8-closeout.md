@@ -39,7 +39,7 @@ internals into the SDK, CLI, or extension surfaces.
   made providers ready for access-token and subscription-style auth resolution.
 - Phase 10 owns CLI modes and thin login/logout/status wrappers over the Phase 9
   runtime auth API.
-- Phase 11 owns exact extension hook names, discovery, and hook exception
+- Phase 12 owns exact extension hook names, discovery, and hook exception
   policy.
 - Later source audits still need exact PI text/payload parity for built-in tool
   descriptions, image read payloads, edit multi-replacement behavior, streaming

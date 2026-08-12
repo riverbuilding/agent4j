@@ -27,7 +27,7 @@ PI has three process modes:
 
 | PI invocation | Semantics | Phase 10 target |
 | --- | --- | --- |
-| `pi` | Interactive terminal session | Defer terminal UI to Phase 12. Phase 10 supplies only the root parsing and runtime boundary it will use. |
+| `pi` | Interactive terminal session | Defer terminal UI to Phase 11. Phase 10 supplies only the root parsing and runtime boundary it will use. |
 | `pi -p <prompt>` / non-TTY invocation | Run prompt(s), write final assistant text, then exit | Implemented for explicit `-p` in Slice 3. Automatic non-TTY selection remains a recorded divergence. |
 | `pi --mode json <prompt>` | One-shot run that writes a session header and events as JSONL | Implemented in Slice 4. |
 | `pi --mode rpc` | Long-lived JSONL command/event process | Implemented in Slice 5. |
@@ -35,7 +35,7 @@ PI has three process modes:
 PI also has package-management commands (`install`, `remove`, `uninstall`,
 `update`, `list`, `config`). They depend on PI package and extension machinery.
 They are outside Phase 10 and must not be represented as available agent4j CLI
-commands before Phase 11 and package-management parity work exist.
+commands before Phase 12 and package-management parity work exist.
 
 ## Mode Selection And Input
 
@@ -141,13 +141,13 @@ structured unsuccessful response, never a silent drop or a process crash.
 | Divergence | Reason | Follow-up |
 | --- | --- | --- |
 | Picocli command model rather than PI's handwritten two-pass parser | Java process integration needs type-safe command binding; behavior, precedence, output, and exit contracts are the compatibility target. | Slice 2 tests pin externally observable precedence. |
-| No interactive terminal/TUI or `--resume` picker in Phase 10 | PI's resume picker and project-crossing confirmation require the Phase 12 terminal UI. | Phase 10 supports explicit `--session` and noninteractive lifecycle operations; Phase 12 owns picker parity. |
-| No package-management commands or extension-defined CLI flags | `agent4j` does not yet implement PI package management or extension discovery/execution. | Phase 11 and later package parity work. |
+| No interactive terminal/TUI or `--resume` picker in Phase 10 | PI's resume picker and project-crossing confirmation require the Phase 11 terminal UI. | Phase 10 supports explicit `--session` and noninteractive lifecycle operations; Phase 11 owns picker parity. |
+| No package-management commands or extension-defined CLI flags | `agent4j` does not yet implement PI package management or extension discovery/execution. | Phase 12 and later package parity work. |
 | Initial RPC subset | Several PI RPC commands depend on model catalog mutation, session tree UI semantics, direct bash, and extensions. | Slice 5 establishes framing and core session/prompt commands, then expand from audited PI commands. |
 | RPC steering/follow-up delivery occurs after the active SDK prompt rather than inside its live AgentLoop queue | `AgentSession` currently accepts queues only when a prompt starts, while PI mutates the active session queue during streaming. | Add runtime-owned live queue operations in a later runtime/CLI parity slice. |
 | Implicit non-TTY selection is not runnable yet | Agent4j requires explicit `--print`, `--mode json`, or `--mode rpc`; PI auto-selects print when stdin or stdout is non-TTY. | Add process TTY detection and PI prompt-input handling in a later CLI parity slice. |
-| `--resume` selects the most recent local session | PI presents an interactive local/global session picker; Phase 10 has no terminal UI. | Phase 12 owns picker parity. |
-| Session ID search is local to the selected session directory | PI falls back to global project search and requests confirmation before cross-project forking. | Add global session discovery with Phase 12 interaction policy. |
+| `--resume` selects the most recent local session | PI presents an interactive local/global session picker; Phase 10 has no terminal UI. | Phase 11 owns picker parity. |
+| Session ID search is local to the selected session directory | PI falls back to global project search and requests confirmation before cross-project forking. | Add global session discovery with Phase 11 interaction policy. |
 | Current CLI runtime factory constructs OpenAI only | The provider abstraction supports more providers, but CLI provider registry wiring has not expanded beyond Phase 9's OpenAI baseline. | Add configured Anthropic and future-provider bootstrap paths with their provider settings. |
 | CLI auth commands expose the Phase 9 OpenAI browser flow but do not prove production endpoints | Browser/OAuth transport correctness needs a real subscription interaction outside CI. | Keep Phase 9's opt-in live test and production endpoint verification as the closure evidence. |
 | Agent4j session filenames use random UUIDs | PI names new session files with a timestamp and session ID. Both are JSONL sessions under the same cwd-derived directory, but the file artifact is not identical. | Align naming only after session ID/file-name compatibility is explicitly tested. |

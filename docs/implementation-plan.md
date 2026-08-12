@@ -889,7 +889,7 @@ Implementation slices:
    - Run fake-provider end-to-end coverage for print, JSON, RPC, session,
      selection, and auth commands.
    - Re-audit PI command names, event payloads, output streams, and exit codes;
-     update the ADR before Phase 11 begins.
+     update the ADR before the next phase begins.
    - Done. `agent4j-cli` now has fake-provider contract coverage across print,
      JSON, RPC, session lifecycle, model/tool selection, and sanitized auth
      commands. The closeout re-audit confirms PI-shaped command names, JSONL
@@ -916,7 +916,35 @@ resume/global session selection, multi-provider construction, package and
 extension commands, and the broader RPC protocol remain tracked divergences.
 Phase 9 production OAuth verification remains separately pending.
 
-## Phase 11: Extension SPI
+## Phase 11: Interactive Shell And TUI
+
+Goal: add human-facing interactive mode after the runtime is stable.
+
+Tasks:
+
+- Mirror PI interaction model, command names, selectors, and queue controls
+  before choosing Java-specific terminal rendering details.
+- Phase 11 Slice 1 is done in `docs/pi-interactive-shape-audit.md`, pinned to
+  PI `0.82.1`. It records the runtime/session ownership boundary, startup and
+  mode-selection contract, prompt/queue/cancellation semantics, renderer
+  progression, selector/command order, and explicitly chooses JLine 3 for the
+  basic line shell while deferring a rich TUI renderer decision. It also records
+  live `AgentSession` queue mutation as a prerequisite for PI-compatible
+  steering/follow-up controls.
+- Implement basic line-oriented interactive shell.
+- Add slash commands.
+- Add model selector.
+- Add session selector.
+- Add queue controls.
+- Add terminal rendering library evaluation.
+- Implement rich TUI only after CLI/RPC behavior is locked down.
+
+Exit criteria:
+
+- Basic interactive mode can run real sessions.
+- Rich TUI has screenshot/manual QA coverage before being treated as parity.
+
+## Phase 12: Extension SPI
 
 Goal: support harness customization without embedding TypeScript first.
 
@@ -924,7 +952,7 @@ Tasks:
 
 - Mirror PI extension lifecycle names and hook timing as the default Java SPI.
   Phase 8 pins current tool-hook timing in `docs/tool-hook-timing-audit.md`;
-  Phase 11 still owns exact extension hook names, discovery, and exception
+  Phase 12 still owns exact extension hook names, discovery, and exception
   policy.
 - Define Java extension interfaces.
 - Add lifecycle hooks:
@@ -940,27 +968,6 @@ Tasks:
 Exit criteria:
 
 - A test extension can register a custom tool and mutate context.
-
-## Phase 12: Interactive Shell And TUI
-
-Goal: add human-facing interactive mode after the runtime is stable.
-
-Tasks:
-
-- Mirror PI interaction model, command names, selectors, and queue controls
-  before choosing Java-specific terminal rendering details.
-- Implement basic line-oriented interactive shell.
-- Add slash commands.
-- Add model selector.
-- Add session selector.
-- Add queue controls.
-- Add terminal rendering library evaluation.
-- Implement rich TUI only after CLI/RPC behavior is locked down.
-
-Exit criteria:
-
-- Basic interactive mode can run real sessions.
-- Rich TUI has screenshot/manual QA coverage before being treated as parity.
 
 ## Phase 13: PI Package Bridge
 
@@ -982,7 +989,7 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Begin Phase 9 SDK/runtime API, starting with the PI-style `AgentSession` and
-   `AgentSessionRuntime` shape.
-2. Keep expanding fixtures with real PI session samples as they become
-   available.
+1. Begin Phase 11 with the basic interactive shell over the established CLI and
+   `AgentSessionRuntime` boundaries.
+2. Keep Phase 9 production OAuth verification separate and expand PI fixtures
+   as they become available.
