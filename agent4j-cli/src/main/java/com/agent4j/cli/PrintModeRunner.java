@@ -38,6 +38,13 @@ public final class PrintModeRunner {
             PrintWriter out,
             PrintWriter err
     ) {
+        return run(runtime, environment, messages, abortSignal, out, err, null);
+    }
+
+    int run(
+            CliRuntime runtime, CliEnvironment environment, List<String> messages, Optional<AbortSignal> abortSignal,
+            PrintWriter out, PrintWriter err, CliSessionLifecycle lifecycle
+    ) {
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(environment, "environment");
         Objects.requireNonNull(messages, "messages");
@@ -52,12 +59,14 @@ public final class PrintModeRunner {
 
         Path sessionDirectory = null;
         try {
-            sessionDirectory = Files.createTempDirectory(temporaryDirectory, "agent4j-print-");
-            AgentSession session = runtime.sessionRuntime().createSession(new CreateSessionRequest(
-                    sessionDirectory.resolve("session.jsonl"),
-                    environment.cwd(),
-                    Optional.empty(),
-                    Optional.of(runtime.defaultModel())));
+            AgentSession session;
+            if (lifecycle == null) {
+                sessionDirectory = Files.createTempDirectory(temporaryDirectory, "agent4j-print-");
+                session = runtime.sessionRuntime().createSession(new CreateSessionRequest(
+                        sessionDirectory.resolve("session.jsonl"), environment.cwd(), Optional.empty(), Optional.of(runtime.defaultModel())));
+            } else {
+                session = lifecycle.open();
+            }
             PromptResult result = session.prompt(new PromptRequest(
                     prompt,
                     Optional.of(runtime.defaultModel()),

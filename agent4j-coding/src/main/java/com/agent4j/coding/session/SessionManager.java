@@ -56,12 +56,27 @@ public final class SessionManager {
     }
 
     public static SessionManager create(Path sessionFile, Path cwd) throws IOException {
-        return create(sessionFile, cwd, new SessionJsonlCodec(), SessionIdGenerator.randomHex(), Clock.systemUTC());
+        return create(sessionFile, cwd, null, new SessionJsonlCodec(), SessionIdGenerator.randomHex(), Clock.systemUTC());
+    }
+
+    public static SessionManager create(Path sessionFile, Path cwd, String sessionId) throws IOException {
+        return create(sessionFile, cwd, sessionId, new SessionJsonlCodec(), SessionIdGenerator.randomHex(), Clock.systemUTC());
     }
 
     public static SessionManager create(
             Path sessionFile,
             Path cwd,
+            SessionJsonlCodec codec,
+            SessionIdGenerator idGenerator,
+            Clock clock
+    ) throws IOException {
+        return create(sessionFile, cwd, null, codec, idGenerator, clock);
+    }
+
+    private static SessionManager create(
+            Path sessionFile,
+            Path cwd,
+            String sessionId,
             SessionJsonlCodec codec,
             SessionIdGenerator idGenerator,
             Clock clock
@@ -73,7 +88,7 @@ public final class SessionManager {
         ObjectNode headerPayload = codec.createObjectNode();
         headerPayload.put("type", SessionEntryType.SESSION.wireName());
         headerPayload.put("version", CURRENT_SESSION_VERSION);
-        headerPayload.put("id", UUID.randomUUID().toString());
+        headerPayload.put("id", sessionId == null ? UUID.randomUUID().toString() : sessionId);
         headerPayload.put("timestamp", Instant.now(clock).toString());
         headerPayload.put("cwd", cwd.toAbsolutePath().normalize().toString());
 

@@ -66,7 +66,7 @@ already implemented in agent4j:
 | --- | --- | --- |
 | `--provider`, `--model`, `--api-key`, `--thinking` | CLI runtime overrides; API keys are runtime-only and never written to session or credential files | 2 and 7 |
 | `--print` / `-p`, `--mode json`, `--mode rpc` | Mode selection above | 2 through 5 |
-| `--continue` / `-c`, `--session <path|id>`, `--session-id <id>`, `--fork <path|id>`, `--session-dir`, `--no-session`, `--name` / `-n` | Delegate to `AgentSessionRuntime` and `SessionManager` | 6 |
+| `--continue` / `-c`, `--session <path|id>`, `--session-id <id>`, `--fork <path|id>`, `--session-dir`, `--no-session`, `--name` / `-n` | Delegates to `AgentSessionRuntime` and `SessionManager` | Implemented in Slice 6. |
 | `--tools` / `-t`, `--exclude-tools` / `-xt`, `--no-tools` / `-nt`, `--no-builtin-tools` / `-nbt` | Validate and construct a tool selection; do not recreate tools inside the CLI mode runner | 7 |
 | `login`, `logout`, status, refresh | Thin command wrappers over `LoginService` | 8 |
 
@@ -146,6 +146,8 @@ structured unsuccessful response, never a silent drop or a process crash.
 | Initial RPC subset | Several PI RPC commands depend on model catalog mutation, session tree UI semantics, direct bash, and extensions. | Slice 5 establishes framing and core session/prompt commands, then expand from audited PI commands. |
 | RPC steering/follow-up delivery occurs after the active SDK prompt rather than inside its live AgentLoop queue | `AgentSession` currently accepts queues only when a prompt starts, while PI mutates the active session queue during streaming. | Add runtime-owned live queue operations before Phase 10 closeout. |
 | Implicit non-TTY selection is not runnable yet | Slices 3-5 implement explicit print, JSON, and RPC modes; automatic process-mode selection remains absent. | Slice 6 closes process/session lifecycle selection. |
+| `--resume` selects the most recent local session | PI presents an interactive local/global session picker; Phase 10 has no terminal UI. | Phase 12 owns picker parity. |
+| Session ID search is local to the selected session directory | PI falls back to global project search and requests confirmation before cross-project forking. | Add global session discovery with Phase 12 interaction policy. |
 | Print mode uses a temporary session | PI persists print-mode sessions by default, while session path, continue, resume, fork, and no-session flags are not implemented yet. | Slice 6 must replace temporary storage with PI-compatible session lifecycle selection. |
 
 ## Slice 1 Result

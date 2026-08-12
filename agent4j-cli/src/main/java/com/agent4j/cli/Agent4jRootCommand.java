@@ -48,6 +48,15 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     @Option(names = "--api-key", description = "Non-persistent provider API key")
     private String apiKey;
 
+    @Option(names = {"--continue", "-c"}) private boolean continueSession;
+    @Option(names = {"--resume", "-r"}) private boolean resume;
+    @Option(names = "--no-session") private boolean noSession;
+    @Option(names = "--session") private String session;
+    @Option(names = "--session-id") private String sessionId;
+    @Option(names = "--fork") private String fork;
+    @Option(names = "--session-dir") private java.nio.file.Path sessionDirectory;
+    @Option(names = {"--name", "-n"}) private String name;
+
     @Parameters(arity = "0..*", paramLabel = "messages", description = "Initial prompt text")
     private List<String> messages = List.of();
 
@@ -80,33 +89,21 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         CliRuntime runtime = runtimeFactory.create(runtimeRequest());
-        if (mode() == CliMode.RPC) {
-            return rpcModeRunner.run(
-                    runtime,
-                    environment,
-                    input,
-                    commandSpec.commandLine().getOut(),
-                    commandSpec.commandLine().getErr());
+        CliSessionLifecycle sessions = new CliSessionLifecycle(runtime, environment, sessionOptions());
+        try {
+            if (mode() == CliMode.RPC) {
+                return rpcModeRunner.run(runtime, environment, input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
+            }
+            if (mode() == CliMode.JSON) {
+                return jsonEventModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
+            }
+            if (print) {
+                return printModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
+            }
+            throw new IllegalStateException("requested CLI mode is not implemented yet; Phase 10 Slice 6 adds session lifecycle selection");
+        } finally {
+            sessions.close();
         }
-        if (mode() == CliMode.JSON) {
-            return jsonEventModeRunner.run(
-                    runtime,
-                    environment,
-                    messages,
-                    Optional.empty(),
-                    commandSpec.commandLine().getOut(),
-                    commandSpec.commandLine().getErr());
-        }
-        if (print) {
-            return printModeRunner.run(
-                    runtime,
-                    environment,
-                    messages,
-                    Optional.empty(),
-                    commandSpec.commandLine().getOut(),
-                    commandSpec.commandLine().getErr());
-        }
-        throw new IllegalStateException("requested CLI mode is not implemented yet; Phase 10 Slices 4-5 add JSON and RPC modes");
     }
 
     CliRuntimeRequest runtimeRequest() {
@@ -120,6 +117,11 @@ public final class Agent4jRootCommand implements Callable<Integer> {
 
     CliMode mode() {
         return modes.isEmpty() ? null : modes.getLast();
+    }
+
+    private CliSessionOptions sessionOptions() {
+        return new CliSessionOptions(continueSession, resume, noSession, Optional.ofNullable(session), Optional.ofNullable(sessionId),
+                Optional.ofNullable(fork), Optional.ofNullable(sessionDirectory), Optional.ofNullable(name));
     }
 
     boolean print() {

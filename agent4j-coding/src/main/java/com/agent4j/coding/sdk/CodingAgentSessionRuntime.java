@@ -69,7 +69,8 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
     @Override
     public AgentSession createSession(CreateSessionRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
-        SessionManager sessionManager = SessionManager.create(request.sessionFile(), request.cwd());
+        SessionManager sessionManager = SessionManager.create(
+                request.sessionFile(), request.cwd(), request.sessionId().orElse(null));
         if (request.name().isPresent()) {
             sessionManager.appendSessionInfo(request.name().orElseThrow());
         }

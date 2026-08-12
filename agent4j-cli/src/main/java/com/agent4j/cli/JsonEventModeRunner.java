@@ -40,6 +40,13 @@ public final class JsonEventModeRunner {
             PrintWriter out,
             PrintWriter err
     ) {
+        return run(runtime, environment, messages, abortSignal, out, err, null);
+    }
+
+    int run(
+            CliRuntime runtime, CliEnvironment environment, List<String> messages, Optional<AbortSignal> abortSignal,
+            PrintWriter out, PrintWriter err, CliSessionLifecycle lifecycle
+    ) {
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(environment, "environment");
         Objects.requireNonNull(messages, "messages");
@@ -55,12 +62,14 @@ public final class JsonEventModeRunner {
         Path sessionDirectory = null;
         EventSubscription subscription = null;
         try {
-            sessionDirectory = Files.createTempDirectory(temporaryDirectory, "agent4j-json-");
-            AgentSession session = runtime.sessionRuntime().createSession(new CreateSessionRequest(
-                    sessionDirectory.resolve("session.jsonl"),
-                    environment.cwd(),
-                    Optional.empty(),
-                    Optional.of(runtime.defaultModel())));
+            AgentSession session;
+            if (lifecycle == null) {
+                sessionDirectory = Files.createTempDirectory(temporaryDirectory, "agent4j-json-");
+                session = runtime.sessionRuntime().createSession(new CreateSessionRequest(
+                        sessionDirectory.resolve("session.jsonl"), environment.cwd(), Optional.empty(), Optional.of(runtime.defaultModel())));
+            } else {
+                session = lifecycle.open();
+            }
             writeHeader(session, out);
             subscription = runtime.sessionRuntime().subscribeSession(session.id(), event -> {
                 out.println(serializer.serialize(serializer.event(event)));

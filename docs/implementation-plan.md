@@ -852,6 +852,13 @@ Implementation slices:
    - Add new, continue, resume, no-session, explicit session path/ID, fork, and
      name behavior as thin mappings to `AgentSessionRuntime`.
    - Test persistence, active-path selection, and mutually exclusive flags.
+   - Done with `CliSessionLifecycle`: `--session`, `--session-id`, `--continue`,
+     noninteractive `--resume`, `--fork`, `--session-dir`, `--no-session`, and
+     `--name` resolve to `AgentSessionRuntime` create/resume/fork calls. Normal
+     CLI modes now persist sessions below PI's cwd-encoded `~/.pi/agent/sessions`
+     location; only `--no-session` creates a cleaned-up temporary session.
+     Tests pin persistent creation, explicit resume, most-recent continuation,
+     forking, and conflicting flag validation.
 7. **Model And Tool Selection**
    - Add provider/model selection, tool enable/disable selection, and argument
      validation using the established settings/resource boundaries.

@@ -50,6 +50,10 @@ public final class RpcModeRunner {
     }
 
     public int run(CliRuntime runtime, CliEnvironment environment, Reader input, PrintWriter out, PrintWriter err) {
+        return run(runtime, environment, input, out, err, null);
+    }
+
+    int run(CliRuntime runtime, CliEnvironment environment, Reader input, PrintWriter out, PrintWriter err, CliSessionLifecycle lifecycle) {
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(environment, "environment");
         Objects.requireNonNull(input, "input");
@@ -60,9 +64,16 @@ public final class RpcModeRunner {
         EventSubscription subscription = null;
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            sessionDirectory = Files.createTempDirectory(temporaryDirectory, "agent4j-rpc-");
+            AgentSession initialSession;
+            if (lifecycle == null) {
+                sessionDirectory = Files.createTempDirectory(temporaryDirectory, "agent4j-rpc-");
+                initialSession = createSession(runtime, environment, sessionDirectory);
+            } else {
+                initialSession = lifecycle.open();
+                sessionDirectory = lifecycle.workingDirectory();
+            }
             State state = new State(runtime, environment, sessionDirectory, outputLock, out, err, executor);
-            state.session.set(createSession(runtime, environment, sessionDirectory));
+            state.session.set(initialSession);
             subscription = runtime.sessionRuntime().subscribe(event -> {
                 AgentSession session = state.session.get();
                 if (session != null && session.id().equals(event.sessionId())) {
