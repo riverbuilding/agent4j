@@ -64,10 +64,10 @@ already implemented in agent4j:
 
 | PI flags | Required behavior | Planned slice |
 | --- | --- | --- |
-| `--provider`, `--model`, `--api-key`, `--thinking` | CLI runtime overrides; API keys are runtime-only and never written to session or credential files | 2 and 7 |
+| `--provider`, `--model`, `--api-key`, `--thinking` | CLI runtime overrides; API keys are runtime-only and never written to session or credential files | Provider/model/API-key selection implemented for the current OpenAI bootstrap; thinking remains Slice 7 follow-up. |
 | `--print` / `-p`, `--mode json`, `--mode rpc` | Mode selection above | 2 through 5 |
 | `--continue` / `-c`, `--session <path|id>`, `--session-id <id>`, `--fork <path|id>`, `--session-dir`, `--no-session`, `--name` / `-n` | Delegates to `AgentSessionRuntime` and `SessionManager` | Implemented in Slice 6. |
-| `--tools` / `-t`, `--exclude-tools` / `-xt`, `--no-tools` / `-nt`, `--no-builtin-tools` / `-nbt` | Validate and construct a tool selection; do not recreate tools inside the CLI mode runner | 7 |
+| `--tools` / `-t`, `--exclude-tools` / `-xt`, `--no-tools` / `-nt`, `--no-builtin-tools` / `-nbt` | Validate and construct a tool selection; do not recreate tools inside the CLI mode runner | Implemented in Slice 7. |
 | `login`, `logout`, status, refresh | Thin command wrappers over `LoginService` | 8 |
 
 Scalar options use last-occurrence-wins parsing in PI. Repeated additive options
@@ -148,14 +148,16 @@ structured unsuccessful response, never a silent drop or a process crash.
 | Implicit non-TTY selection is not runnable yet | Slices 3-5 implement explicit print, JSON, and RPC modes; automatic process-mode selection remains absent. | Slice 6 closes process/session lifecycle selection. |
 | `--resume` selects the most recent local session | PI presents an interactive local/global session picker; Phase 10 has no terminal UI. | Phase 12 owns picker parity. |
 | Session ID search is local to the selected session directory | PI falls back to global project search and requests confirmation before cross-project forking. | Add global session discovery with Phase 12 interaction policy. |
+| Current CLI runtime factory constructs OpenAI only | The provider abstraction supports more providers, but CLI provider registry wiring has not expanded beyond Phase 9's OpenAI baseline. | Add configured Anthropic and future-provider bootstrap paths with their provider settings. |
 | Print mode uses a temporary session | PI persists print-mode sessions by default, while session path, continue, resume, fork, and no-session flags are not implemented yet. | Slice 6 must replace temporary storage with PI-compatible session lifecycle selection. |
 
 ## Slice 1 Result
 
-Slices 1-5 are complete. The root command, injectable I/O, runtime factory,
+Slices 1-7 are complete. The root command, injectable I/O, runtime factory,
 print runner, JSON runner, and RPC runner pin lowercase mode parsing,
 repeated-mode last-value acceptance, settings model resolution, ephemeral
 `--api-key` behavior, final-text stdout, PI-shaped JSONL event ordering,
 streaming deltas, correlated protocol responses, malformed-input recovery,
 orderly shutdown, provider failures, cancellation, and temporary-session
-cleanup.
+cleanup. Session lifecycle flags now delegate to SDK operations, and typed tool
+selection filters the runtime-owned registry with strict argument validation.

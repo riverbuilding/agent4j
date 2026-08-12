@@ -70,7 +70,7 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                         .credentialStore(runtimeCredentialStore)
                         .clock(clock)
                         .build())
-                .toolRegistry(toolRegistry)
+                .toolRegistry(CliToolSelector.select(toolRegistry, request.toolSelection()))
                 .build();
         request.apiKey().ifPresent(apiKey -> services.loginService().loginApiKey(
                 new ApiKeyLoginRequest(model.providerId(), apiKey)));
@@ -107,4 +107,5 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                 .map(String::strip)
                 .filter(value -> !value.isEmpty());
     }
+
 }

@@ -48,6 +48,13 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     @Option(names = "--api-key", description = "Non-persistent provider API key")
     private String apiKey;
 
+    @Option(names = {"--tools", "-t"}, split = ",", description = "Comma-separated enabled tool names")
+    private List<String> includedTools = new ArrayList<>();
+    @Option(names = {"--exclude-tools", "-xt"}, split = ",", description = "Comma-separated disabled tool names")
+    private List<String> excludedTools = new ArrayList<>();
+    @Option(names = {"--no-tools", "-nt"}, description = "Disable all tools") private boolean noTools;
+    @Option(names = {"--no-builtin-tools", "-nbt"}, description = "Disable built-in tools") private boolean noBuiltinTools;
+
     @Option(names = {"--continue", "-c"}) private boolean continueSession;
     @Option(names = {"--resume", "-r"}) private boolean resume;
     @Option(names = "--no-session") private boolean noSession;
@@ -112,7 +119,12 @@ public final class Agent4jRootCommand implements Callable<Integer> {
                 environment.homeDirectory(),
                 Optional.ofNullable(provider),
                 Optional.ofNullable(model),
-                Optional.ofNullable(apiKey));
+                Optional.ofNullable(apiKey),
+                new CliToolSelection(
+                        includedTools.isEmpty() ? Optional.empty() : Optional.of(includedTools),
+                        excludedTools,
+                        noTools,
+                        noBuiltinTools));
     }
 
     CliMode mode() {

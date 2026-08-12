@@ -117,6 +117,20 @@ class Agent4jCliTest {
         assertThat(stderr.toString()).isEmpty();
     }
 
+    @Test
+    void commandLineToolFlagsArePassedToTheRuntimeRequest() throws Exception {
+        AtomicReference<CliRuntimeRequest> received = new AtomicReference<>();
+
+        int exitCode = execute(request -> {
+            received.set(request);
+            return runtime();
+        }, "-p", "--tools", "read,grep", "--exclude-tools", "grep", "hello");
+
+        assertThat(exitCode).isEqualTo(1);
+        assertThat(received.get().toolSelection().included()).contains(List.of("read", "grep"));
+        assertThat(received.get().toolSelection().excluded()).containsExactly("grep");
+    }
+
     private CliEnvironment environment() {
         return new CliEnvironment(temporaryDirectory.resolve("workspace"), temporaryDirectory.resolve("home"));
     }

@@ -862,6 +862,15 @@ Implementation slices:
 7. **Model And Tool Selection**
    - Add provider/model selection, tool enable/disable selection, and argument
      validation using the established settings/resource boundaries.
+   - Done for the current OpenAI bootstrap. `--provider`/`--model` continue to
+     override resource settings through `CliRuntimeRequest` and reject provider
+     conflicts or bootstrap-unsupported providers. `--tools`,
+     `--exclude-tools`, `--no-tools`, and `--no-builtin-tools` are parsed into a
+     typed selection and filtered against the runtime-owned registry before
+     `CodingAgentRuntimeServices` is built. Unknown tools and conflicting
+     include/disable flags fail clearly; filtering preserves registered tool
+     order. All currently supplied CLI tools are built-ins, so
+     `--no-builtin-tools` yields an empty registry until extension tools exist.
 8. **Auth Commands**
    - Add `login`, `logout`, auth status, and refresh as thin wrappers over
      `LoginService`, including browser-login invocation without token output.
