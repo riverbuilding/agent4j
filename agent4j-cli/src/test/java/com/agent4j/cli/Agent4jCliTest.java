@@ -108,6 +108,31 @@ class Agent4jCliTest {
     }
 
     @Test
+    void defaultTextModeBootstrapsResolvedSessionThroughInteractiveRunner() throws Exception {
+        AtomicReference<CliRuntimeRequest> request = new AtomicReference<>();
+        StringWriter stdout = new StringWriter();
+        StringWriter stderr = new StringWriter();
+
+        int exitCode = Agent4jCli.execute(
+                input -> {
+                    request.set(input);
+                    return runtime();
+                },
+                environment(),
+                new java.io.StringReader("unused interactive input"),
+                new PrintWriter(stdout),
+                new PrintWriter(stderr));
+
+        assertThat(exitCode).isZero();
+        assertThat(request.get()).isNotNull();
+        assertThat(stdout.toString()).startsWith("Interactive session ready: ");
+        assertThat(stderr.toString()).isEmpty();
+        try (var sessionFiles = Files.list(environment().homeDirectory().resolve(".pi/agent/sessions"))) {
+            assertThat(sessionFiles.anyMatch(path -> path.getFileName().toString().endsWith(".jsonl"))).isTrue();
+        }
+    }
+
+    @Test
     void jsonModeTakesPrecedenceOverPrintAndWritesOnlyJsonLines() throws Exception {
         FakeModelClient model = new FakeModelClient().enqueue(List.of(new AiStreamEvent.MessageCompleted(
                 "assistant-1",

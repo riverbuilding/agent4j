@@ -42,7 +42,7 @@ public final class Agent4jCli {
             String... args
     ) {
         Agent4jRootCommand command = new Agent4jRootCommand(
-                runtimeFactory, environment, new PrintModeRunner(), new JsonEventModeRunner(), new RpcModeRunner(), input);
+                runtimeFactory, environment, new PrintModeRunner(), new JsonEventModeRunner(), new RpcModeRunner(), new InteractiveModeRunner(), input);
         CommandLine commandLine = new CommandLine(command);
         commandLine.setOut(out);
         commandLine.setErr(err);

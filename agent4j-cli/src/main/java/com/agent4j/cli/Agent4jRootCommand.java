@@ -30,6 +30,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     private final PrintModeRunner printModeRunner;
     private final JsonEventModeRunner jsonEventModeRunner;
     private final RpcModeRunner rpcModeRunner;
+    private final InteractiveModeRunner interactiveModeRunner;
     private final Reader input;
 
     @Spec
@@ -75,12 +76,12 @@ public final class Agent4jRootCommand implements Callable<Integer> {
 
     Agent4jRootCommand(CliRuntimeFactory runtimeFactory, CliEnvironment environment) {
         this(runtimeFactory, environment, new PrintModeRunner(), new JsonEventModeRunner(), new RpcModeRunner(),
-                new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8));
+                new InteractiveModeRunner(), new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8));
     }
 
     Agent4jRootCommand(CliRuntimeFactory runtimeFactory, CliEnvironment environment, PrintModeRunner printModeRunner) {
         this(runtimeFactory, environment, printModeRunner, new JsonEventModeRunner(), new RpcModeRunner(),
-                new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8));
+                new InteractiveModeRunner(), new java.io.InputStreamReader(System.in, java.nio.charset.StandardCharsets.UTF_8));
     }
 
     Agent4jRootCommand(
@@ -89,6 +90,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
             PrintModeRunner printModeRunner,
             JsonEventModeRunner jsonEventModeRunner,
             RpcModeRunner rpcModeRunner,
+            InteractiveModeRunner interactiveModeRunner,
             Reader input
     ) {
         this.runtimeFactory = runtimeFactory;
@@ -96,6 +98,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
         this.printModeRunner = printModeRunner;
         this.jsonEventModeRunner = jsonEventModeRunner;
         this.rpcModeRunner = rpcModeRunner;
+        this.interactiveModeRunner = interactiveModeRunner;
         this.input = input;
     }
 
@@ -115,7 +118,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
             if (print) {
                 return printModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
-            throw new IllegalStateException("interactive text mode is not implemented; use --print, --mode json, or --mode rpc");
+            return interactiveModeRunner.run(runtime, sessions, new InteractiveTerminal(input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr()));
         } finally {
             sessions.close();
         }

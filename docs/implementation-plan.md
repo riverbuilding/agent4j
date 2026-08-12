@@ -931,6 +931,12 @@ Tasks:
   basic line shell while deferring a rich TUI renderer decision. It also records
   live `AgentSession` queue mutation as a prerequisite for PI-compatible
   steering/follow-up controls.
+- Phase 11 Slice 2 is done with `InteractiveModeRunner` and
+  `InteractiveTerminal` in `agent4j-cli`. Default text mode now uses the same
+  runtime factory and `CliSessionLifecycle` as the Phase 10 process modes,
+  opens the resolved SDK `AgentSession`, and hands it to an injectable session
+  host. The temporary bootstrap host reports session readiness only; Slice 3
+  replaces it with the persistent line-oriented REPL.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.
