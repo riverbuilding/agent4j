@@ -945,6 +945,13 @@ Tasks:
   injected I/O; JLine editor integration follows after the loop contract is
   covered by tests. Fake-provider tests pin repeated prompts on one session,
   blank input, failure recovery, final text, and EOF shutdown.
+- Phase 11 Slice 4 is done with `InteractiveEventRenderer`. The interactive
+  runner subscribes to the opened session before entering the host loop and
+  closes that subscription during shutdown. Assistant `text_delta` content is
+  written as it arrives; `message_end` is only a fallback for non-streaming
+  providers, so final text is not duplicated. Tool start/update/end, retries,
+  compaction, stream errors, and agent aborts render as concise terminal status
+  or error rows. Renderer tests pin both streams and fallback/deduplication.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.

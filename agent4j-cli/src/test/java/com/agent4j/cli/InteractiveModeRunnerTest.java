@@ -63,7 +63,13 @@ class InteractiveModeRunnerTest {
     void keepsOneSessionAcrossPromptsAndContinuesAfterPromptFailuresUntilEof() throws Exception {
         FakeModelClient model = new FakeModelClient()
                 .enqueueFailure(new IllegalStateException("provider unavailable"))
-                .enqueue(List.of(new AiStreamEvent.MessageCompleted("assistant-1", new AiAssistantMessage(
+                .enqueue(List.of(
+                        new AiStreamEvent.MessageStarted("assistant-1"),
+                        new AiStreamEvent.TextStarted("assistant-1", 0),
+                        new AiStreamEvent.TextDelta("assistant-1", 0, "second "),
+                        new AiStreamEvent.TextDelta("assistant-1", 0, "answer"),
+                        new AiStreamEvent.TextEnded("assistant-1", 0),
+                        new AiStreamEvent.MessageCompleted("assistant-1", new AiAssistantMessage(
                         List.of(new AiTextContent("second answer")), AiStopReason.STOP, AiUsage.zero()))));
         CliRuntime runtime = runtime(model);
         StringWriter stdout = new StringWriter();

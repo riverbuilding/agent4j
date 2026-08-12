@@ -2,8 +2,6 @@ package com.agent4j.cli;
 
 import com.agent4j.coding.sdk.AgentSession;
 import com.agent4j.coding.sdk.PromptRequest;
-import com.agent4j.coding.sdk.PromptResult;
-import com.agent4j.core.message.AgentMessage;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -41,7 +39,7 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
             return;
         }
         try {
-            PromptResult result = session.prompt(new PromptRequest(
+            session.prompt(new PromptRequest(
                     prompt,
                     Optional.empty(),
                     DEFAULT_MAX_TOOL_ROUNDS,
@@ -54,18 +52,10 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
                     null,
                     null,
                     Optional.empty()));
-            finalAssistantText(result).ifPresent(terminal.out()::println);
-            terminal.out().flush();
         } catch (Exception error) {
             terminal.err().println("Error: " + error.getMessage());
             terminal.err().flush();
         }
     }
 
-    private static Optional<String> finalAssistantText(PromptResult result) {
-        return result.loopResult().assistantMessages().stream()
-                .map(AgentMessage::textContent)
-                .filter(text -> !text.isEmpty())
-                .reduce((ignored, latest) -> latest);
-    }
 }
