@@ -937,6 +937,14 @@ Tasks:
   opens the resolved SDK `AgentSession`, and hands it to an injectable session
   host. The temporary bootstrap host reports session readiness only; Slice 3
   replaces it with the persistent line-oriented REPL.
+- Phase 11 Slice 3 is done: `LineInteractiveSessionHost` is the
+  injected, persistent line-loop implementation. It submits each nonblank
+  initial or entered line through the opened `AgentSession`, prints only final
+  assistant text, reports a failed prompt to stderr without losing the session,
+  ignores empty lines, and exits cleanly on EOF. This first loop uses buffered
+  injected I/O; JLine editor integration follows after the loop contract is
+  covered by tests. Fake-provider tests pin repeated prompts on one session,
+  blank input, failure recovery, final text, and EOF shutdown.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.

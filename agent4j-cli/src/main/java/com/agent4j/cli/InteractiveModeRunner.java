@@ -2,6 +2,7 @@ package com.agent4j.cli;
 
 import com.agent4j.coding.sdk.AgentSession;
 
+import java.util.List;
 import java.util.Objects;
 
 /** Opens the resolved SDK session and hands it to the interactive terminal host. */
@@ -9,24 +10,21 @@ public final class InteractiveModeRunner {
     private final InteractiveSessionHost sessionHost;
 
     public InteractiveModeRunner() {
-        this((session, terminal) -> {
-            terminal.out().println("Interactive session ready: " + session.id());
-            terminal.out().flush();
-            return 0;
-        });
+        this(new LineInteractiveSessionHost());
     }
 
     InteractiveModeRunner(InteractiveSessionHost sessionHost) {
         this.sessionHost = Objects.requireNonNull(sessionHost, "sessionHost");
     }
 
-    int run(CliRuntime runtime, CliSessionLifecycle lifecycle, InteractiveTerminal terminal) {
+    int run(CliRuntime runtime, CliSessionLifecycle lifecycle, InteractiveTerminal terminal, List<String> initialMessages) {
         Objects.requireNonNull(runtime, "runtime");
         Objects.requireNonNull(lifecycle, "lifecycle");
         Objects.requireNonNull(terminal, "terminal");
+        initialMessages = initialMessages == null ? List.of() : List.copyOf(initialMessages);
         try {
             AgentSession session = lifecycle.open();
-            return sessionHost.run(session, terminal);
+            return sessionHost.run(session, terminal, initialMessages);
         } catch (Exception error) {
             terminal.err().println("Error: " + error.getMessage());
             return 1;

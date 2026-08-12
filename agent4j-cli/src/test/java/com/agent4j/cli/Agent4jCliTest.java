@@ -119,13 +119,13 @@ class Agent4jCliTest {
                     return runtime();
                 },
                 environment(),
-                new java.io.StringReader("unused interactive input"),
+                new java.io.StringReader(""),
                 new PrintWriter(stdout),
                 new PrintWriter(stderr));
 
         assertThat(exitCode).isZero();
         assertThat(request.get()).isNotNull();
-        assertThat(stdout.toString()).startsWith("Interactive session ready: ");
+        assertThat(stdout.toString()).isEqualTo("agent4j> ");
         assertThat(stderr.toString()).isEmpty();
         try (var sessionFiles = Files.list(environment().homeDirectory().resolve(".pi/agent/sessions"))) {
             assertThat(sessionFiles.anyMatch(path -> path.getFileName().toString().endsWith(".jsonl"))).isTrue();

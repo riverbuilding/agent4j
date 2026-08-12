@@ -118,7 +118,8 @@ public final class Agent4jRootCommand implements Callable<Integer> {
             if (print) {
                 return printModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
-            return interactiveModeRunner.run(runtime, sessions, new InteractiveTerminal(input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr()));
+            return interactiveModeRunner.run(runtime, sessions,
+                    new InteractiveTerminal(input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr()), messages);
         } finally {
             sessions.close();
         }

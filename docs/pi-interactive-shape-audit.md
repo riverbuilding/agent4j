@@ -113,10 +113,12 @@ only after the active operation is dealt with.
 
 ## Java Terminal Decision
 
-Phase 11 will use **JLine 3** for the basic interactive shell. It supplies the
-terminal abstraction, line editor, history, completion hooks, key maps, and
-testable terminal streams required by the mini core without requiring a full
-screen renderer.
+Phase 11 will introduce **JLine 3** after the basic loop contract is stable. It
+supplies the terminal abstraction, line editor, history, completion hooks, key
+maps, and testable terminal streams needed for the interactive editor without
+requiring a full-screen renderer. Slice 3 intentionally starts with injected
+buffered line I/O so prompt/session/error/EOF behavior is pinned before JLine
+key handling is added.
 
 No rich TUI library is selected in this slice. PI uses its own differential
 `@earendil-works/pi-tui`; JLine alone is not a comparable component framework.
