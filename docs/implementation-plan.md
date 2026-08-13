@@ -970,7 +970,12 @@ Tasks:
   subscription rebinding, so lifecycle commands remain SDK/lifecycle calls.
   Manual compaction is exposed through `AgentSession.compact(...)` and the
   runtime compactor, rather than duplicating provider/compaction internals in
-  the CLI. PI's no-argument interactive resume picker remains Slice 7 work.
+  the CLI. Phase 11 Slice 7 is done with the interactive local/global session
+  picker, cross-project confirmation/forking, and model/provider selection.
+- Phase 11 Slice 8 is done with a JLine 3-backed terminal rendering layer.
+  ANSI-aware terminals receive styled markdown headings/code, tool activity,
+  progress/status, and errors; pipes, tests, and `NO_COLOR`/dumb terminals use
+  the existing plain line renderer.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.

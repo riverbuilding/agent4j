@@ -91,6 +91,27 @@ class InteractiveModeRunnerTest {
         }
     }
 
+    @Test
+    void switchesAndDisplaysTheInteractiveModelSelection() throws Exception {
+        CliRuntime runtime = runtime();
+        StringWriter stdout = new StringWriter();
+        InteractiveTerminal terminal = new InteractiveTerminal(
+                new StringReader("/model gpt-next\n/model\n/status\n/exit\n"),
+                new PrintWriter(stdout),
+                new PrintWriter(new StringWriter()));
+
+        int exitCode = new InteractiveModeRunner().run(runtime, new CliSessionLifecycle(runtime, environment(), new CliSessionOptions(
+                false, false, false, Optional.empty(), Optional.empty(), Optional.empty(),
+                Optional.of(temporaryDirectory.resolve("sessions")), Optional.empty())), terminal, List.of());
+
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString()).contains("model: openai/gpt-next");
+        try (var files = Files.list(temporaryDirectory.resolve("sessions"))) {
+            Path sessionFile = files.filter(path -> path.getFileName().toString().endsWith(".jsonl")).findFirst().orElseThrow();
+            assertThat(Files.readString(sessionFile)).contains("\"modelId\":\"gpt-next\"");
+        }
+    }
+
     private CliRuntime runtime() throws Exception {
         return runtime(null);
     }

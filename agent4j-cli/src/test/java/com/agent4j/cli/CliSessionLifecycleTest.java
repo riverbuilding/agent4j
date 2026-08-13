@@ -7,6 +7,7 @@ import com.agent4j.coding.resource.ResourceLoader;
 import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
 import com.agent4j.coding.sdk.CreateSessionRequest;
 import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
+import com.agent4j.coding.session.SessionManager;
 import com.agent4j.core.tool.InMemoryToolRegistry;
 import com.agent4j.testkit.ai.FakeModelClient;
 import org.junit.jupiter.api.Test;
@@ -55,6 +56,22 @@ class CliSessionLifecycleTest {
                 true, false, false, Optional.of(first.file().toString()), Optional.empty(), Optional.of(first.file().toString()), Optional.of(directory), Optional.empty())))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("--fork cannot be combined");
+    }
+
+    @Test
+    void findsGlobalSessionsAndForksAfterCrossProjectConfirmation() throws Exception {
+        CliRuntime runtime = runtime();
+        Path otherProject = temporaryDirectory.resolve("other-project");
+        Path globalFile = environment().homeDirectory().resolve(".pi/agent/sessions/other/session.jsonl");
+        SessionManager.create(globalFile, otherProject, "global-session");
+        CliSessionLifecycle lifecycle = new CliSessionLifecycle(runtime, environment(), options(temporaryDirectory.resolve("sessions")));
+
+        assertThat(lifecycle.candidates()).anyMatch(candidate -> candidate.id().equals("global-session"));
+        assertThat(lifecycle.isCrossProject("global-session")).isTrue();
+        var forked = lifecycle.resume("global-session", true);
+
+        assertThat(forked.cwd()).isEqualTo(environment().cwd());
+        assertThat(forked.id()).isNotEqualTo("global-session");
     }
 
     private CliSessionOptions options(Path directory) {

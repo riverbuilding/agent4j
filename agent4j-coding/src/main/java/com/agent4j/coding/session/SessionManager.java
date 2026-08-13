@@ -329,11 +329,15 @@ public final class SessionManager {
     }
 
     public SessionManager forkToActivePath(Path targetFile) throws IOException {
+        return forkToActivePath(targetFile, null);
+    }
+
+    public SessionManager forkToActivePath(Path targetFile, Path cwd) throws IOException {
         Objects.requireNonNull(targetFile, "targetFile");
         if (Files.exists(targetFile)) {
             throw new IOException("target session file already exists: " + targetFile);
         }
-        SessionEntry derivedHeader = derivedHeader();
+        SessionEntry derivedHeader = derivedHeader(cwd);
         SessionDocument forkedDocument = new SessionDocument(derivedHeader, activePath());
         writeDocument(targetFile, codec, forkedDocument);
         return open(targetFile, codec, idGenerator, clock);
@@ -481,7 +485,7 @@ public final class SessionManager {
         });
     }
 
-    private SessionEntry derivedHeader() throws IOException {
+    private SessionEntry derivedHeader(Path cwd) throws IOException {
         ObjectNode payload = header.payload().deepCopy();
         payload.put("id", UUID.randomUUID().toString());
         payload.put("timestamp", Instant.now(clock).toString());
@@ -490,6 +494,9 @@ public final class SessionManager {
         }
         if (activeEntryId != null) {
             payload.put("forkedFromEntryId", activeEntryId);
+        }
+        if (cwd != null) {
+            payload.put("cwd", cwd.toAbsolutePath().normalize().toString());
         }
         return codec.parseLine(codec.writeJson(payload), 1);
     }

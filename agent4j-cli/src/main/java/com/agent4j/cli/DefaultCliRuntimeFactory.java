@@ -76,7 +76,7 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                 new ApiKeyLoginRequest(model.providerId(), apiKey)));
 
         AgentSessionRuntime runtime = new CodingAgentSessionRuntime(services);
-        return new CliRuntime(runtime, discovery, model);
+        return new CliRuntime(runtime, discovery, model, services.optionalProviderRegistry());
     }
 
     private static AiModelReference resolveModel(CliRuntimeRequest request, AgentSettings settings) {

@@ -117,7 +117,7 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
         if (activeEntryId != null) {
             source.navigateTo(activeEntryId);
         }
-        return newSession(source.forkToActivePath(request.targetFile()));
+        return newSession(source.forkToActivePath(request.targetFile(), request.cwd().orElse(null)));
     }
 
     @Override

@@ -1,6 +1,5 @@
 package com.agent4j.cli;
 
-import com.agent4j.coding.sdk.AgentSession;
 import com.agent4j.coding.sdk.PromptRequest;
 import com.agent4j.coding.session.SessionManager;
 
@@ -19,14 +18,14 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
 
     @Override
     public int run(InteractiveSessionController controller, InteractiveTerminal terminal, List<String> initialMessages) throws IOException {
-        InteractiveCommandRegistry registry = createCommandRegistry(controller, terminal);
         BufferedReader reader = terminal.input() instanceof BufferedReader buffered
                 ? buffered
                 : new BufferedReader(terminal.input());
+        InteractiveCommandRegistry registry = createCommandRegistry(controller, terminal, reader);
         try (ExecutorService prompts = Executors.newSingleThreadExecutor()) {
             Future<?> active = null;
             for (String message : initialMessages) {
-                active = submit(prompts, controller.session(), message, terminal);
+                active = submit(prompts, controller, message, terminal);
                 await(active);
             }
             while (true) {
@@ -50,6 +49,10 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
                     terminal.err().flush();
                     continue;
                 }
+                if (active != null && active.isDone()) {
+                    await(active);
+                    active = null;
+                }
                 if (active == null || !input.startsWith("/follow-up ")) {
                     try {
                         InteractiveCommandResult command = registry.execute(input);
@@ -66,6 +69,10 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
                         continue;
                     }
                 }
+                if (active != null && !controller.session().isStreaming() && !input.startsWith("/follow-up ")) {
+                    await(active);
+                    active = null;
+                }
                 if (active != null) {
                     try {
                         if (input.startsWith("/follow-up ")) {
@@ -79,17 +86,21 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
                     }
                     continue;
                 }
-                active = submit(prompts, controller.session(), input, terminal);
+                active = submit(prompts, controller, input, terminal);
+                if (active != null && !controller.session().isStreaming()) {
+                    await(active);
+                }
             }
         }
     }
 
     private static InteractiveCommandRegistry createCommandRegistry(
             InteractiveSessionController controller,
-            InteractiveTerminal terminal) {
+            InteractiveTerminal terminal,
+            BufferedReader reader) {
         InteractiveCommandRegistry registry = new InteractiveCommandRegistry();
         registry.register("help", ignored -> {
-            terminal.out().println("Commands: /help, /exit, /abort, /clear, /status, /name <name>, /compact, /new, /continue, /resume");
+            terminal.out().println("Commands: /help, /exit, /abort, /clear, /status, /model [provider/]model, /name <name>, /compact, /new, /continue, /resume [path|id]");
             terminal.out().flush();
             return InteractiveCommandResult.handledResult();
         });
@@ -113,6 +124,17 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
             terminal.out().println("cwd: " + info.cwd());
             terminal.out().println("active entry: " + (info.activeEntryId() == null ? "(none)" : info.activeEntryId()));
             terminal.out().println("streaming: " + controller.session().isStreaming());
+            terminal.out().println("model: " + controller.model().displayName());
+            terminal.out().flush();
+            return InteractiveCommandResult.handledResult();
+        });
+        registry.register("model", value -> {
+            if (value.isBlank()) {
+                terminal.out().println("model: " + controller.model().displayName());
+            } else {
+                controller.selectModel(value);
+                terminal.out().println("model: " + controller.model().displayName());
+            }
             terminal.out().flush();
             return InteractiveCommandResult.handledResult();
         });
@@ -142,8 +164,16 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
             return InteractiveCommandResult.handledResult();
         });
         registry.register("resume", value -> {
-            if (value.isBlank()) throw new IllegalArgumentException("/resume requires a session file path or ID");
-            controller.resume(value);
+            String selection = value.isBlank() ? selectSession(controller, terminal, reader) : value;
+            if (controller.lifecycle().isCrossProject(selection)) {
+                terminal.out().print("Session belongs to another project. Fork it into this project? [y/N] ");
+                terminal.out().flush();
+                String confirmation = reader.readLine();
+                if (confirmation == null || !confirmation.strip().equalsIgnoreCase("y")) {
+                    throw new IllegalArgumentException("cross-project resume cancelled");
+                }
+            }
+            controller.resume(selection, true);
             terminal.out().println("resumed session: " + controller.session().id());
             terminal.out().flush();
             return InteractiveCommandResult.handledResult();
@@ -151,16 +181,16 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
         return registry;
     }
 
-    private Future<?> submit(ExecutorService prompts, AgentSession session, String input, InteractiveTerminal terminal) {
+    private Future<?> submit(ExecutorService prompts, InteractiveSessionController controller, String input, InteractiveTerminal terminal) {
         String prompt = input == null ? "" : input.strip();
         if (prompt.isEmpty()) {
             return null;
         }
         return prompts.submit(() -> {
             try {
-                session.prompt(new PromptRequest(
+                controller.session().prompt(new PromptRequest(
                     prompt,
-                    Optional.empty(),
+                    Optional.of(controller.model()),
                     DEFAULT_MAX_TOOL_ROUNDS,
                     0,
                     Optional.empty(),
@@ -176,6 +206,27 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
                 terminal.err().flush();
             }
         });
+    }
+
+    private static String selectSession(InteractiveSessionController controller, InteractiveTerminal terminal, BufferedReader reader) throws IOException {
+        List<CliSessionLifecycle.SessionCandidate> candidates = controller.lifecycle().candidates();
+        if (candidates.isEmpty()) throw new IllegalArgumentException("no sessions found");
+        terminal.out().println("Sessions:");
+        for (int index = 0; index < candidates.size(); index++) {
+            var candidate = candidates.get(index);
+            terminal.out().println((index + 1) + ") " + candidate.id() + " " + candidate.cwd());
+        }
+        terminal.out().print("Select session: ");
+        terminal.out().flush();
+        String selection = reader.readLine();
+        if (selection == null || selection.isBlank()) throw new IllegalArgumentException("session selection cancelled");
+        try {
+            int index = Integer.parseInt(selection.strip()) - 1;
+            if (index < 0 || index >= candidates.size()) throw new IllegalArgumentException("invalid session selection");
+            return candidates.get(index).path().toString();
+        } catch (NumberFormatException error) {
+            throw new IllegalArgumentException("invalid session selection: " + selection);
+        }
     }
 
     private static void await(Future<?> active) {

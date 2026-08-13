@@ -64,6 +64,22 @@ class InteractiveEventRendererTest {
         assertThat(stdout.toString()).isEqualTo("final only\n");
     }
 
+    @Test
+    void usesJLineStylesForMarkdownStatusAndErrorsWhenAnsiIsEnabled() {
+        StringWriter stdout = new StringWriter();
+        StringWriter stderr = new StringWriter();
+        InteractiveEventRenderer renderer = new InteractiveEventRenderer(
+                new InteractiveTerminal(new StringReader(""), new PrintWriter(stdout), new PrintWriter(stderr), true));
+
+        renderer.render(new AgentEvent.MessageEnded("session", NOW,
+                assistant("assistant-1", "# Heading\n\n`code`")));
+        renderer.render(new AgentEvent.RetryStarted("session", NOW, 1, "temporary"));
+        renderer.render(new AgentEvent.AgentAborted("session", NOW, "cancelled"));
+
+        assertThat(stdout.toString()).contains("Heading", "code", "\u001B[");
+        assertThat(stderr.toString()).contains("Error: aborted: cancelled", "\u001B[");
+    }
+
     private static AgentMessage assistant(String id, String text) {
         return AgentMessage.assistantText(id, null, NOW, text, JSON.objectNode());
     }

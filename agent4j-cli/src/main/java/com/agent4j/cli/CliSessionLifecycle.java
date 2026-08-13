@@ -10,7 +10,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -70,6 +72,33 @@ final class CliSessionLifecycle implements AutoCloseable {
         return resume(resolve(value));
     }
 
+    AgentSession resume(String value, boolean confirmCrossProject) throws Exception {
+        Path path = resolve(value);
+        SessionManager manager = SessionManager.open(path);
+        Path sessionCwd = Path.of(manager.document().header().header().orElseThrow().cwd()).toAbsolutePath().normalize();
+        if (confirmCrossProject && !sessionCwd.equals(environment.cwd())) {
+            AgentSession source = resume(path);
+            return runtime.sessionRuntime().forkSession(new ForkSessionRequest(
+                    source, newSessionFile(), Optional.empty(), Optional.of(environment.cwd())));
+        }
+        return resume(path);
+    }
+
+    boolean isCrossProject(String value) throws IOException {
+        Path path = resolve(value);
+        SessionManager manager = SessionManager.open(path);
+        return !Path.of(manager.document().header().header().orElseThrow().cwd()).toAbsolutePath().normalize().equals(environment.cwd());
+    }
+
+    List<SessionCandidate> candidates() throws IOException {
+        List<SessionCandidate> candidates = new ArrayList<>();
+        addCandidates(directory(), candidates);
+        Path global = environment.homeDirectory().resolve(".pi/agent/sessions");
+        if (!global.equals(directory())) addCandidates(global, candidates);
+        candidates.sort(Comparator.comparing(SessionCandidate::modified).reversed());
+        return List.copyOf(candidates);
+    }
+
     Path directory() {
         return options.sessionDirectory().orElseGet(() -> environment.homeDirectory()
                 .resolve(".pi/agent/sessions")
@@ -103,14 +132,10 @@ final class CliSessionLifecycle implements AutoCloseable {
     }
 
     private Optional<Path> findById(String id) throws IOException {
-        if (!Files.isDirectory(directory())) {
-            return Optional.empty();
-        }
-        try (var files = Files.list(directory())) {
-            return files.filter(path -> path.getFileName().toString().endsWith(".jsonl"))
-                    .filter(path -> headerId(path).map(value -> value.equals(id) || value.startsWith(id)).orElse(false))
-                    .max(Comparator.comparing(this::modified));
-        }
+        return candidates().stream()
+                .filter(candidate -> candidate.id().equals(id) || candidate.id().startsWith(id))
+                .map(SessionCandidate::path)
+                .findFirst();
     }
 
     private Path mostRecent() throws IOException {
@@ -124,11 +149,19 @@ final class CliSessionLifecycle implements AutoCloseable {
         }
     }
 
-    private Optional<String> headerId(Path file) {
-        try {
-            return Optional.of(SessionManager.open(file).document().header().header().orElseThrow().id());
-        } catch (Exception ignored) {
-            return Optional.empty();
+    private void addCandidates(Path root, List<SessionCandidate> candidates) throws IOException {
+        if (!Files.isDirectory(root)) return;
+        try (var files = Files.walk(root)) {
+            files.filter(path -> path.getFileName().toString().endsWith(".jsonl"))
+                    .forEach(path -> {
+                        try {
+                            SessionManager manager = SessionManager.open(path);
+                            var header = manager.document().header().header().orElseThrow();
+                            candidates.add(new SessionCandidate(path, header.id(), Path.of(header.cwd()), modified(path)));
+                        } catch (Exception ignored) {
+                            // Ignore malformed or concurrently removed session files in the picker.
+                        }
+                    });
         }
     }
 
@@ -143,6 +176,8 @@ final class CliSessionLifecycle implements AutoCloseable {
     private Path newSessionFile() {
         return directory().resolve(UUID.randomUUID() + ".jsonl");
     }
+
+    record SessionCandidate(Path path, String id, Path cwd, Instant modified) { }
 
     @Override
     public void close() {
