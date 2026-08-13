@@ -43,7 +43,7 @@ class InteractiveModeRunnerTest {
         AtomicReference<String> sessionId = new AtomicReference<>();
         AtomicReference<InteractiveTerminal> receivedTerminal = new AtomicReference<>();
         InteractiveModeRunner runner = new InteractiveModeRunner((session, received, initialMessages) -> {
-            sessionId.set(session.id());
+            sessionId.set(session.session().id());
             receivedTerminal.set(received);
             return 7;
         });

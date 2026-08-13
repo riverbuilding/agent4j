@@ -4,6 +4,10 @@ import com.agent4j.ai.AiModelClient;
 import com.agent4j.ai.AiProviderRegistry;
 import com.agent4j.ai.AiProviderSelection;
 import com.agent4j.ai.AiResolvedAuth;
+import com.agent4j.ai.AiStreamOptions;
+import com.agent4j.coding.runtime.ManualCompactionRequest;
+import com.agent4j.core.compaction.CompactionConfig;
+import com.agent4j.core.compaction.CompactionResult;
 import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionHeader;
 import com.agent4j.coding.session.SessionManager;
@@ -158,6 +162,17 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
         QueueKind kind = steering ? QueueKind.STEER : QueueKind.FOLLOW_UP;
         if (steering) active.queues().steer(message); else active.queues().followUp(message);
         services.eventBus().publish(new AgentEvent.QueueUpdated(session.id(), Instant.now(services.clock()), kind, active.queues().size(kind)));
+    }
+
+    CompactionResult compact(CodingAgentSession session, String focusInstructions) throws Exception {
+        Objects.requireNonNull(session, "session");
+        AiProviderSelection selection = services.optionalProviderRegistry()
+                .orElseThrow(() -> new IllegalStateException("manual compaction requires a provider registry"))
+                .requireDefault();
+        AiResolvedAuth auth = services.loginService().resolveAuth(selection.provider().id());
+        return services.sessionCompactor().compact(new ManualCompactionRequest(
+                session.sessionManager(), selection, auth, session.cwd(), null, CompactionConfig.defaults(),
+                focusInstructions == null ? "" : focusInstructions, AiStreamOptions.defaults()));
     }
 
     private AgentLoop agentLoop(PromptRequest request) {

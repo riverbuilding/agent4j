@@ -4,6 +4,8 @@ import com.agent4j.coding.sdk.AgentSession;
 import sun.misc.Signal;
 import sun.misc.SignalHandler;
 
+import java.util.function.Supplier;
+
 /** Temporarily maps terminal SIGINT to cancellation of the active session run. */
 final class InteractiveInterruptHandler implements AutoCloseable {
     private final Signal signal;
@@ -14,10 +16,10 @@ final class InteractiveInterruptHandler implements AutoCloseable {
         this.previous = previous;
     }
 
-    static InteractiveInterruptHandler install(AgentSession session) {
+    static InteractiveInterruptHandler install(Supplier<AgentSession> session) {
         try {
             Signal signal = new Signal("INT");
-            SignalHandler previous = Signal.handle(signal, ignored -> session.abort("cancelled by Ctrl-C"));
+            SignalHandler previous = Signal.handle(signal, ignored -> session.get().abort("cancelled by Ctrl-C"));
             return new InteractiveInterruptHandler(signal, previous);
         } catch (IllegalArgumentException unsupported) {
             return new InteractiveInterruptHandler(null, null);

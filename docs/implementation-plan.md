@@ -962,6 +962,15 @@ Tasks:
   Buffered line I/O cannot distinguish Alt+Enter; `/follow-up` is the interim
   follow-up control until JLine key handling is introduced. SDK tests pin live
   steer/follow-up consumption in the same loop invocation and active-run abort.
+- Phase 11 Slice 6 is done with `InteractiveCommandRegistry` and a command
+  handler boundary intended for Phase 12 registrations. The line shell now
+  supports `/help`, `/exit`, `/abort`, `/clear`, `/status`, `/name <name>`,
+  `/compact`, `/new`, `/continue`, and `/resume <path|id>`. An
+  `InteractiveSessionController` owns active-session replacement and event
+  subscription rebinding, so lifecycle commands remain SDK/lifecycle calls.
+  Manual compaction is exposed through `AgentSession.compact(...)` and the
+  runtime compactor, rather than duplicating provider/compaction internals in
+  the CLI. PI's no-argument interactive resume picker remains Slice 7 work.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.

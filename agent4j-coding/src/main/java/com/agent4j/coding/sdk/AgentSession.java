@@ -1,6 +1,7 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.core.runtime.AgentConversationContext;
+import com.agent4j.core.compaction.CompactionResult;
 
 /**
  * User-facing handle for one persisted coding-agent conversation.
@@ -26,6 +27,10 @@ public interface AgentSession {
 
     default boolean abort(String reason) {
         return false;
+    }
+
+    default CompactionResult compact(String focusInstructions) throws Exception {
+        throw new IllegalStateException("manual compaction is not supported by this session");
     }
 
     default String id() {

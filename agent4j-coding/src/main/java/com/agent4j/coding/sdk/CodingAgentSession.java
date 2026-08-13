@@ -4,6 +4,7 @@ import com.agent4j.coding.session.SessionManager;
 import com.agent4j.core.runtime.AgentConversationContext;
 import com.agent4j.core.runtime.AbortController;
 import com.agent4j.core.runtime.LiveAgentQueues;
+import com.agent4j.core.compaction.CompactionResult;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -49,6 +50,15 @@ public final class CodingAgentSession implements AgentSession {
     @Override public boolean abort(String reason) {
         ActivePrompt active = activePrompt.get();
         return active != null && active.abortController().abort(reason);
+    }
+
+    @Override public CompactionResult compact(String focusInstructions) throws Exception {
+        if (isStreaming()) {
+            throw new IllegalStateException("cannot compact while a prompt is active");
+        }
+        CompactionResult result = runtime.compact(this, focusInstructions);
+        refreshConversationContext(new AgentConversationContext(sessionManager.activeAgentMessages(), java.util.List.of()));
+        return result;
     }
 
     SessionManager sessionManager() {

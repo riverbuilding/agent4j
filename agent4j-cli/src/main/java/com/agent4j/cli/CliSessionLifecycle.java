@@ -58,6 +58,18 @@ final class CliSessionLifecycle implements AutoCloseable {
         return create(newSessionFile(), options.sessionId());
     }
 
+    AgentSession createNew() throws Exception {
+        return create(newSessionFile(), Optional.empty());
+    }
+
+    AgentSession continueMostRecent() throws Exception {
+        return resume(mostRecent());
+    }
+
+    AgentSession resume(String value) throws Exception {
+        return resume(resolve(value));
+    }
+
     Path directory() {
         return options.sessionDirectory().orElseGet(() -> environment.homeDirectory()
                 .resolve(".pi/agent/sessions")
