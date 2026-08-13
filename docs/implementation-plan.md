@@ -976,6 +976,11 @@ Tasks:
   ANSI-aware terminals receive styled markdown headings/code, tool activity,
   progress/status, and errors; pipes, tests, and `NO_COLOR`/dumb terminals use
   the existing plain line renderer.
+- Phase 11 Slice 9 is done with fake-provider terminal contract coverage in
+  `InteractiveContractTest`, plus the lower-level live-session queue and abort
+  contracts. The closeout is recorded in `docs/phase-11-closeout.md`; the
+  remaining editor, rich-TUI, extension, filename, and production-provider
+  gaps are explicit and are not being counted as interactive parity.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.
