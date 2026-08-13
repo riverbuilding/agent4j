@@ -7,6 +7,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /** Minimal persistent line REPL over one SDK session. */
 final class LineInteractiveSessionHost implements InteractiveSessionHost {
@@ -15,31 +18,64 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
 
     @Override
     public int run(AgentSession session, InteractiveTerminal terminal, List<String> initialMessages) throws IOException {
-        for (String message : initialMessages) {
-            submit(session, message, terminal);
-        }
-
         BufferedReader reader = terminal.input() instanceof BufferedReader buffered
                 ? buffered
                 : new BufferedReader(terminal.input());
-        while (true) {
-            terminal.out().print(PROMPT);
-            terminal.out().flush();
-            String line = reader.readLine();
-            if (line == null) {
-                return 0;
+        try (ExecutorService prompts = Executors.newSingleThreadExecutor()) {
+            Future<?> active = null;
+            for (String message : initialMessages) {
+                active = submit(prompts, session, message, terminal);
+                await(active);
             }
-            submit(session, line, terminal);
+            while (true) {
+                if (active != null && active.isDone()) {
+                    await(active);
+                    active = null;
+                }
+                terminal.out().print(PROMPT);
+                terminal.out().flush();
+                String line = reader.readLine();
+                if (line == null) {
+                    await(active);
+                    return 0;
+                }
+                String input = line.strip();
+                if (input.isEmpty()) {
+                    continue;
+                }
+                if ("/abort".equals(input)) {
+                    if (!session.abort("cancelled by interactive user")) {
+                        terminal.err().println("Error: no prompt is active");
+                        terminal.err().flush();
+                    }
+                    continue;
+                }
+                if (active != null) {
+                    try {
+                        if (input.startsWith("/follow-up ")) {
+                            session.followUp(input.substring("/follow-up ".length()));
+                        } else {
+                            session.steer(input.startsWith("/steer ") ? input.substring("/steer ".length()) : input);
+                        }
+                    } catch (RuntimeException error) {
+                        terminal.err().println("Error: " + error.getMessage());
+                        terminal.err().flush();
+                    }
+                    continue;
+                }
+                active = submit(prompts, session, input, terminal);
+            }
         }
     }
 
-    private void submit(AgentSession session, String input, InteractiveTerminal terminal) {
+    private Future<?> submit(ExecutorService prompts, AgentSession session, String input, InteractiveTerminal terminal) {
         String prompt = input == null ? "" : input.strip();
         if (prompt.isEmpty()) {
-            return;
+            return null;
         }
-        try {
-            session.prompt(new PromptRequest(
+        return prompts.submit(() -> {
+            try {
+                session.prompt(new PromptRequest(
                     prompt,
                     Optional.empty(),
                     DEFAULT_MAX_TOOL_ROUNDS,
@@ -52,9 +88,19 @@ final class LineInteractiveSessionHost implements InteractiveSessionHost {
                     null,
                     null,
                     Optional.empty()));
-        } catch (Exception error) {
-            terminal.err().println("Error: " + error.getMessage());
-            terminal.err().flush();
+            } catch (Exception error) {
+                terminal.err().println("Error: " + error.getMessage());
+                terminal.err().flush();
+            }
+        });
+    }
+
+    private static void await(Future<?> active) {
+        if (active == null) return;
+        try {
+            active.get();
+        } catch (Exception ignored) {
+            // Prompt task converts failures to terminal diagnostics.
         }
     }
 

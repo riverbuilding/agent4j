@@ -31,8 +31,20 @@ public record AgentLoopRequest(
         List<AgentMessage> followUpMessages,
         QueueMode steeringMode,
         QueueMode followUpMode,
-        CompactionConfig compactionConfig
+        CompactionConfig compactionConfig,
+        LiveAgentQueues liveQueues
 ) {
+    public AgentLoopRequest(
+            String sessionId, String turnId, String parentMessageId, List<AgentMessage> messages, Path cwd, Clock clock,
+            AbortSignal abortSignal, Map<String, Object> toolAttributes, String systemPrompt, int maxToolRounds,
+            int maxModelRetries, Optional<Duration> modelTimeout, ToolExecutionMode toolExecutionMode,
+            List<AgentMessage> promptMessages, List<AgentMessage> steeringMessages, List<AgentMessage> followUpMessages,
+            QueueMode steeringMode, QueueMode followUpMode, CompactionConfig compactionConfig
+    ) {
+        this(sessionId, turnId, parentMessageId, messages, cwd, clock, abortSignal, toolAttributes, systemPrompt,
+                maxToolRounds, maxModelRetries, modelTimeout, toolExecutionMode, promptMessages, steeringMessages,
+                followUpMessages, steeringMode, followUpMode, compactionConfig, null);
+    }
     public AgentLoopRequest(
             String sessionId,
             String turnId,
@@ -333,6 +345,7 @@ public record AgentLoopRequest(
         compactionConfig = compactionConfig == null
                 ? CompactionConfig.builder().enabled(false).build()
                 : compactionConfig;
+        liveQueues = liveQueues == null ? new LiveAgentQueues(steeringMessages, followUpMessages) : liveQueues;
     }
 
     private static List<AgentMessage> inferPromptMessages(String parentMessageId, List<AgentMessage> messages) {

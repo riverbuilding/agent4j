@@ -28,7 +28,9 @@ public final class InteractiveModeRunner {
             AgentSession session = lifecycle.open();
             InteractiveEventRenderer renderer = new InteractiveEventRenderer(terminal);
             subscription = runtime.sessionRuntime().subscribeSession(session.id(), renderer::render);
-            return sessionHost.run(session, terminal, initialMessages);
+            try (InteractiveInterruptHandler ignored = InteractiveInterruptHandler.install(session)) {
+                return sessionHost.run(session, terminal, initialMessages);
+            }
         } catch (Exception error) {
             terminal.err().println("Error: " + error.getMessage());
             return 1;

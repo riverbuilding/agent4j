@@ -231,13 +231,13 @@ public final class AgentLoop {
 
         AgentConversationContext conversation = new AgentConversationContext(request.messages(), request.promptMessages());
         List<ToolResult> toolResults = new ArrayList<>();
-        List<AgentMessage> steeringQueue = new ArrayList<>(request.steeringMessages());
-        List<AgentMessage> followUpQueue = new ArrayList<>(request.followUpMessages());
+        LiveAgentQueues liveQueues = request.liveQueues();
         List<AgentMessage> pendingMessages = new ArrayList<>();
         Usage usage = Usage.zero();
 
         try {
-            for (int round = 0; round <= request.maxToolRounds(); round++) {
+            int toolRounds = 0;
+            for (int round = 0; ; round++) {
                 request.abortSignal().throwIfAborted();
                 eventBus.publish(new AgentEvent.TurnStarted(request.sessionId(), now(request), request.turnId()));
                 if (round == 0) {
@@ -267,11 +267,11 @@ public final class AgentLoop {
                             roundResult.message(),
                             roundToolResults,
                             roundResult.usage()));
-                    pendingMessages.addAll(drainQueue(request, QueueKind.STEER, steeringQueue, request.steeringMode()));
+                    pendingMessages.addAll(drainQueue(request, QueueKind.STEER, liveQueues, request.steeringMode()));
                     if (!pendingMessages.isEmpty()) {
                         continue;
                     }
-                    pendingMessages.addAll(drainQueue(request, QueueKind.FOLLOW_UP, followUpQueue, request.followUpMode()));
+                    pendingMessages.addAll(drainQueue(request, QueueKind.FOLLOW_UP, liveQueues, request.followUpMode()));
                     if (!pendingMessages.isEmpty()) {
                         continue;
                     }
@@ -287,9 +287,10 @@ public final class AgentLoop {
                             List.copyOf(toolResults),
                             usage);
                 }
-                if (round == request.maxToolRounds()) {
+                if (toolRounds == request.maxToolRounds()) {
                     throw new IllegalStateException("maximum tool rounds exceeded: " + request.maxToolRounds());
                 }
+                toolRounds++;
 
                 List<ToolResult> roundResults = executeToolCalls(request, toolCalls);
                 for (ToolResult toolResult : roundResults) {
@@ -324,9 +325,8 @@ public final class AgentLoop {
                             List.copyOf(toolResults),
                             usage);
                 }
-                pendingMessages.addAll(drainQueue(request, QueueKind.STEER, steeringQueue, request.steeringMode()));
+                pendingMessages.addAll(drainQueue(request, QueueKind.STEER, liveQueues, request.steeringMode()));
             }
-            throw new IllegalStateException("agent loop ended without settling");
         } catch (AgentAbortException e) {
             eventBus.publish(new AgentEvent.AgentAborted(request.sessionId(), now(request), e.getMessage()));
             throw e;
@@ -507,20 +507,13 @@ public final class AgentLoop {
     private List<AgentMessage> drainQueue(
             AgentLoopRequest request,
             QueueKind queueKind,
-            List<AgentMessage> queue,
+            LiveAgentQueues queues,
             QueueMode mode
     ) {
-        if (queue.isEmpty()) {
-            return List.of();
+        List<AgentMessage> drained = queues.drain(queueKind, mode);
+        if (!drained.isEmpty()) {
+            eventBus.publish(new AgentEvent.QueueUpdated(request.sessionId(), now(request), queueKind, queues.size(queueKind)));
         }
-        List<AgentMessage> drained;
-        if (mode == QueueMode.ALL) {
-            drained = List.copyOf(queue);
-            queue.clear();
-        } else {
-            drained = List.of(queue.removeFirst());
-        }
-        eventBus.publish(new AgentEvent.QueueUpdated(request.sessionId(), now(request), queueKind, queue.size()));
         return drained;
     }
 

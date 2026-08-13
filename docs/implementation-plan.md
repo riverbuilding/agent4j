@@ -952,6 +952,16 @@ Tasks:
   providers, so final text is not duplicated. Tool start/update/end, retries,
   compaction, stream errors, and agent aborts render as concise terminal status
   or error rows. Renderer tests pin both streams and fallback/deduplication.
+- Phase 11 Slice 5 is done. `LiveAgentQueues` now crosses the active
+  `AgentSession`/`AgentLoop` boundary, and `AgentSession` exposes
+  `isStreaming()`, `steer(...)`, `followUp(...)`, and `abort(...)`. The line
+  shell keeps reading while a prompt task runs: ordinary entered text steers,
+  `/follow-up <text>` queues follow-up work, and `/abort` cancels the active
+  run. `InteractiveInterruptHandler` maps terminal SIGINT/Ctrl-C to the active
+  session abort and restores the previous process handler when the shell exits.
+  Buffered line I/O cannot distinguish Alt+Enter; `/follow-up` is the interim
+  follow-up control until JLine key handling is introduced. SDK tests pin live
+  steer/follow-up consumption in the same loop invocation and active-run abort.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.

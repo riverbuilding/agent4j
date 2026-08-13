@@ -12,6 +12,22 @@ public interface AgentSession {
 
     PromptResult prompt(PromptRequest request) throws Exception;
 
+    default boolean isStreaming() {
+        return false;
+    }
+
+    default void steer(String message) {
+        throw new IllegalStateException("live steering is not supported by this session");
+    }
+
+    default void followUp(String message) {
+        throw new IllegalStateException("live follow-up is not supported by this session");
+    }
+
+    default boolean abort(String reason) {
+        return false;
+    }
+
     default String id() {
         return info().id();
     }

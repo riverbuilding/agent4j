@@ -31,6 +31,7 @@ final class InteractiveEventRenderer {
                     + (completed.success() ? " completed" : " failed"));
             case AgentEvent.CompactionStarted started -> status("compacting: " + started.reason());
             case AgentEvent.CompactionCompleted completed -> status("compaction completed: " + completed.summaryMessageId());
+            case AgentEvent.QueueUpdated updated -> status(updated.queueKind().wireName() + " queue: " + updated.size());
             case AgentEvent.AgentAborted aborted -> error("aborted: " + aborted.reason());
             default -> {
                 // Agent, turn, prompt, queue, and message-start events do not require a terminal row.

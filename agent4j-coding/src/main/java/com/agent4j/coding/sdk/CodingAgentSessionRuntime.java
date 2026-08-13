@@ -13,11 +13,14 @@ import com.agent4j.core.event.EventSubscription;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
 import com.agent4j.core.runtime.AbortController;
+import com.agent4j.core.runtime.AbortSignal;
 import com.agent4j.core.runtime.AgentConversationContext;
 import com.agent4j.core.runtime.AgentLoop;
 import com.agent4j.core.runtime.AgentLoopRequest;
 import com.agent4j.core.runtime.AgentLoopResult;
 import com.agent4j.core.runtime.AgentMessageConverter;
+import com.agent4j.core.runtime.LiveAgentQueues;
+import com.agent4j.core.runtime.QueueKind;
 import com.agent4j.core.tool.ToolRegistry;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 
@@ -131,9 +134,30 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
         List<AgentMessage> messages = java.util.stream.Stream
                 .concat(sessionManager.activeAgentMessages().stream(), java.util.stream.Stream.of(promptMessage))
                 .toList();
-        AgentLoopResult loopResult = agentLoop(request).runTurn(loopRequest(session, request, promptMessage, messages));
-        List<SessionEntry> persisted = sessionManager.appendAgentLoopResult(loopResult);
-        return new PromptResult(session, loopResult, persisted);
+        AbortController abortController = new AbortController();
+        LiveAgentQueues queues = new LiveAgentQueues(request.steeringMessages(), request.followUpMessages());
+        CodingAgentSession.ActivePrompt active = session.beginPrompt(abortController, queues);
+        try {
+            AgentLoopResult loopResult = agentLoop(request).runTurn(loopRequest(
+                    session, request, promptMessage, messages, abortSignal(request, abortController), queues));
+            List<SessionEntry> persisted = sessionManager.appendAgentLoopResult(loopResult);
+            return new PromptResult(session, loopResult, persisted);
+        } finally {
+            session.endPrompt(active);
+        }
+    }
+
+    void queue(CodingAgentSession session, String text, boolean steering) {
+        Objects.requireNonNull(session, "session");
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("queued message must not be blank");
+        }
+        AgentMessage message = new AgentMessage(messageId(), session.sessionManager().activeEntryId(), Instant.now(services.clock()),
+                AgentMessageRole.USER, JSON.textNode(text.strip()), JSON.objectNode());
+        CodingAgentSession.ActivePrompt active = session.requireActivePrompt();
+        QueueKind kind = steering ? QueueKind.STEER : QueueKind.FOLLOW_UP;
+        if (steering) active.queues().steer(message); else active.queues().followUp(message);
+        services.eventBus().publish(new AgentEvent.QueueUpdated(session.id(), Instant.now(services.clock()), kind, active.queues().size(kind)));
     }
 
     private AgentLoop agentLoop(PromptRequest request) {
@@ -165,7 +189,9 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
             CodingAgentSession session,
             PromptRequest request,
             AgentMessage promptMessage,
-            List<AgentMessage> messages
+            List<AgentMessage> messages,
+            AbortSignal abortSignal,
+            LiveAgentQueues queues
     ) {
         return new AgentLoopRequest(
                 session.id(),
@@ -174,7 +200,7 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
                 messages,
                 session.cwd(),
                 services.clock(),
-                request.abortSignal().orElseGet(() -> new AbortController().signal()),
+                abortSignal,
                 request.toolAttributes(),
                 null,
                 request.maxToolRounds(),
@@ -185,7 +211,18 @@ public final class CodingAgentSessionRuntime implements AgentSessionRuntime {
                 request.steeringMessages(),
                 request.followUpMessages(),
                 request.steeringMode(),
-                request.followUpMode());
+                request.followUpMode(), null, queues);
+    }
+
+    private static AbortSignal abortSignal(PromptRequest request, AbortController local) {
+        return new AbortSignal() {
+            @Override public boolean aborted() {
+                return local.signal().aborted() || request.abortSignal().map(AbortSignal::aborted).orElse(false);
+            }
+            @Override public java.util.Optional<String> reason() {
+                return local.signal().reason().or(() -> request.abortSignal().flatMap(AbortSignal::reason));
+            }
+        };
     }
 
     AgentSessionInfo sessionInfo(SessionManager sessionManager) {
