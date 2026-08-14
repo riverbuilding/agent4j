@@ -21,7 +21,7 @@ final class CliSessionLifecycle implements AutoCloseable {
     private final CliRuntime runtime;
     private final CliEnvironment environment;
     private final CliSessionOptions options;
-    private Path temporaryDirectory;
+    private OwnedTemporaryDirectory temporaryDirectory;
 
     CliSessionLifecycle(CliRuntime runtime, CliEnvironment environment, CliSessionOptions options) {
         this.runtime = runtime;
@@ -32,8 +32,8 @@ final class CliSessionLifecycle implements AutoCloseable {
 
     AgentSession open() throws Exception {
         if (options.noSession()) {
-            temporaryDirectory = Files.createTempDirectory("agent4j-no-session-");
-            return create(temporaryDirectory.resolve("session.jsonl"), Optional.empty());
+            temporaryDirectory = OwnedTemporaryDirectory.create("agent4j-no-session-");
+            return create(temporaryDirectory.path().resolve("session.jsonl"), Optional.empty());
         }
         if (options.fork().isPresent()) {
             AgentSession source = resume(resolve(options.fork().orElseThrow()));
@@ -106,7 +106,7 @@ final class CliSessionLifecycle implements AutoCloseable {
     }
 
     Path workingDirectory() {
-        return temporaryDirectory == null ? directory() : temporaryDirectory;
+        return temporaryDirectory == null ? directory() : temporaryDirectory.path();
     }
 
     private AgentSession create(Path file, Optional<String> sessionId) throws Exception {
@@ -181,19 +181,8 @@ final class CliSessionLifecycle implements AutoCloseable {
 
     @Override
     public void close() {
-        if (temporaryDirectory == null || !Files.exists(temporaryDirectory)) {
-            return;
-        }
-        try (var paths = Files.walk(temporaryDirectory)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException ignored) {
-                    // Temporary no-session cleanup must not change command outcome.
-                }
-            });
-        } catch (IOException ignored) {
-            // Temporary no-session cleanup must not change command outcome.
+        if (temporaryDirectory != null) {
+            temporaryDirectory.close();
         }
     }
 }

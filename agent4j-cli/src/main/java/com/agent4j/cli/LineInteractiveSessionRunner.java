@@ -1,6 +1,5 @@
 package com.agent4j.cli;
 
-import com.agent4j.coding.sdk.PromptRequest;
 import com.agent4j.coding.session.SessionManager;
 
 import java.io.BufferedReader;
@@ -13,7 +12,6 @@ import java.util.concurrent.Future;
 
 /** Minimal persistent line REPL over one SDK session. */
 final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
-    private static final int DEFAULT_MAX_TOOL_ROUNDS = 20;
     private static final String PROMPT = "agent4j> ";
 
     @Override
@@ -188,19 +186,7 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
         }
         return prompts.submit(() -> {
             try {
-                controller.session().prompt(new PromptRequest(
-                    prompt,
-                    Optional.of(controller.model()),
-                    DEFAULT_MAX_TOOL_ROUNDS,
-                    0,
-                    Optional.empty(),
-                    null,
-                    java.util.Map.of(),
-                    List.of(),
-                    List.of(),
-                    null,
-                    null,
-                    Optional.empty()));
+                controller.session().prompt(CliPromptRequestFactory.create(prompt, controller.model(), Optional.empty()));
             } catch (Exception error) {
                 terminal.err().println("Error: " + error.getMessage());
                 terminal.err().flush();

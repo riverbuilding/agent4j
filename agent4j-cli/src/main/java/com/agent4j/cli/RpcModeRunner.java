@@ -2,7 +2,6 @@ package com.agent4j.cli;
 
 import com.agent4j.coding.sdk.AgentSession;
 import com.agent4j.coding.sdk.CreateSessionRequest;
-import com.agent4j.coding.sdk.PromptRequest;
 import com.agent4j.coding.session.SessionManager;
 import com.agent4j.core.event.EventSubscription;
 import com.agent4j.core.message.AgentMessage;
@@ -20,7 +19,6 @@ import java.io.PrintWriter;
 import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -33,7 +31,6 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Implements the PI-compatible JSONL RPC framing over stdin and stdout. */
 public final class RpcModeRunner {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
-    private static final int DEFAULT_MAX_TOOL_ROUNDS = 20;
 
     private final Path temporaryDirectory;
     private final ObjectMapper mapper;
@@ -61,14 +58,14 @@ public final class RpcModeRunner {
         Objects.requireNonNull(err, "err");
         Object outputLock = new Object();
         Path sessionDirectory = null;
-        boolean ownsSessionDirectory = false;
+        OwnedTemporaryDirectory ownedSessionDirectory = null;
         EventSubscription subscription = null;
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             AgentSession initialSession;
             if (lifecycle == null) {
-                sessionDirectory = Files.createTempDirectory(temporaryDirectory, "agent4j-rpc-");
-                ownsSessionDirectory = true;
+                ownedSessionDirectory = OwnedTemporaryDirectory.create(temporaryDirectory, "agent4j-rpc-");
+                sessionDirectory = ownedSessionDirectory.path();
                 initialSession = createSession(runtime, environment, sessionDirectory);
             } else {
                 initialSession = lifecycle.open();
@@ -103,8 +100,8 @@ public final class RpcModeRunner {
                 subscription.close();
             }
             executor.shutdownNow();
-            if (ownsSessionDirectory) {
-                deleteRecursively(sessionDirectory);
+            if (ownedSessionDirectory != null) {
+                ownedSessionDirectory.close();
             }
             out.flush();
             err.flush();
@@ -211,19 +208,8 @@ public final class RpcModeRunner {
     }
 
     private static void runPrompt(String message, AbortController controller, State state) throws Exception {
-        state.session.get().prompt(new PromptRequest(
-                message,
-                Optional.of(state.runtime.defaultModel()),
-                DEFAULT_MAX_TOOL_ROUNDS,
-                0,
-                Optional.empty(),
-                null,
-                java.util.Map.of(),
-                java.util.List.of(),
-                java.util.List.of(),
-                null,
-                null,
-                Optional.of(controller.signal())));
+        state.session.get().prompt(CliPromptRequestFactory.create(
+                message, state.runtime.defaultModel(), Optional.of(controller.signal())));
     }
 
     private void newSession(JsonNode id, State state) throws Exception {
@@ -312,23 +298,6 @@ public final class RpcModeRunner {
         synchronized (lock) {
             out.println(line);
             out.flush();
-        }
-    }
-
-    private static void deleteRecursively(Path path) {
-        if (path == null || !Files.exists(path)) {
-            return;
-        }
-        try (var paths = Files.walk(path)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(candidate -> {
-                try {
-                    Files.deleteIfExists(candidate);
-                } catch (IOException ignored) {
-                    // RPC temporary-session cleanup must not mask protocol output.
-                }
-            });
-        } catch (IOException ignored) {
-            // RPC temporary-session cleanup must not mask protocol output.
         }
     }
 
