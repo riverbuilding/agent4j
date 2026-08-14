@@ -61,12 +61,14 @@ public final class RpcModeRunner {
         Objects.requireNonNull(err, "err");
         Object outputLock = new Object();
         Path sessionDirectory = null;
+        boolean ownsSessionDirectory = false;
         EventSubscription subscription = null;
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             AgentSession initialSession;
             if (lifecycle == null) {
                 sessionDirectory = Files.createTempDirectory(temporaryDirectory, "agent4j-rpc-");
+                ownsSessionDirectory = true;
                 initialSession = createSession(runtime, environment, sessionDirectory);
             } else {
                 initialSession = lifecycle.open();
@@ -101,7 +103,9 @@ public final class RpcModeRunner {
                 subscription.close();
             }
             executor.shutdownNow();
-            deleteRecursively(sessionDirectory);
+            if (ownsSessionDirectory) {
+                deleteRecursively(sessionDirectory);
+            }
             out.flush();
             err.flush();
         }

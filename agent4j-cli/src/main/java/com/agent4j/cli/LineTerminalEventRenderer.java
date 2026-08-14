@@ -1,8 +1,8 @@
 package com.agent4j.cli;
 
 /** Plain-text fallback for pipes, tests, and terminals without ANSI support. */
-final class LineTerminalRenderingLayer extends TerminalRenderingLayer.Base {
-    LineTerminalRenderingLayer(InteractiveTerminal terminal) {
+final class LineTerminalEventRenderer extends TerminalEventRenderer.Base {
+    LineTerminalEventRenderer(InteractiveTerminal terminal) {
         super(terminal);
     }
 

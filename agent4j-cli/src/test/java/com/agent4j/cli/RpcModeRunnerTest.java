@@ -104,6 +104,28 @@ class RpcModeRunnerTest {
         assertThat(stderr.toString()).isEmpty();
     }
 
+    @Test
+    void preservesPersistentSessionDirectoryOwnedByLifecycle() throws Exception {
+        Path sessionDirectory = temporaryDirectory.resolve("sessions");
+        Files.createDirectories(sessionDirectory);
+        Path sentinel = sessionDirectory.resolve("keep.txt");
+        Files.writeString(sentinel, "preserve me");
+        CliRuntime runtime = runtime(new FakeModelClient());
+        CliSessionLifecycle lifecycle = new CliSessionLifecycle(runtime, environment(), new CliSessionOptions(
+                false, false, false, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty(),
+                java.util.Optional.of(sessionDirectory), java.util.Optional.empty()));
+        StringWriter stdout = new StringWriter();
+        StringWriter stderr = new StringWriter();
+
+        int exitCode = new RpcModeRunner(temporaryDirectory, JSON, new JsonEventSerializer()).run(
+                runtime, environment(), new StringReader("{\"id\":\"shutdown\",\"type\":\"shutdown\"}\n"),
+                new PrintWriter(stdout), new PrintWriter(stderr), lifecycle);
+
+        assertThat(exitCode).withFailMessage(stderr.toString()).isZero();
+        assertThat(sentinel).exists();
+        assertThat(sessionDirectory).isDirectory();
+    }
+
     private int run(FakeModelClient model, String input, StringWriter stdout, StringWriter stderr) throws Exception {
         return new RpcModeRunner(temporaryDirectory, JSON, new JsonEventSerializer()).run(
                 runtime(model),

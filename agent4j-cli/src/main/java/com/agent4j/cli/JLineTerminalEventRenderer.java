@@ -4,13 +4,13 @@ import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
 
 /** JLine-backed renderer for ANSI-aware terminals. */
-final class JLineTerminalRenderingLayer extends TerminalRenderingLayer.Base {
+final class JLineTerminalEventRenderer extends TerminalEventRenderer.Base {
     private static final AttributedStyle STATUS = AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN);
     private static final AttributedStyle ERROR = AttributedStyle.DEFAULT.foreground(AttributedStyle.RED).bold();
     private static final AttributedStyle HEADING = AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE).bold();
     private static final AttributedStyle CODE = AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW);
 
-    JLineTerminalRenderingLayer(InteractiveTerminal terminal) {
+    JLineTerminalEventRenderer(InteractiveTerminal terminal) {
         super(terminal);
     }
 

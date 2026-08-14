@@ -67,7 +67,7 @@ class CodingAgentLoopRequestFactoryTest {
                 QueueMode.ALL,
                 QueueMode.ONE_AT_A_TIME);
 
-        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestFactory().prepare(request, home);
+        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 
         assertThat(prepared.discovery().systemPrompt()).hasValueSatisfying(system ->
                 assertThat(system.content()).isEqualTo("project system\n"));
@@ -83,6 +83,12 @@ class CodingAgentLoopRequestFactoryTest {
         assertThat(prepared.request().toolExecutionMode()).isEqualTo(ToolExecutionMode.SEQUENTIAL);
         assertThat(prepared.request().maxToolRounds()).isEqualTo(3);
         assertThat(prepared.request().maxModelRetries()).isEqualTo(2);
+
+        @SuppressWarnings("deprecation")
+        PreparedAgentLoopRequest compatibilityPrepared = new CodingAgentLoopRequestFactory().prepare(request, home);
+
+        assertThat(compatibilityPrepared.request().systemPrompt()).isEqualTo(prepared.request().systemPrompt());
+        assertThat(compatibilityPrepared.discovery()).isEqualTo(prepared.discovery());
     }
 
     @Test
@@ -101,7 +107,7 @@ class CodingAgentLoopRequestFactoryTest {
                 Map.of(),
                 1);
 
-        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestFactory().prepare(request, home);
+        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 
         assertThat(prepared.request().systemPrompt()).isNull();
         assertThat(prepared.discovery().contextFiles()).isEmpty();
@@ -131,7 +137,7 @@ class CodingAgentLoopRequestFactoryTest {
                 Map.of(),
                 1);
 
-        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestFactory().prepare(request, home);
+        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 
         assertThat(prepared.request().maxModelRetries()).isEqualTo(4);
         assertThat(prepared.request().modelTimeout()).contains(Duration.ofMillis(300000));
@@ -169,7 +175,7 @@ class CodingAgentLoopRequestFactoryTest {
                 QueueMode.ONE_AT_A_TIME,
                 QueueMode.ONE_AT_A_TIME);
 
-        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestFactory().prepare(request, home);
+        PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 
         assertThat(prepared.request().maxModelRetries()).isEqualTo(2);
         assertThat(prepared.request().modelTimeout()).contains(Duration.ofSeconds(10));

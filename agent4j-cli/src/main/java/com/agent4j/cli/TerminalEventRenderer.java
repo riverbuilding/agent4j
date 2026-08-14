@@ -9,20 +9,20 @@ import java.util.Map;
 import java.util.Objects;
 
 /** Structured event-to-terminal rendering shared by styled and line fallbacks. */
-interface TerminalRenderingLayer {
+interface TerminalEventRenderer {
     void render(AgentEvent event);
 
     final class Factory {
         private Factory() { }
 
-        static TerminalRenderingLayer create(InteractiveTerminal terminal) {
+        static TerminalEventRenderer create(InteractiveTerminal terminal) {
             return terminal.ansiEnabled()
-                    ? new JLineTerminalRenderingLayer(terminal)
-                    : new LineTerminalRenderingLayer(terminal);
+                    ? new JLineTerminalEventRenderer(terminal)
+                    : new LineTerminalEventRenderer(terminal);
         }
     }
 
-    abstract class Base implements TerminalRenderingLayer {
+    abstract class Base implements TerminalEventRenderer {
         protected final InteractiveTerminal terminal;
         private final Map<String, Boolean> streamedText = new HashMap<>();
         private boolean lineOpen;

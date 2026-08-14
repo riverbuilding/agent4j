@@ -12,7 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /** Minimal persistent line REPL over one SDK session. */
-final class LineInteractiveSessionHost implements InteractiveSessionHost {
+final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
     private static final int DEFAULT_MAX_TOOL_ROUNDS = 20;
     private static final String PROMPT = "agent4j> ";
 

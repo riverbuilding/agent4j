@@ -13,12 +13,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
-public final class FakeTextTurnRuntime {
+public final class FakeAssistantTextTurnEmitter {
     private final AgentEventBus eventBus;
     private final Clock clock;
     private final ObjectMapper mapper;
 
-    public FakeTextTurnRuntime(AgentEventBus eventBus, Clock clock) {
+    public FakeAssistantTextTurnEmitter(AgentEventBus eventBus, Clock clock) {
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.mapper = new ObjectMapper();

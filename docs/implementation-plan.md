@@ -334,7 +334,7 @@ Tasks:
   Started system prompt transport with `AiSystemMessage` and optional
   `AgentLoopRequest.systemPrompt`, so assembled prompts can be sent to the
   model without being persisted as transcript messages. Started coding-agent
-  request preparation with `CodingAgentLoopRequestFactory`, which discovers
+  request preparation with `CodingAgentLoopRequestPreparer`, which discovers
   resources, assembles the system prompt, preserves the original loop request
   fields, and returns discovery metadata for diagnostics. Full `AgentSession`
   wiring and fixture-based exact text parity are still pending.
@@ -935,9 +935,9 @@ Tasks:
   `InteractiveTerminal` in `agent4j-cli`. Default text mode now uses the same
   runtime factory and `CliSessionLifecycle` as the Phase 10 process modes,
   opens the resolved SDK `AgentSession`, and hands it to an injectable session
-  host. The temporary bootstrap host reports session readiness only; Slice 3
+  runner. The temporary bootstrap runner reports session readiness only; Slice 3
   replaces it with the persistent line-oriented REPL.
-- Phase 11 Slice 3 is done: `LineInteractiveSessionHost` is the
+- Phase 11 Slice 3 is done: `LineInteractiveSessionRunner` is the
   injected, persistent line-loop implementation. It submits each nonblank
   initial or entered line through the opened `AgentSession`, prints only final
   assistant text, reports a failed prompt to stderr without losing the session,
@@ -945,7 +945,7 @@ Tasks:
   injected I/O; JLine editor integration follows after the loop contract is
   covered by tests. Fake-provider tests pin repeated prompts on one session,
   blank input, failure recovery, final text, and EOF shutdown.
-- Phase 11 Slice 4 is done with `InteractiveEventRenderer`. The interactive
+- Phase 11 Slice 4 is done with `TerminalEventRenderer`. The interactive
   runner subscribes to the opened session before entering the host loop and
   closes that subscription during shutdown. Assistant `text_delta` content is
   written as it arrives; `message_end` is only a fallback for non-streaming

@@ -2,7 +2,6 @@ package com.agent4j.cli;
 
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.message.AgentMessage;
-import com.agent4j.core.message.AgentMessageRole;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -15,7 +14,7 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class InteractiveEventRendererTest {
+class TerminalEventRendererTest {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
     private static final Instant NOW = Instant.parse("2026-08-12T00:00:00Z");
 
@@ -23,7 +22,7 @@ class InteractiveEventRendererTest {
     void rendersStreamingTextOnceAndWritesStatusAndFailureEventsToExpectedStreams() {
         StringWriter stdout = new StringWriter();
         StringWriter stderr = new StringWriter();
-        InteractiveEventRenderer renderer = new InteractiveEventRenderer(
+        TerminalEventRenderer renderer = TerminalEventRenderer.Factory.create(
                 new InteractiveTerminal(new StringReader(""), new PrintWriter(stdout), new PrintWriter(stderr)));
         ToolCall call = new ToolCall("tool-1", "read", JSON.objectNode().put("path", "README.md"));
 
@@ -56,7 +55,7 @@ class InteractiveEventRendererTest {
     @Test
     void fallsBackToCompletedAssistantTextWhenProviderDidNotStreamDeltas() {
         StringWriter stdout = new StringWriter();
-        InteractiveEventRenderer renderer = new InteractiveEventRenderer(
+        TerminalEventRenderer renderer = TerminalEventRenderer.Factory.create(
                 new InteractiveTerminal(new StringReader(""), new PrintWriter(stdout), new PrintWriter(new StringWriter())));
 
         renderer.render(new AgentEvent.MessageEnded("session", NOW, assistant("assistant-1", "final only")));
@@ -68,7 +67,7 @@ class InteractiveEventRendererTest {
     void usesJLineStylesForMarkdownStatusAndErrorsWhenAnsiIsEnabled() {
         StringWriter stdout = new StringWriter();
         StringWriter stderr = new StringWriter();
-        InteractiveEventRenderer renderer = new InteractiveEventRenderer(
+        TerminalEventRenderer renderer = TerminalEventRenderer.Factory.create(
                 new InteractiveTerminal(new StringReader(""), new PrintWriter(stdout), new PrintWriter(stderr), true));
 
         renderer.render(new AgentEvent.MessageEnded("session", NOW,

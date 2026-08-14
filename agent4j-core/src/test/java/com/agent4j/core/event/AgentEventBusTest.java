@@ -6,7 +6,7 @@ import com.agent4j.core.message.ContentBlocks;
 import com.agent4j.core.message.TextBlock;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
-import com.agent4j.core.runtime.FakeTextTurnRuntime;
+import com.agent4j.core.runtime.FakeAssistantTextTurnEmitter;
 import com.agent4j.core.runtime.QueueKind;
 import com.agent4j.core.runtime.Usage;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,9 +32,9 @@ class AgentEventBusTest {
         AgentEventBus bus = new AgentEventBus();
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
-        FakeTextTurnRuntime runtime = new FakeTextTurnRuntime(bus, clock);
+        FakeAssistantTextTurnEmitter emitter = new FakeAssistantTextTurnEmitter(bus, clock);
 
-        runtime.emitAssistantTextTurn(
+        emitter.emitAssistantTextTurn(
                 "session-1",
                 "turn-1",
                 "message-1",
