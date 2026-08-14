@@ -32,6 +32,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.PrintWriter;
+import java.io.StringReader;
 import java.io.StringWriter;
 import java.time.Clock;
 import java.time.Instant;
@@ -75,7 +76,7 @@ class Agent4jCliTest {
                 "--api-key", "sk-runtime-only",
                 "hello");
 
-        assertThat(exitCode).isEqualTo(1);
+        assertThat(exitCode).isZero();
         assertThat(received.get()).isNotNull();
         assertThat(received.get().cwd()).isEqualTo(temporaryDirectory.resolve("workspace").toAbsolutePath());
         assertThat(received.get().provider()).contains("openai");
@@ -127,8 +128,9 @@ class Agent4jCliTest {
         assertThat(request.get()).isNotNull();
         assertThat(stdout.toString()).isEqualTo("agent4j> ");
         assertThat(stderr.toString()).isEmpty();
-        try (var sessionFiles = Files.list(environment().homeDirectory().resolve(".pi/agent/sessions"))) {
-            assertThat(sessionFiles.anyMatch(path -> path.getFileName().toString().endsWith(".jsonl"))).isTrue();
+        try (var sessionFiles = Files.walk(environment().homeDirectory().resolve(".pi/agent/sessions"))) {
+            assertThat(sessionFiles.anyMatch(path ->
+                    Files.isRegularFile(path) && path.getFileName().toString().endsWith(".jsonl"))).isTrue();
         }
     }
 
@@ -237,6 +239,7 @@ class Agent4jCliTest {
         return Agent4jCli.execute(
                 factory,
                 environment(),
+                new StringReader(""),
                 new PrintWriter(new StringWriter()),
                 new PrintWriter(new StringWriter()),
                 args);

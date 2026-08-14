@@ -47,9 +47,51 @@ The command reports the selected model, bounded output/tool limits, and the
 workspace/session locations. It deliberately does not print the API key and
 does not send a request.
 
+## Progressive live walkthroughs
+
+Each command below sends a real streamed request and may incur provider
+charges. They reuse the environment configuration above and create temporary
+workspaces and sessions unless you explicitly select their locations.
+
+### 01-real-prompt
+
+Sends one short prompt, prints assistant text as it arrives, then reports the
+usage returned by the provider.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.RealPromptExample
+```
+
+### 02-streaming-events
+
+Builds on the first walkthrough by printing the public `AgentEvent` lifecycle
+boundaries around a real streamed response.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.StreamingEventsExample
+```
+
+### 03-tool-calling
+
+Builds on streaming by exposing exactly one `workspace_status` tool. It only
+returns the session workspace path; it cannot read, write, delete, or execute
+anything. The walkthrough fails clearly if the selected model does not invoke
+the tool, so choose a model that supports function calling.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ToolCallingExample
+```
+
 ## Bounds and cost
 
-Future walkthroughs inherit these defaults from `LiveExampleRuntime`:
+Future walkthroughs pass these defaults from `LiveExampleConfiguration` to
+`CodingAgentRuntime`:
 
 - maximum output tokens: `256`
 - maximum tool rounds: `1`

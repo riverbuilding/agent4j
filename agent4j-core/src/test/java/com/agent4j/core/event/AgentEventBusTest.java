@@ -50,6 +50,15 @@ class AgentEventBusTest {
                         "MessageEnded",
                         "TurnEnded",
                         "AgentEnded");
+        assertThat(events).extracting(AgentEvent::wireName)
+                .containsExactly(
+                        AgentEvent.AgentStarted.TYPE,
+                        AgentEvent.TurnStarted.TYPE,
+                        AgentEvent.MessageStarted.TYPE,
+                        AgentEvent.MessageUpdated.TYPE,
+                        AgentEvent.MessageEnded.TYPE,
+                        AgentEvent.TurnEnded.TYPE,
+                        AgentEvent.AgentEnded.TYPE);
         assertThat(((AgentEvent.MessageEnded) events.get(4)).message().content().get(0).get("text").asText())
                 .isEqualTo("hello");
         assertThat(((AgentEvent.MessageEnded) events.get(4)).message().textContent()).isEqualTo("hello");
@@ -82,7 +91,7 @@ class AgentEventBusTest {
         String json = mapper.writeValueAsString(event);
         AgentEvent readBack = mapper.readValue(json, AgentEvent.class);
 
-        assertThat(json).contains("\"type\":\"agent_end\"");
+        assertThat(json).contains("\"type\":\"" + event.wireName() + "\"");
         assertThat(readBack).isInstanceOf(AgentEvent.AgentEnded.class);
         assertThat(((AgentEvent.AgentEnded) readBack).turnId()).isEqualTo("turn-1");
     }

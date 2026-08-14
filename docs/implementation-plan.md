@@ -1003,8 +1003,8 @@ Principles:
 
 - Add an `agent4j-examples` Maven module containing runnable Java applications
   and matching Markdown walkthroughs under `docs/examples/`.
-- Examples use the production `OpenAiResponsesProvider`,
-  `CodingAgentSessionRuntime`, and CLI boundaries. They must not substitute
+- Examples use the production `OpenAiResponsesProvider`, `CodingAgentRuntime`,
+  and `CodingAgentSession` boundaries. They must not substitute
   fake models or fake providers for the feature being demonstrated.
 - Require `OPENAI_API_KEY` and `AGENT4J_OPENAI_MODEL` from the environment;
   never accept keys as command-line arguments, print them, persist them in
@@ -1022,11 +1022,12 @@ Principles:
 Tasks:
 
 1. Establish the live-example foundation. Done with `agent4j-examples`, shared
-   `LiveExampleRuntime`, and `LiveExamplePreflight`.
-   - `LiveExampleRuntime` validates required environment variables without
-     retaining or displaying API-key values, configures the production OpenAI
-     runtime, bounds future example output/tool limits, and creates temporary
-     workspace/session directories unless the user explicitly supplies paths.
+   `LiveExampleConfiguration`, and `LiveExamplePreflight`.
+   - `LiveExampleConfiguration` validates required environment variables without
+     displaying or persisting API-key values, bounds future example output/tool
+     limits, and creates temporary workspace/session directories unless the user
+     explicitly supplies paths. `CodingAgentRuntime` configures the production
+     OpenAI runtime from those values.
    - The opt-in `live-openai-examples` Maven profile executes the selected
      example entry point; the current preflight entry point validates setup and
      cleanup without sending an API request. `docs/examples/README.md` covers
@@ -1034,13 +1035,14 @@ Tasks:
    - The foundation registers no filesystem-writing or process-executing tools.
      Future tool walkthroughs must constrain any side effects to the example
      workspace and document them before execution.
-2. Add progressive real OpenAI walkthroughs.
-   - `01-real-prompt`: create the standard OpenAI runtime, send one prompt,
-     print streaming assistant text and usage.
-   - `02-streaming-events`: reuse the first runtime/session setup and render
-     `AgentEvent` start/update/end/error boundaries.
-   - `03-tool-calling`: extend the same live agent with constrained local tools
-     and demonstrate model tool selection, execution, and final response.
+2. Add progressive real OpenAI walkthroughs. The first three are complete.
+   - `01-real-prompt` creates the standard OpenAI runtime, sends one prompt,
+     prints streaming assistant text and provider usage.
+   - `02-streaming-events` reuses the runtime/session setup and renders public
+     `AgentEvent` lifecycle boundaries.
+   - `03-tool-calling` exposes only the no-side-effect `workspace_status` tool,
+     then demonstrates model selection and execution. It fails clearly when a
+     selected model does not support or invoke function calling.
    - `04-persistent-sessions`: create, prompt, close, resume, and inspect a
      JSONL session without callers rebuilding conversation history.
    - `05-live-session-control`: demonstrate steering, follow-up, and
@@ -1127,8 +1129,7 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Continue Phase 12 with the first three real OpenAI walkthroughs: prompt,
-   streaming events, and constrained tool calling, using the completed
-   `LiveExampleRuntime` foundation.
+1. Continue Phase 12 with `04-persistent-sessions`, building directly on the
+   completed prompt, event, and no-side-effect tool walkthroughs.
 2. Keep Phase 9 production OAuth verification separate; record live-provider
    example evidence without treating it as sufficient OAuth closure evidence.

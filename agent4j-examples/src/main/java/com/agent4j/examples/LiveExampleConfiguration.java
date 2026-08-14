@@ -1,13 +1,8 @@
 package com.agent4j.examples;
 
-import com.agent4j.ai.AiModelReference;
-import com.agent4j.coding.sdk.ApiKeyLoginRequest;
-import com.agent4j.coding.sdk.AgentSession;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
-import com.agent4j.coding.sdk.CreateSessionRequest;
-import com.agent4j.coding.sdk.InMemoryAuthCredentialStore;
-import com.agent4j.coding.sdk.OpenAiCodingRuntimeOptions;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
+import com.agent4j.coding.sdk.OpenAiCodingAgentConfig;
+import com.agent4j.core.tool.ToolRegistry;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,8 +12,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Shared, credential-safe foundation for opt-in examples backed by the OpenAI API. */
-public final class LiveExampleRuntime implements AutoCloseable {
+/** Environment-derived configuration and temporary paths for opt-in live examples. */
+public final class LiveExampleConfiguration implements AutoCloseable {
     public static final String OPENAI_API_KEY = "OPENAI_API_KEY";
     public static final String OPENAI_BASE_URL = "OPENAI_BASE_URL";
     public static final String OPENAI_MODEL = "AGENT4J_OPENAI_MODEL";
@@ -30,8 +25,8 @@ public final class LiveExampleRuntime implements AutoCloseable {
     public static final int DEFAULT_MAX_OUTPUT_TOKENS = 256;
     public static final int DEFAULT_MAX_TOOL_ROUNDS = 1;
 
-    private final CodingAgentSessionRuntime runtime;
-    private final AiModelReference model;
+    private final String apiKey;
+    private final String model;
     private final Optional<String> baseUrl;
     private final Path workspace;
     private final Path sessionDirectory;
@@ -40,9 +35,9 @@ public final class LiveExampleRuntime implements AutoCloseable {
     private final boolean cleanupWorkspace;
     private final boolean cleanupSessionDirectory;
 
-    private LiveExampleRuntime(
-            CodingAgentSessionRuntime runtime,
-            AiModelReference model,
+    private LiveExampleConfiguration(
+            String apiKey,
+            String model,
             Optional<String> baseUrl,
             Path workspace,
             Path sessionDirectory,
@@ -51,7 +46,7 @@ public final class LiveExampleRuntime implements AutoCloseable {
             boolean cleanupWorkspace,
             boolean cleanupSessionDirectory
     ) {
-        this.runtime = Objects.requireNonNull(runtime, "runtime");
+        this.apiKey = Objects.requireNonNull(apiKey, "apiKey");
         this.model = Objects.requireNonNull(model, "model");
         this.baseUrl = Objects.requireNonNull(baseUrl, "baseUrl");
         this.workspace = Objects.requireNonNull(workspace, "workspace");
@@ -62,27 +57,19 @@ public final class LiveExampleRuntime implements AutoCloseable {
         this.cleanupSessionDirectory = cleanupSessionDirectory;
     }
 
-    public static LiveExampleRuntime open() throws IOException {
+    public static LiveExampleConfiguration open() throws IOException {
         return open(System.getenv());
     }
 
-    static LiveExampleRuntime open(Map<String, String> environment) throws IOException {
+    static LiveExampleConfiguration open(Map<String, String> environment) throws IOException {
         Objects.requireNonNull(environment, "environment");
-        String apiKey = requireEnvironment(environment, OPENAI_API_KEY);
-        AiModelReference model = new AiModelReference("openai", requireEnvironment(environment, OPENAI_MODEL));
-        Optional<String> baseUrl = optionalEnvironment(environment, OPENAI_BASE_URL);
         ManagedDirectory workspace = directory(environment, WORKSPACE, "agent4j-example-workspace-");
         ManagedDirectory sessionDirectory = directory(environment, SESSION_DIRECTORY, "agent4j-example-sessions-");
         try {
-            CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
-                    OpenAiCodingRuntimeOptions.builder(model)
-                            .credentialStore(new InMemoryAuthCredentialStore())
-                            .build());
-            services.loginService().loginApiKey(new ApiKeyLoginRequest("openai", apiKey, baseUrl));
-            return new LiveExampleRuntime(
-                    new CodingAgentSessionRuntime(services),
-                    model,
-                    baseUrl,
+            return new LiveExampleConfiguration(
+                    requireEnvironment(environment, OPENAI_API_KEY),
+                    requireEnvironment(environment, OPENAI_MODEL),
+                    optionalEnvironment(environment, OPENAI_BASE_URL),
                     workspace.path(),
                     sessionDirectory.path(),
                     positiveInt(environment, MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
@@ -96,11 +83,32 @@ public final class LiveExampleRuntime implements AutoCloseable {
         }
     }
 
-    public CodingAgentSessionRuntime runtime() {
-        return runtime;
+    public CodingAgentRuntime createRuntime() {
+        return CodingAgentRuntime.openAi(openAiConfig());
     }
 
-    public AiModelReference model() {
+    public CodingAgentRuntime createRuntime(ToolRegistry toolRegistry) {
+        return CodingAgentRuntime.openAi(openAiConfig(toolRegistry));
+    }
+
+    OpenAiCodingAgentConfig openAiConfig() {
+        return openAiConfigBuilder().build();
+    }
+
+    OpenAiCodingAgentConfig openAiConfig(ToolRegistry toolRegistry) {
+        return openAiConfigBuilder()
+                .toolRegistry(toolRegistry)
+                .build();
+    }
+
+    private OpenAiCodingAgentConfig.Builder openAiConfigBuilder() {
+        OpenAiCodingAgentConfig.Builder config = OpenAiCodingAgentConfig.builder(apiKey, model)
+                .maxOutputTokens(maxOutputTokens);
+        baseUrl.ifPresent(config::baseUrl);
+        return config;
+    }
+
+    public String model() {
         return model;
     }
 
@@ -132,14 +140,13 @@ public final class LiveExampleRuntime implements AutoCloseable {
         return cleanupSessionDirectory;
     }
 
-    public AgentSession createSession(String fileName) throws Exception {
+    public Path sessionFile(String fileName) {
         Objects.requireNonNull(fileName, "fileName");
         Path name = Path.of(fileName);
         if (name.getNameCount() != 1 || !fileName.endsWith(".jsonl")) {
             throw new IllegalArgumentException("session file name must be a single .jsonl file name");
         }
-        return runtime.createSession(new CreateSessionRequest(
-                sessionDirectory.resolve(name).normalize(), workspace, Optional.empty(), Optional.of(model)));
+        return sessionDirectory.resolve(name).normalize();
     }
 
     @Override

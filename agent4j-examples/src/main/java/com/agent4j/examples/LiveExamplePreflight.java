@@ -10,16 +10,16 @@ public final class LiveExamplePreflight {
             usage();
             return;
         }
-        try (LiveExampleRuntime runtime = LiveExampleRuntime.open()) {
+        try (LiveExampleConfiguration configuration = LiveExampleConfiguration.open()) {
             System.out.println("Live OpenAI example runtime is ready.");
-            System.out.println("Model: " + runtime.model().providerId() + "/" + runtime.model().modelId());
-            System.out.println("Base URL: " + runtime.baseUrl().orElse("https://api.openai.com/v1"));
-            System.out.println("Workspace: " + runtime.workspace());
-            System.out.println("Session directory: " + runtime.sessionDirectory());
-            System.out.println("Max output tokens: " + runtime.maxOutputTokens());
-            System.out.println("Max tool rounds: " + runtime.maxToolRounds());
-            System.out.println("Temporary workspace: " + runtime.temporaryWorkspace());
-            System.out.println("Temporary session directory: " + runtime.temporarySessionDirectory());
+            System.out.println("Model: openai/" + configuration.model());
+            System.out.println("Base URL: " + configuration.baseUrl().orElse("https://api.openai.com/v1"));
+            System.out.println("Workspace: " + configuration.workspace());
+            System.out.println("Session directory: " + configuration.sessionDirectory());
+            System.out.println("Max output tokens: " + configuration.maxOutputTokens());
+            System.out.println("Max tool rounds: " + configuration.maxToolRounds());
+            System.out.println("Temporary workspace: " + configuration.temporaryWorkspace());
+            System.out.println("Temporary session directory: " + configuration.temporarySessionDirectory());
             System.out.println("No API request was sent by this preflight check.");
         }
     }
