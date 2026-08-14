@@ -963,7 +963,7 @@ Tasks:
   follow-up control until JLine key handling is introduced. SDK tests pin live
   steer/follow-up consumption in the same loop invocation and active-run abort.
 - Phase 11 Slice 6 is done with `InteractiveCommandRegistry` and a command
-  handler boundary intended for Phase 12 registrations. The line shell now
+  handler boundary intended for Phase 13 registrations. The line shell now
   supports `/help`, `/exit`, `/abort`, `/clear`, `/status`, `/name <name>`,
   `/compact`, `/new`, `/continue`, and `/resume <path|id>`. An
   `InteractiveSessionController` owns active-session replacement and event
@@ -994,7 +994,95 @@ Exit criteria:
 - Basic interactive mode can run real sessions.
 - Rich TUI has screenshot/manual QA coverage before being treated as parity.
 
-## Phase 12: Extension SPI
+## Phase 12: Live OpenAI Feature Walkthroughs
+
+Goal: provide a progressive, real-provider learning path that demonstrates
+agent4j's public feature composition against the OpenAI API.
+
+Principles:
+
+- Add an `agent4j-examples` Maven module containing runnable Java applications
+  and matching Markdown walkthroughs under `docs/examples/`.
+- Examples use the production `OpenAiResponsesProvider`,
+  `CodingAgentSessionRuntime`, and CLI boundaries. They must not substitute
+  fake models or fake providers for the feature being demonstrated.
+- Require `OPENAI_API_KEY` and `AGENT4J_OPENAI_MODEL` from the environment;
+  never accept keys as command-line arguments, print them, persist them in
+  example sessions, or add them to source control.
+- Make all live runs opt-in and exclude them from normal `mvn test` execution.
+  CI compiles the examples; deterministic fake-provider tests remain the
+  regression safety net.
+- Bound each live invocation with explicit model, output-token, tool-round, and
+  workspace limits. Each walkthrough records usage, elapsed time, model ID,
+  request ID when available, cleanup instructions, and expected observable
+  behavior without asserting exact model prose.
+- Each successive example reuses the runtime/session setup established by the
+  prior example rather than reimplementing agent construction.
+
+Tasks:
+
+1. Establish the live-example foundation. Done with `agent4j-examples`, shared
+   `LiveExampleRuntime`, and `LiveExamplePreflight`.
+   - `LiveExampleRuntime` validates required environment variables without
+     retaining or displaying API-key values, configures the production OpenAI
+     runtime, bounds future example output/tool limits, and creates temporary
+     workspace/session directories unless the user explicitly supplies paths.
+   - The opt-in `live-openai-examples` Maven profile executes the selected
+     example entry point; the current preflight entry point validates setup and
+     cleanup without sending an API request. `docs/examples/README.md` covers
+     API-key configuration, model selection, cost estimation, and cleanup.
+   - The foundation registers no filesystem-writing or process-executing tools.
+     Future tool walkthroughs must constrain any side effects to the example
+     workspace and document them before execution.
+2. Add progressive real OpenAI walkthroughs.
+   - `01-real-prompt`: create the standard OpenAI runtime, send one prompt,
+     print streaming assistant text and usage.
+   - `02-streaming-events`: reuse the first runtime/session setup and render
+     `AgentEvent` start/update/end/error boundaries.
+   - `03-tool-calling`: extend the same live agent with constrained local tools
+     and demonstrate model tool selection, execution, and final response.
+   - `04-persistent-sessions`: create, prompt, close, resume, and inspect a
+     JSONL session without callers rebuilding conversation history.
+   - `05-live-session-control`: demonstrate steering, follow-up, and
+     cancellation during a streamed real-provider run, with timing guidance for
+     manual execution rather than exact-text assertions.
+   - `06-resources-and-coding-tools`: add a safe sample workspace, resource
+     discovery, settings, system-prompt construction, selected built-in tools,
+     and workspace-scoped behavior.
+   - `07-compaction-and-branching`: demonstrate manual compaction, fork,
+     resume, active-path behavior, and persisted summaries; document token cost
+     and generated-session cleanup.
+   - `08-cli-modes`: invoke the actual CLI with the same environment-based
+     credentials for print, JSON, RPC, and session lifecycle flows.
+   - `09-interactive-shell`: demonstrate real interactive streaming, tool
+     activity, `/status`, `/model`, `/new`, `/resume`, `/follow-up`, and
+     `/abort`, with an ANSI/plain-terminal manual QA checklist.
+   - `10-reference-application`: combine the preceding pieces in a small,
+     safe workspace coding-assistant application that becomes the recommended
+     onboarding path.
+3. Validate and close out the examples.
+   - Add compile-time/example-structure checks to normal CI.
+   - Add environment-gated live verification commands that assert stable facts
+     such as successful completion, event ordering, tool/session shape, and
+     cleanup; do not assert exact natural-language output.
+   - Record actual live execution evidence separately from deterministic unit
+     tests, including the selected model and date but no secrets.
+   - Reuse successful live OpenAI API examples as evidence toward the remaining
+     Phase 9 production-provider verification gate; do not declare that gate
+     closed until the documented OAuth and live subscription checks also pass.
+
+Exit criteria:
+
+- A user with a valid OpenAI API key can run the examples in order from a clean
+  checkout and see each feature extend the prior one.
+- Every feature introduced through Phase 11 has a real-provider walkthrough or
+  an explicit documented exclusion.
+- The reference application uses the same public runtime, session, and CLI
+  boundaries recommended to users.
+- Live examples are credential-safe, bounded, documented for cost and cleanup,
+  and never run unintentionally in CI.
+
+## Phase 13: Extension SPI
 
 Goal: support harness customization without embedding TypeScript first.
 
@@ -1002,7 +1090,7 @@ Tasks:
 
 - Mirror PI extension lifecycle names and hook timing as the default Java SPI.
   Phase 8 pins current tool-hook timing in `docs/tool-hook-timing-audit.md`;
-  Phase 12 still owns exact extension hook names, discovery, and exception
+  Phase 13 still owns exact extension hook names, discovery, and exception
   policy.
 - Define Java extension interfaces.
 - Add lifecycle hooks:
@@ -1019,7 +1107,7 @@ Exit criteria:
 
 - A test extension can register a custom tool and mutate context.
 
-## Phase 13: PI Package Bridge
+## Phase 14: PI Package Bridge
 
 Goal: decide whether PI package compatibility is worth the complexity.
 
@@ -1039,7 +1127,8 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Begin Phase 11 with the basic interactive shell over the established CLI and
-   `AgentSessionRuntime` boundaries.
-2. Keep Phase 9 production OAuth verification separate and expand PI fixtures
-   as they become available.
+1. Continue Phase 12 with the first three real OpenAI walkthroughs: prompt,
+   streaming events, and constrained tool calling, using the completed
+   `LiveExampleRuntime` foundation.
+2. Keep Phase 9 production OAuth verification separate; record live-provider
+   example evidence without treating it as sufficient OAuth closure evidence.

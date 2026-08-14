@@ -1,0 +1,71 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.agent4j</groupId>
+        <artifactId>agent4j-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>agent4j-examples</artifactId>
+    <name>agent4j-examples</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.agent4j</groupId>
+            <artifactId>agent4j-coding</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>live-openai-examples</id>
+            <activation>
+                <property>
+                    <name>agent4j.liveOpenAiExamples</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <agent4j.liveExample.mainClass>com.agent4j.examples.LiveExamplePreflight</agent4j.liveExample.mainClass>
+                <agent4j.liveExample.args></agent4j.liveExample.args>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.6.3</version>
+                        <executions>
+                            <execution>
+                                <id>run-live-openai-example</id>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>java</goal>
+                                </goals>
+                                <configuration>
+                                    <mainClass>${agent4j.liveExample.mainClass}</mainClass>
+                                    <commandlineArgs>${agent4j.liveExample.args}</commandlineArgs>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

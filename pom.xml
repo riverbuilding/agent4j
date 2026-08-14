@@ -17,6 +17,7 @@
         <module>agent4j-coding</module>
         <module>agent4j-cli</module>
         <module>agent4j-testkit</module>
+        <module>agent4j-examples</module>
     </modules>
 
     <properties>
