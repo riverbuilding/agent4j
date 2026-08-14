@@ -1,10 +1,12 @@
 package com.agent4j.examples;
 
 import com.agent4j.ai.AiModelReference;
+import com.agent4j.coding.sdk.ApiKeyLoginRequest;
 import com.agent4j.coding.sdk.AgentSession;
 import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
 import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
 import com.agent4j.coding.sdk.CreateSessionRequest;
+import com.agent4j.coding.sdk.InMemoryAuthCredentialStore;
 import com.agent4j.coding.sdk.OpenAiCodingRuntimeOptions;
 
 import java.io.IOException;
@@ -18,6 +20,7 @@ import java.util.Optional;
 /** Shared, credential-safe foundation for opt-in examples backed by the OpenAI API. */
 public final class LiveExampleRuntime implements AutoCloseable {
     public static final String OPENAI_API_KEY = "OPENAI_API_KEY";
+    public static final String OPENAI_BASE_URL = "OPENAI_BASE_URL";
     public static final String OPENAI_MODEL = "AGENT4J_OPENAI_MODEL";
     public static final String WORKSPACE = "AGENT4J_EXAMPLES_WORKSPACE";
     public static final String SESSION_DIRECTORY = "AGENT4J_EXAMPLES_SESSION_DIRECTORY";
@@ -29,6 +32,7 @@ public final class LiveExampleRuntime implements AutoCloseable {
 
     private final CodingAgentSessionRuntime runtime;
     private final AiModelReference model;
+    private final Optional<String> baseUrl;
     private final Path workspace;
     private final Path sessionDirectory;
     private final int maxOutputTokens;
@@ -39,6 +43,7 @@ public final class LiveExampleRuntime implements AutoCloseable {
     private LiveExampleRuntime(
             CodingAgentSessionRuntime runtime,
             AiModelReference model,
+            Optional<String> baseUrl,
             Path workspace,
             Path sessionDirectory,
             int maxOutputTokens,
@@ -48,6 +53,7 @@ public final class LiveExampleRuntime implements AutoCloseable {
     ) {
         this.runtime = Objects.requireNonNull(runtime, "runtime");
         this.model = Objects.requireNonNull(model, "model");
+        this.baseUrl = Objects.requireNonNull(baseUrl, "baseUrl");
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.sessionDirectory = Objects.requireNonNull(sessionDirectory, "sessionDirectory");
         this.maxOutputTokens = maxOutputTokens;
@@ -62,16 +68,21 @@ public final class LiveExampleRuntime implements AutoCloseable {
 
     static LiveExampleRuntime open(Map<String, String> environment) throws IOException {
         Objects.requireNonNull(environment, "environment");
-        requireEnvironment(environment, OPENAI_API_KEY);
+        String apiKey = requireEnvironment(environment, OPENAI_API_KEY);
         AiModelReference model = new AiModelReference("openai", requireEnvironment(environment, OPENAI_MODEL));
+        Optional<String> baseUrl = optionalEnvironment(environment, OPENAI_BASE_URL);
         ManagedDirectory workspace = directory(environment, WORKSPACE, "agent4j-example-workspace-");
         ManagedDirectory sessionDirectory = directory(environment, SESSION_DIRECTORY, "agent4j-example-sessions-");
         try {
             CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
-                    OpenAiCodingRuntimeOptions.builder(model).build());
+                    OpenAiCodingRuntimeOptions.builder(model)
+                            .credentialStore(new InMemoryAuthCredentialStore())
+                            .build());
+            services.loginService().loginApiKey(new ApiKeyLoginRequest("openai", apiKey, baseUrl));
             return new LiveExampleRuntime(
                     new CodingAgentSessionRuntime(services),
                     model,
+                    baseUrl,
                     workspace.path(),
                     sessionDirectory.path(),
                     positiveInt(environment, MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
@@ -91,6 +102,10 @@ public final class LiveExampleRuntime implements AutoCloseable {
 
     public AiModelReference model() {
         return model;
+    }
+
+    public Optional<String> baseUrl() {
+        return baseUrl;
     }
 
     public Path workspace() {
@@ -157,6 +172,10 @@ public final class LiveExampleRuntime implements AutoCloseable {
             throw new IllegalStateException(name + " must be set before running a live OpenAI example");
         }
         return value.strip();
+    }
+
+    private static Optional<String> optionalEnvironment(Map<String, String> environment, String name) {
+        return Optional.ofNullable(environment.get(name)).map(String::strip).filter(value -> !value.isBlank());
     }
 
     private static int positiveInt(Map<String, String> environment, String name, int defaultValue) {

@@ -15,6 +15,20 @@ export OPENAI_API_KEY="..."
 export AGENT4J_OPENAI_MODEL="<enabled-model-id>"
 ```
 
+To use an OpenAI Responses-compatible provider, retain the provider API key in
+`OPENAI_API_KEY`, select its model identifier, and set its API base URL. For
+example, OpenRouter's free-model router is configured as follows:
+
+```bash
+export OPENAI_API_KEY="<your-openrouter-api-key>"
+export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+export AGENT4J_OPENAI_MODEL="openrouter/free"
+```
+
+The live runtime keeps this credential and base URL only in memory for the
+example process; it does not write either to the user credential store. The
+configured URL must expose the OpenAI Responses endpoint at `/responses`.
+
 Choose a model enabled for your account. The [official OpenAI model
 guidance](https://developers.openai.com/api/docs/guides/latest-model) recommends
 the Responses API for reasoning, tool-calling, and multi-turn workflows;

@@ -13,6 +13,7 @@ public final class LiveExamplePreflight {
         try (LiveExampleRuntime runtime = LiveExampleRuntime.open()) {
             System.out.println("Live OpenAI example runtime is ready.");
             System.out.println("Model: " + runtime.model().providerId() + "/" + runtime.model().modelId());
+            System.out.println("Base URL: " + runtime.baseUrl().orElse("https://api.openai.com/v1"));
             System.out.println("Workspace: " + runtime.workspace());
             System.out.println("Session directory: " + runtime.sessionDirectory());
             System.out.println("Max output tokens: " + runtime.maxOutputTokens());
@@ -26,5 +27,6 @@ public final class LiveExamplePreflight {
     private static void usage() {
         System.out.println("Usage: LiveExamplePreflight [help]");
         System.out.println("Set OPENAI_API_KEY and AGENT4J_OPENAI_MODEL before running the preflight check.");
+        System.out.println("Optionally set OPENAI_BASE_URL for an OpenAI Responses-compatible provider.");
     }
 }

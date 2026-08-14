@@ -52,6 +52,18 @@ class LiveExampleRuntimeTest {
     }
 
     @Test
+    void configuresAnOptionalOpenAiCompatibleBaseUrlInMemory() throws Exception {
+        try (LiveExampleRuntime runtime = LiveExampleRuntime.open(Map.of(
+                LiveExampleRuntime.OPENAI_API_KEY, "test-key",
+                LiveExampleRuntime.OPENAI_BASE_URL, "https://openrouter.example/api/v1/ ",
+                LiveExampleRuntime.OPENAI_MODEL, "openrouter/free"))) {
+            assertThat(runtime.baseUrl()).contains("https://openrouter.example/api/v1/");
+            assertThat(runtime.runtime().loginService().resolveAuth("openai").baseUrl())
+                    .contains("https://openrouter.example/api/v1/");
+        }
+    }
+
+    @Test
     void rejectsMissingCredentialsAndUnsafeSessionNames() throws Exception {
         assertThatThrownBy(() -> LiveExampleRuntime.open(Map.of(
                 LiveExampleRuntime.OPENAI_MODEL, "gpt-test")))
