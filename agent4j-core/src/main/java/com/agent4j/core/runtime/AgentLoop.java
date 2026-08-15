@@ -1,7 +1,7 @@
 package com.agent4j.core.runtime;
 
-import com.agent4j.ai.AiAbortSignal;
 import com.agent4j.ai.AiMessage;
+import com.agent4j.ai.AiAbortSignal;
 import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelClient;
 import com.agent4j.ai.AiProvider;
@@ -18,10 +18,6 @@ import com.agent4j.ai.AiContentBlocks;
 import com.agent4j.ai.AiToolSpec;
 import com.agent4j.ai.AiTurnRequest;
 import com.agent4j.ai.AiUsage;
-import com.agent4j.core.compaction.CompactionPlan;
-import com.agent4j.core.compaction.CompactionReason;
-import com.agent4j.core.compaction.CompactionRequest;
-import com.agent4j.core.compaction.CompactionResult;
 import com.agent4j.core.compaction.CompactionService;
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
@@ -31,8 +27,6 @@ import com.agent4j.core.message.AssistantAgentMessageView;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
 import com.agent4j.core.message.ToolResultAgentMessageView;
-import com.agent4j.core.tool.ToolContext;
-import com.agent4j.core.tool.ToolExecutor;
 import com.agent4j.core.tool.ToolExecutionHook;
 import com.agent4j.core.tool.ToolRegistry;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -43,10 +37,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
 public final class AgentLoop {
@@ -54,14 +44,10 @@ public final class AgentLoop {
 
     private final ModelRoundStreamer modelStreamer;
     private final ToolRegistry toolRegistry;
-    private final ToolExecutor toolExecutor;
+    private final AgentLoopToolRoundExecutor toolRoundExecutor;
     private final AgentEventBus eventBus;
     private final AgentMessageConverter messageConverter;
-    private final List<ToolExecutionHook> toolExecutionHooks;
-    private final CompactionService compactionService;
-    private final AiProvider compactionProvider;
-    private final AiModel compactionModel;
-    private final AiResolvedAuth compactionAuth;
+    private final AgentLoopCompactor compactor;
 
     public AgentLoop(AiModelClient modelClient, ToolRegistry toolRegistry, AgentEventBus eventBus) {
         this(modelClient, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE);
@@ -205,14 +191,15 @@ public final class AgentLoop {
     ) {
         this.modelStreamer = Objects.requireNonNull(modelStreamer, "modelStreamer");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
-        this.toolExecutor = new ToolExecutor(toolRegistry);
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.messageConverter = Objects.requireNonNull(messageConverter, "messageConverter");
-        this.toolExecutionHooks = toolExecutionHooks == null ? List.of() : List.copyOf(toolExecutionHooks);
-        this.compactionService = compactionService;
-        this.compactionProvider = compactionProvider;
-        this.compactionModel = compactionModel;
-        this.compactionAuth = compactionAuth == null ? AiResolvedAuth.none() : compactionAuth;
+        this.toolRoundExecutor = new AgentLoopToolRoundExecutor(toolRegistry, eventBus, toolExecutionHooks);
+        this.compactor = new AgentLoopCompactor(
+                compactionService,
+                compactionProvider,
+                compactionModel,
+                compactionAuth == null ? AiResolvedAuth.none() : compactionAuth,
+                eventBus);
     }
 
     public AgentLoop(
@@ -334,70 +321,7 @@ public final class AgentLoop {
     }
 
     private List<ToolResult> executeToolCalls(AgentLoopRequest request, List<ToolCall> toolCalls) throws Exception {
-        if (request.toolExecutionMode() == ToolExecutionMode.SEQUENTIAL || toolCalls.size() <= 1) {
-            List<ToolResult> results = new ArrayList<>();
-            for (ToolCall toolCall : toolCalls) {
-                request.abortSignal().throwIfAborted();
-                eventBus.publish(new AgentEvent.ToolExecutionStarted(request.sessionId(), now(request), toolCall));
-                results.add(executeToolCall(request, toolCall));
-            }
-            return results;
-        }
-        for (ToolCall toolCall : toolCalls) {
-            request.abortSignal().throwIfAborted();
-            eventBus.publish(new AgentEvent.ToolExecutionStarted(request.sessionId(), now(request), toolCall));
-        }
-        ExecutorService executorService = Executors.newFixedThreadPool(toolCalls.size());
-        try {
-            List<Future<ToolResult>> futures = new ArrayList<>();
-            for (ToolCall toolCall : toolCalls) {
-                futures.add(executorService.submit(() -> executeToolCall(request, toolCall)));
-            }
-            List<ToolResult> results = new ArrayList<>();
-            for (Future<ToolResult> future : futures) {
-                request.abortSignal().throwIfAborted();
-                results.add(awaitToolResult(future));
-            }
-            return results;
-        } finally {
-            executorService.shutdownNow();
-        }
-    }
-
-    private ToolResult executeToolCall(AgentLoopRequest request, ToolCall toolCall) throws Exception {
-        ToolContext context = toolContext(request, toolCall);
-        Optional<ToolResult> blockedResult = Optional.empty();
-        for (ToolExecutionHook hook : toolExecutionHooks) {
-            request.abortSignal().throwIfAborted();
-            blockedResult = hook.beforeToolExecution(toolCall, context);
-            if (blockedResult.isPresent()) {
-                break;
-            }
-        }
-        ToolResult result = blockedResult.orElseGet(() -> toolExecutor.execute(toolCall, context));
-        for (ToolExecutionHook hook : toolExecutionHooks) {
-            request.abortSignal().throwIfAborted();
-            hook.afterToolExecution(toolCall, context, result);
-        }
-        return result;
-    }
-
-    private static ToolResult awaitToolResult(Future<ToolResult> future) throws Exception {
-        try {
-            return future.get();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw e;
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof Exception exception) {
-                throw exception;
-            }
-            if (cause instanceof Error error) {
-                throw error;
-            }
-            throw new IllegalStateException(cause);
-        }
+        return toolRoundExecutor.execute(request, toolCalls);
     }
 
     private void publishPromptMessageEvents(AgentLoopRequest request) {
@@ -423,10 +347,7 @@ public final class AgentLoop {
             AgentLoopRequest request,
             AgentConversationContext conversation
     ) throws Exception {
-        if (!request.compactionConfig().enabled()) {
-            return;
-        }
-        compactIfNeeded(request, conversation, CompactionReason.THRESHOLD);
+        compactor.compactForThreshold(request, conversation);
     }
 
     private void compactForOverflowAndRetryIfPossible(
@@ -434,74 +355,7 @@ public final class AgentLoop {
             AgentConversationContext conversation,
             Exception failure
     ) throws Exception {
-        if (!isContextOverflowError(failure)
-                || !request.compactionConfig().enabled()
-                || !request.compactionConfig().overflowRetryEnabled()) {
-            throw failure;
-        }
-        boolean compacted = compactIfNeeded(request, conversation, CompactionReason.OVERFLOW);
-        if (!compacted) {
-            throw failure;
-        }
-    }
-
-    private boolean compactIfNeeded(
-            AgentLoopRequest request,
-            AgentConversationContext conversation,
-            CompactionReason reason
-    ) throws Exception {
-        if (compactionService == null || compactionProvider == null || compactionModel == null) {
-            return false;
-        }
-        CompactionRequest compactionRequest = new CompactionRequest(
-                request.sessionId(),
-                reason,
-                conversation.transcriptMessages(),
-                request.systemPrompt(),
-                request.compactionConfig(),
-                null);
-        CompactionPlan plan = compactionService.plan(compactionRequest, compactionModel);
-        if (!plan.compact()) {
-            return false;
-        }
-        eventBus.publish(new AgentEvent.CompactionStarted(
-                request.sessionId(),
-                now(request),
-                reason.wireName()));
-        CompactionResult result = compactionService.compact(
-                compactionRequest,
-                compactionProvider,
-                compactionModel,
-                providerContext(request, compactionAuth),
-                streamOptions(request));
-        if (!result.compacted()) {
-            eventBus.publish(new AgentEvent.CompactionCompleted(request.sessionId(), now(request), null));
-            return false;
-        }
-        conversation.replaceTranscript(result.compactedMessages());
-        conversation.recordGenerated(result.summaryMessage());
-        eventBus.publish(new AgentEvent.MessageStarted(request.sessionId(), now(request), result.summaryMessage()));
-        eventBus.publish(new AgentEvent.MessageEnded(request.sessionId(), now(request), result.summaryMessage()));
-        eventBus.publish(new AgentEvent.CompactionCompleted(
-                request.sessionId(),
-                now(request),
-                result.summaryMessage().id()));
-        return true;
-    }
-
-    private static boolean isContextOverflowError(Exception e) {
-        String message = e.getMessage();
-        if (message == null) {
-            return false;
-        }
-        String lower = message.toLowerCase();
-        return lower.contains("context_length_exceeded")
-                || lower.contains("context length")
-                || lower.contains("maximum context")
-                || lower.contains("token limit")
-                || lower.contains("too many tokens")
-                || lower.contains("exceeds the model's maximum")
-                || lower.contains("reduce the length");
+        compactor.compactForOverflow(request, conversation, failure);
     }
 
     private List<AgentMessage> drainQueue(
@@ -529,7 +383,7 @@ public final class AgentLoop {
             } catch (AgentAbortException e) {
                 throw e;
             } catch (Exception e) {
-                if (isContextOverflowError(e)) {
+                if (AgentLoopCompactor.isContextOverflow(e)) {
                     throw e;
                 }
                 if (!AiRetryClassifier.isRetryable(e)) {
@@ -676,20 +530,6 @@ public final class AgentLoop {
         return toolRegistry.specs().stream()
                 .map(spec -> new AiToolSpec(spec.name(), spec.description(), spec.inputSchema()))
                 .toList();
-    }
-
-    private ToolContext toolContext(AgentLoopRequest request, ToolCall toolCall) {
-        return new ToolContext(
-                request.sessionId(),
-                request.cwd(),
-                request.clock(),
-                request.abortSignal(),
-                request.toolAttributes(),
-                update -> eventBus.publish(new AgentEvent.ToolExecutionUpdated(
-                        request.sessionId(),
-                        now(request),
-                        toolCall.id(),
-                        update)));
     }
 
     private static List<ToolCall> toolCalls(AgentMessage message) {
