@@ -17,6 +17,7 @@ import com.agent4j.core.runtime.AbortController;
 import com.agent4j.core.runtime.AbortSignal;
 import com.agent4j.core.runtime.AgentConversationContext;
 import com.agent4j.core.runtime.AgentLoop;
+import com.agent4j.core.runtime.AgentLoopOptions;
 import com.agent4j.core.runtime.AgentLoopRequest;
 import com.agent4j.core.runtime.AgentLoopResult;
 import com.agent4j.core.runtime.AgentMessageConverter;
@@ -157,10 +158,24 @@ public final class CodingAgentSession implements AgentSession {
             LiveAgentQueues queues
     ) {
         return new AgentLoopRequest(
-                id(), turnId(), promptMessage.id(), messages, cwd(), runtime.clock(), abortSignal,
-                request.toolAttributes(), null, request.maxToolRounds(), request.maxModelRetries(), request.modelTimeout(),
-                request.toolExecutionMode(), List.of(promptMessage), request.steeringMessages(), request.followUpMessages(),
-                request.steeringMode(), request.followUpMode(), null, queues);
+                id(),
+                turnId(),
+                promptMessage.id(),
+                messages,
+                cwd(),
+                runtime.clock(),
+                abortSignal,
+                AgentLoopOptions.builder()
+                        .toolAttributes(request.toolAttributes())
+                        .maxToolRounds(request.maxToolRounds())
+                        .maxModelRetries(request.maxModelRetries())
+                        .modelTimeout(request.modelTimeout())
+                        .toolExecutionMode(request.toolExecutionMode())
+                        .promptMessages(List.of(promptMessage))
+                        .steeringMode(request.steeringMode())
+                        .followUpMode(request.followUpMode())
+                        .build(),
+                queues);
     }
 
     private AgentMessage promptMessage(PromptRequest request) {

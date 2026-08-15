@@ -115,9 +115,11 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        "Use concise answers.",
-                        1));
+                        AgentLoopOptions.builder()
+                                .systemPrompt("Use concise answers.")
+                                .maxToolRounds(1)
+                                .promptMessages(List.of(userMessage("user-1", "say hi")))
+                                .build()));
 
         assertThat(model.requests()).hasSize(1);
         assertThat(model.requests().getFirst().messages()).extracting(AiMessage::role)
@@ -303,17 +305,12 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                null,
-                2,
-                3,
-                Optional.of(Duration.ofSeconds(30)),
-                ToolExecutionMode.PARALLEL,
-                List.of(prompt),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(2)
+                        .maxModelRetries(3)
+                        .modelTimeout(Optional.of(Duration.ofSeconds(30)))
+                        .promptMessages(List.of(prompt))
+                        .build());
 
         AgentLoopResult result = new AgentLoop(provider, model, registry, bus)
                 .runTurn(request);
@@ -416,22 +413,16 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        "Use concise answers.",
-                        1,
-                        0,
-                        Optional.empty(),
-                        ToolExecutionMode.PARALLEL,
-                        List.of(prompt),
-                        List.of(),
-                        List.of(),
-                        QueueMode.ONE_AT_A_TIME,
-                        QueueMode.ONE_AT_A_TIME,
-                        CompactionConfig.builder()
-                                .triggerMessages(2)
-                                .keepTokens(0)
-                                .keepMessages(1)
-                                .summaryPrompt("Summarize:\n{messages}")
+                        AgentLoopOptions.builder()
+                                .systemPrompt("Use concise answers.")
+                                .maxToolRounds(1)
+                                .promptMessages(List.of(prompt))
+                                .compactionConfig(CompactionConfig.builder()
+                                        .triggerMessages(2)
+                                        .keepTokens(0)
+                                        .keepMessages(1)
+                                        .summaryPrompt("Summarize:\n{messages}")
+                                        .build())
                                 .build()));
 
         assertThat(provider.requests()).hasSize(2);
@@ -523,22 +514,16 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        null,
-                        2,
-                        0,
-                        Optional.empty(),
-                        ToolExecutionMode.SEQUENTIAL,
-                        List.of(prompt),
-                        List.of(),
-                        List.of(),
-                        QueueMode.ONE_AT_A_TIME,
-                        QueueMode.ONE_AT_A_TIME,
-                        CompactionConfig.builder()
-                                .triggerMessages(2)
-                                .keepTokens(0)
-                                .keepMessages(2)
-                                .summaryPrompt("Summarize:\n{messages}")
+                        AgentLoopOptions.builder()
+                                .maxToolRounds(2)
+                                .toolExecutionMode(ToolExecutionMode.SEQUENTIAL)
+                                .promptMessages(List.of(prompt))
+                                .compactionConfig(CompactionConfig.builder()
+                                        .triggerMessages(2)
+                                        .keepTokens(0)
+                                        .keepMessages(2)
+                                        .summaryPrompt("Summarize:\n{messages}")
+                                        .build())
                                 .build()));
 
         assertThat(provider.requests()).hasSize(4);
@@ -607,22 +592,16 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        null,
-                        1,
-                        1,
-                        Optional.empty(),
-                        ToolExecutionMode.PARALLEL,
-                        List.of(prompt),
-                        List.of(),
-                        List.of(),
-                        QueueMode.ONE_AT_A_TIME,
-                        QueueMode.ONE_AT_A_TIME,
-                        CompactionConfig.builder()
-                                .triggerMessages(100)
-                                .keepTokens(0)
-                                .keepMessages(1)
-                                .summaryPrompt("Summarize:\n{messages}")
+                        AgentLoopOptions.builder()
+                                .maxToolRounds(1)
+                                .maxModelRetries(1)
+                                .promptMessages(List.of(prompt))
+                                .compactionConfig(CompactionConfig.builder()
+                                        .triggerMessages(100)
+                                        .keepTokens(0)
+                                        .keepMessages(1)
+                                        .summaryPrompt("Summarize:\n{messages}")
+                                        .build())
                                 .build()));
 
         assertThat(provider.requests()).hasSize(3);
@@ -672,23 +651,17 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        null,
-                        1,
-                        1,
-                        Optional.empty(),
-                        ToolExecutionMode.PARALLEL,
-                        List.of(prompt),
-                        List.of(),
-                        List.of(),
-                        QueueMode.ONE_AT_A_TIME,
-                        QueueMode.ONE_AT_A_TIME,
-                        CompactionConfig.builder()
-                                .triggerMessages(100)
-                                .keepTokens(0)
-                                .keepMessages(1)
-                                .summaryPrompt("Summarize:\n{messages}")
-                                .overflowRetryEnabled(false)
+                        AgentLoopOptions.builder()
+                                .maxToolRounds(1)
+                                .maxModelRetries(1)
+                                .promptMessages(List.of(prompt))
+                                .compactionConfig(CompactionConfig.builder()
+                                        .triggerMessages(100)
+                                        .keepTokens(0)
+                                        .keepMessages(1)
+                                        .summaryPrompt("Summarize:\n{messages}")
+                                        .overflowRetryEnabled(false)
+                                        .build())
                                 .build())))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("maximum context length exceeded");
@@ -709,16 +682,11 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                null,
-                1,
-                0,
-                Optional.of(Duration.ZERO),
-                List.of(user),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME))
+                AgentLoopOptions.builder()
+                        .maxToolRounds(1)
+                        .modelTimeout(Optional.of(Duration.ZERO))
+                        .promptMessages(List.of(user))
+                        .build()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("modelTimeout");
     }
@@ -1481,15 +1449,11 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                maxToolRounds,
-                maxModelRetries,
-                Optional.empty(),
-                List.of(messages.getLast()),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(maxToolRounds)
+                        .maxModelRetries(maxModelRetries)
+                        .promptMessages(List.of(messages.getLast()))
+                        .build());
     }
 
     private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds, ToolExecutionMode toolExecutionMode) {
@@ -1501,17 +1465,11 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                null,
-                maxToolRounds,
-                0,
-                Optional.empty(),
-                toolExecutionMode,
-                List.of(messages.getLast()),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(maxToolRounds)
+                        .toolExecutionMode(toolExecutionMode)
+                        .promptMessages(List.of(messages.getLast()))
+                        .build());
     }
 
     private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds, AbortSignal signal) {
@@ -1523,8 +1481,10 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 signal,
-                Map.of(),
-                maxToolRounds);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(maxToolRounds)
+                        .promptMessages(List.of(messages.getLast()))
+                        .build());
     }
 
     private AgentLoopRequest request(
@@ -1561,15 +1521,13 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                maxToolRounds,
-                0,
-                Optional.empty(),
-                promptMessages,
-                steeringMessages,
-                followUpMessages,
-                steeringMode,
-                followUpMode);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(maxToolRounds)
+                        .promptMessages(promptMessages)
+                        .steeringMode(steeringMode)
+                        .followUpMode(followUpMode)
+                        .build(),
+                new LiveAgentQueues(steeringMessages, followUpMessages));
     }
 
     private AgentMessage userMessage(String id, String text) {

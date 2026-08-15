@@ -5,7 +5,10 @@ import com.agent4j.core.message.AgentMessageRole;
 import com.agent4j.core.message.ContentBlocks;
 import com.agent4j.core.message.TextBlock;
 import com.agent4j.core.runtime.AbortController;
+import com.agent4j.core.runtime.AgentLoopOptions;
 import com.agent4j.core.runtime.AgentLoopRequest;
+import com.agent4j.core.runtime.LiveAgentQueues;
+import com.agent4j.core.runtime.QueueKind;
 import com.agent4j.core.runtime.QueueMode;
 import com.agent4j.core.runtime.ToolExecutionMode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -55,17 +58,15 @@ class CodingAgentLoopRequestPreparerTest {
                 cwd,
                 clock,
                 new AbortController().signal(),
-                Map.of("workspace", "repo"),
-                null,
-                3,
-                2,
-                java.util.Optional.empty(),
-                ToolExecutionMode.SEQUENTIAL,
-                List.of(user),
-                List.of(steering),
-                List.of(),
-                QueueMode.ALL,
-                QueueMode.ONE_AT_A_TIME);
+                AgentLoopOptions.builder()
+                        .toolAttributes(Map.of("workspace", "repo"))
+                        .maxToolRounds(3)
+                        .maxModelRetries(2)
+                        .toolExecutionMode(ToolExecutionMode.SEQUENTIAL)
+                        .promptMessages(List.of(user))
+                        .steeringMode(QueueMode.ALL)
+                        .build(),
+                new LiveAgentQueues(List.of(steering), List.of()));
 
         PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 
@@ -78,7 +79,7 @@ class CodingAgentLoopRequestPreparerTest {
                 .contains("name=\"review\"");
         assertThat(prepared.request().messages()).containsExactly(user);
         assertThat(prepared.request().promptMessages()).containsExactly(user);
-        assertThat(prepared.request().steeringMessages()).containsExactly(steering);
+        assertThat(prepared.request().liveQueues().size(QueueKind.STEER)).isEqualTo(1);
         assertThat(prepared.request().toolAttributes()).containsEntry("workspace", "repo");
         assertThat(prepared.request().toolExecutionMode()).isEqualTo(ToolExecutionMode.SEQUENTIAL);
         assertThat(prepared.request().maxToolRounds()).isEqualTo(3);
@@ -99,8 +100,10 @@ class CodingAgentLoopRequestPreparerTest {
                 cwd,
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                1);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(1)
+                        .promptMessages(List.of(user))
+                        .build());
 
         PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 
@@ -129,8 +132,10 @@ class CodingAgentLoopRequestPreparerTest {
                 cwd,
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                1);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(1)
+                        .promptMessages(List.of(user))
+                        .build());
 
         PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 
@@ -159,16 +164,12 @@ class CodingAgentLoopRequestPreparerTest {
                 cwd,
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                null,
-                1,
-                2,
-                java.util.Optional.of(Duration.ofSeconds(10)),
-                List.of(user),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(1)
+                        .maxModelRetries(2)
+                        .modelTimeout(java.util.Optional.of(Duration.ofSeconds(10)))
+                        .promptMessages(List.of(user))
+                        .build());
 
         PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 

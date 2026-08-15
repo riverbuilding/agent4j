@@ -13,6 +13,7 @@ import com.agent4j.core.message.AgentMessageRole;
 import com.agent4j.core.message.ContentBlocks;
 import com.agent4j.core.message.TextBlock;
 import com.agent4j.core.runtime.AbortController;
+import com.agent4j.core.runtime.AgentLoopOptions;
 import com.agent4j.core.runtime.AgentLoop;
 import com.agent4j.core.runtime.AgentLoopRequest;
 import com.agent4j.core.tool.InMemoryToolRegistry;
@@ -129,8 +130,10 @@ class CodingAgentMessageConverterTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        1));
+                        AgentLoopOptions.builder()
+                                .maxToolRounds(1)
+                                .promptMessages(List.of(user))
+                                .build()));
 
         assertThat(model.requests()).hasSize(1);
         assertThat(model.requests().getFirst().messages()).extracting(AiMessage::role)

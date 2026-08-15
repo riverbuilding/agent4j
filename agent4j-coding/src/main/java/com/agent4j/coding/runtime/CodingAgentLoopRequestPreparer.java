@@ -53,17 +53,12 @@ public final class CodingAgentLoopRequestPreparer {
                 request.cwd(),
                 request.clock(),
                 request.abortSignal(),
-                request.toolAttributes(),
-                systemPrompt,
-                request.maxToolRounds(),
-                maxModelRetries(request, settings),
-                modelTimeout(request, settings),
-                request.toolExecutionMode(),
-                request.promptMessages(),
-                request.steeringMessages(),
-                request.followUpMessages(),
-                request.steeringMode(),
-                request.followUpMode());
+                request.options().toBuilder()
+                        .systemPrompt(systemPrompt)
+                        .maxModelRetries(maxModelRetries(request, settings))
+                        .modelTimeout(modelTimeout(request, settings))
+                        .build(),
+                request.liveQueues());
     }
 
     private static int maxModelRetries(AgentLoopRequest request, AgentSettings settings) {
