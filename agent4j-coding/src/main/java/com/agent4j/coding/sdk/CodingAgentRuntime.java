@@ -64,6 +64,14 @@ public final class CodingAgentRuntime {
         return (CodingAgentSession) sessionRuntime.createSession(request);
     }
 
+    public CodingAgentSession resumeSession(Path sessionFile) throws Exception {
+        return resumeSession(new ResumeSessionRequest(sessionFile));
+    }
+
+    public CodingAgentSession resumeSession(ResumeSessionRequest request) throws Exception {
+        return (CodingAgentSession) sessionRuntime.resumeSession(request);
+    }
+
     public EventSubscription subscribe(Consumer<AgentEvent> subscriber) {
         return sessionRuntime.subscribe(subscriber);
     }

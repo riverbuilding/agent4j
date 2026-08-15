@@ -20,11 +20,13 @@ class CodingAgentRuntimeTest {
 
         CodingAgentSession session = runtime.createSession(
                 temporaryDirectory.resolve("session.jsonl"), temporaryDirectory);
+        CodingAgentSession resumed = runtime.resumeSession(session.sessionFile());
 
         assertThat(runtime.defaultModel().providerId()).isEqualTo("openai");
         assertThat(runtime.defaultModel().modelId()).isEqualTo("gpt-test");
         assertThat(session.info().sessionFile()).isEqualTo(temporaryDirectory.resolve("session.jsonl"));
         assertThat(session.info().cwd()).isEqualTo(temporaryDirectory);
+        assertThat(resumed.id()).isEqualTo(session.id());
     }
 
     @Test

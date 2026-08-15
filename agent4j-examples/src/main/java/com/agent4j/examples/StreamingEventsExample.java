@@ -18,13 +18,13 @@ public final class StreamingEventsExample {
             PromptResult result;
             try (EventSubscription ignored = runtime.subscribe(event ->
                     System.out.println("event: " + event.wireName()))) {
-                result = session.prompt(LiveExampleSupport.prompt(
-                        runtime,
+                result = session.prompt(LiveExampleHelper.buildPromptRequest(
+                        runtime.defaultModel(),
                         "Reply with exactly: lifecycle events observed.",
                         0));
             }
-            LiveExampleSupport.printMessage(System.out, result);
-            LiveExampleSupport.printUsage(System.out, result);
+            LiveExampleHelper.printMessage(System.out, result);
+            LiveExampleHelper.printUsage(System.out, result);
         }
     }
 }

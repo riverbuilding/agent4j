@@ -1035,7 +1035,7 @@ Tasks:
    - The foundation registers no filesystem-writing or process-executing tools.
      Future tool walkthroughs must constrain any side effects to the example
      workspace and document them before execution.
-2. Add progressive real OpenAI walkthroughs. The first three are complete.
+2. Add progressive real OpenAI walkthroughs. The first four are complete.
    - `01-real-prompt` creates the standard OpenAI runtime, sends one prompt,
      prints streaming assistant text and provider usage.
    - `02-streaming-events` reuses the runtime/session setup and renders public
@@ -1043,8 +1043,8 @@ Tasks:
    - `03-tool-calling` exposes only the no-side-effect `workspace_status` tool,
      then demonstrates model selection and execution. It fails clearly when a
      selected model does not support or invoke function calling.
-   - `04-persistent-sessions`: create, prompt, close, resume, and inspect a
-     JSONL session without callers rebuilding conversation history.
+   - `04-persistent-sessions` creates, prompts, releases, resumes, and inspects
+     a JSONL session without callers rebuilding conversation history.
    - `05-live-session-control`: demonstrate steering, follow-up, and
      cancellation during a streamed real-provider run, with timing guidance for
      manual execution rather than exact-text assertions.
@@ -1129,7 +1129,8 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Continue Phase 12 with `04-persistent-sessions`, building directly on the
-   completed prompt, event, and no-side-effect tool walkthroughs.
+1. Continue Phase 12 with `05-live-session-control`, building directly on the
+   completed prompt, event, no-side-effect tool, and persistent-session
+   walkthroughs.
 2. Keep Phase 9 production OAuth verification separate; record live-provider
    example evidence without treating it as sufficient OAuth closure evidence.

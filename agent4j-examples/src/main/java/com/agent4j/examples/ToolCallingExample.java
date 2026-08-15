@@ -25,8 +25,8 @@ public final class ToolCallingExample {
                     System.out.println("Tool result: " + ended.result().content());
                 }
             })) {
-                result = session.prompt(LiveExampleSupport.prompt(
-                        runtime,
+                result = session.prompt(LiveExampleHelper.buildPromptRequest(
+                        runtime.defaultModel(),
                         "Call the workspace_status tool exactly once, then state the reported workspace path. "
                                 + "Do not request any other tool.",
                         1));
@@ -34,8 +34,8 @@ public final class ToolCallingExample {
             if (result.loopResult().toolResults().isEmpty()) {
                 throw new IllegalStateException("The selected model did not invoke workspace_status.");
             }
-            LiveExampleSupport.printMessage(System.out, result);
-            LiveExampleSupport.printUsage(System.out, result);
+            LiveExampleHelper.printMessage(System.out, result);
+            LiveExampleHelper.printUsage(System.out, result);
         }
     }
 }

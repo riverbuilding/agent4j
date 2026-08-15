@@ -88,6 +88,21 @@ mvn -pl agent4j-examples -am test \
   -Dagent4j.liveExample.mainClass=com.agent4j.examples.ToolCallingExample
 ```
 
+### 04-persistent-sessions
+
+Creates a JSONL session, sends one real prompt, then releases that first session
+handle. It resumes the JSONL into a new `CodingAgentSession`, reports its
+persisted entry and restored-message counts, and sends a follow-up question
+that relies on the first turn's conversation history. Session writes are
+durable at turn completion, so there is no file handle to close between the
+initial and resumed sessions.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.PersistentSessionsExample
+```
+
 ## Bounds and cost
 
 Future walkthroughs pass these defaults from `LiveExampleConfiguration` to

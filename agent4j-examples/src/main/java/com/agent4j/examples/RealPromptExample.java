@@ -17,13 +17,13 @@ public final class RealPromptExample {
                     configuration.sessionFile("01-real-prompt.jsonl"), configuration.workspace());
             System.out.println("Assistant: ");
             PromptResult result;
-            try (EventSubscription ignored = LiveExampleSupport.streamAssistantText(runtime, System.out)) {
-                result = session.prompt(LiveExampleSupport.prompt(
-                        runtime,
+            try (EventSubscription ignored = LiveExampleHelper.streamAssistantText(runtime, System.out)) {
+                result = session.prompt(LiveExampleHelper.buildPromptRequest(
+                        runtime.defaultModel(),
                         "Reply with exactly one short sentence that says live streaming is working.",
                         0));
             }
-            LiveExampleSupport.printUsage(System.out, result);
+            LiveExampleHelper.printUsage(System.out, result);
         }
     }
 }
