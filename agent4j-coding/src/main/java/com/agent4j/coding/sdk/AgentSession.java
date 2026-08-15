@@ -17,6 +17,10 @@ public interface AgentSession {
         return false;
     }
 
+    default int pendingMessageCount() {
+        return 0;
+    }
+
     default void steer(String message) {
         throw new IllegalStateException("live steering is not supported by this session");
     }

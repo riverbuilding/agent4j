@@ -1,6 +1,7 @@
 package com.agent4j.cli;
 
 import com.agent4j.ai.AiAssistantMessage;
+import com.agent4j.ai.AiModelClient;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
@@ -18,12 +19,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.PrintWriter;
+import java.io.PipedReader;
+import java.io.PipedWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -125,7 +132,64 @@ class RpcModeRunnerTest {
         assertThat(sessionDirectory).isDirectory();
     }
 
-    private int run(FakeModelClient model, String input, StringWriter stdout, StringWriter stderr) throws Exception {
+    @Test
+    void sendsLiveSteeringAndFollowUpsThroughTheActiveSession() throws Exception {
+        CountDownLatch firstRoundStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirstRound = new CountDownLatch(1);
+        CountDownLatch thirdRoundStarted = new CountDownLatch(1);
+        AtomicInteger rounds = new AtomicInteger();
+        AiModelClient model = (request, sink) -> {
+            int round = rounds.incrementAndGet();
+            if (round == 1) {
+                firstRoundStarted.countDown();
+                assertThat(releaseFirstRound.await(5, TimeUnit.SECONDS)).isTrue();
+            }
+            if (round == 3) {
+                thirdRoundStarted.countDown();
+            }
+            sink.accept(new AiStreamEvent.MessageCompleted(
+                    "assistant-" + round,
+                    new AiAssistantMessage(List.of(new AiTextContent("round " + round)), AiStopReason.STOP, AiUsage.zero())));
+        };
+        StringWriter stdout = new StringWriter();
+        StringWriter stderr = new StringWriter();
+        try (PipedWriter input = new PipedWriter(); PipedReader reader = new PipedReader(input);
+             var executor = Executors.newSingleThreadExecutor()) {
+            var running = executor.submit(() -> new RpcModeRunner(temporaryDirectory, JSON, new JsonEventSerializer()).run(
+                    runtime(model), environment(), reader, new PrintWriter(stdout), new PrintWriter(stderr)));
+
+            input.write("{\"id\":\"prompt\",\"type\":\"prompt\",\"message\":\"start\"}\n");
+            input.flush();
+            assertThat(firstRoundStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            input.write("{\"id\":\"steer\",\"type\":\"steer\",\"message\":\"continue\"}\n");
+            input.write("{\"id\":\"follow\",\"type\":\"follow_up\",\"message\":\"then finish\"}\n");
+            input.write("{\"id\":\"state\",\"type\":\"get_state\"}\n");
+            input.flush();
+            assertThat(awaitResponse(stdout, "get_state")).isTrue();
+            releaseFirstRound.countDown();
+            assertThat(thirdRoundStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+            input.write("{\"id\":\"shutdown\",\"type\":\"shutdown\"}\n");
+            input.flush();
+            input.close();
+
+            assertThat(running.get(5, TimeUnit.SECONDS)).isZero();
+        }
+
+        List<JsonNode> lines = lines(stdout);
+        assertThat(rounds).hasValue(3);
+        assertThat(lines.stream().filter(line -> "agent_start".equals(line.path("type").asText()))).hasSize(1);
+        assertThat(lines.stream().filter(line -> "agent_end".equals(line.path("type").asText()))).hasSize(1);
+        assertThat(lines).filteredOn(line -> "response".equals(line.path("type").asText())
+                        && "state".equals(line.path("id").asText()))
+                .singleElement()
+                .extracting(line -> line.path("data").path("pendingMessageCount").asInt())
+                .isEqualTo(2);
+        assertThat(stderr.toString()).isEmpty();
+    }
+
+    private int run(AiModelClient model, String input, StringWriter stdout, StringWriter stderr) throws Exception {
         return new RpcModeRunner(temporaryDirectory, JSON, new JsonEventSerializer()).run(
                 runtime(model),
                 environment(),
@@ -134,7 +198,7 @@ class RpcModeRunnerTest {
                 new PrintWriter(stderr));
     }
 
-    private CliRuntime runtime(FakeModelClient model) throws Exception {
+    private CliRuntime runtime(AiModelClient model) throws Exception {
         CliEnvironment environment = environment();
         Files.createDirectories(environment.cwd());
         ResourceDiscovery discovery = new ResourceLoader().discover(
@@ -159,6 +223,17 @@ class RpcModeRunnerTest {
             lines.add(JSON.readTree(line));
         }
         return List.copyOf(lines);
+    }
+
+    private boolean awaitResponse(StringWriter output, String command) throws Exception {
+        for (int attempt = 0; attempt < 5_000; attempt++) {
+            if (lines(output).stream().anyMatch(line -> "response".equals(line.path("type").asText())
+                    && command.equals(line.path("command").asText()))) {
+                return true;
+            }
+            Thread.sleep(1);
+        }
+        return false;
     }
 
     private boolean noTemporarySessions() throws Exception {

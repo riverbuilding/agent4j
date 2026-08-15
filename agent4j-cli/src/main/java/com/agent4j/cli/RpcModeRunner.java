@@ -5,7 +5,6 @@ import com.agent4j.coding.sdk.CreateSessionRequest;
 import com.agent4j.coding.session.SessionManager;
 import com.agent4j.core.event.EventSubscription;
 import com.agent4j.core.message.AgentMessage;
-import com.agent4j.core.runtime.AbortController;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,12 +20,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 
 /** Implements the PI-compatible JSONL RPC framing over stdin and stdout. */
 public final class RpcModeRunner {
@@ -133,8 +132,8 @@ public final class RpcModeRunner {
         try {
             switch (command) {
                 case "prompt" -> prompt(request, id, state);
-                case "steer" -> queue(request, id, state, state.steering, "steer");
-                case "follow_up" -> queue(request, id, state, state.followUps, "follow_up");
+                case "steer" -> queue(request, id, state, "steer");
+                case "follow_up" -> queue(request, id, state, "follow_up");
                 case "abort" -> {
                     state.abortActive(request.path("reason").asText("aborted by RPC request"));
                     writeResponse(state, id, command, true, null, null);
@@ -145,7 +144,7 @@ public final class RpcModeRunner {
                 case "set_session_name" -> setSessionName(request, id, state);
                 case "shutdown" -> {
                     state.shutdown.set(true);
-                    state.abortActive("RPC shutdown");
+                    state.abortActiveIfPresent("RPC shutdown");
                     writeResponse(state, id, command, true, null, null);
                 }
                 default -> writeResponse(state, id, command, false, null, "unsupported RPC command: " + command);
@@ -160,9 +159,9 @@ public final class RpcModeRunner {
         if (state.streaming.get()) {
             String behavior = request.path("streamingBehavior").asText();
             if ("steer".equals(behavior)) {
-                state.steering.addLast(message);
+                state.activeSession("prompt").steer(message);
             } else if ("followUp".equals(behavior)) {
-                state.followUps.addLast(message);
+                state.activeSession("prompt").followUp(message);
             } else {
                 throw new IllegalStateException("prompt requires streamingBehavior while the agent is running");
             }
@@ -172,11 +171,14 @@ public final class RpcModeRunner {
         startPrompt(message, id, state);
     }
 
-    private void queue(JsonNode request, JsonNode id, State state, ConcurrentLinkedDeque<String> queue, String command) {
-        if (!state.streaming.get()) {
-            throw new IllegalStateException(command + " requires an active prompt");
+    private void queue(JsonNode request, JsonNode id, State state, String command) {
+        AgentSession session = state.activeSession(command);
+        String message = requiredMessage(request);
+        if ("steer".equals(command)) {
+            session.steer(message);
+        } else {
+            session.followUp(message);
         }
-        queue.addLast(requiredMessage(request));
         writeResponse(state, id, command, true, null, null);
     }
 
@@ -184,32 +186,22 @@ public final class RpcModeRunner {
         if (!state.streaming.compareAndSet(false, true)) {
             throw new IllegalStateException("agent is already running");
         }
-        AbortController controller = new AbortController();
-        state.abortController.set(controller);
         writeResponse(state, id, "prompt", true, null, null);
         state.executor.submit(() -> {
             try {
-                runPrompt(message, controller, state);
-                while (!controller.signal().aborted()) {
-                    String queued = state.pollNextQueuedMessage();
-                    if (queued == null) {
-                        break;
-                    }
-                    runPrompt(queued, controller, state);
-                }
+                runPrompt(message, state);
             } catch (Exception error) {
                 state.err.println("Error: " + error.getMessage());
                 state.err.flush();
             } finally {
-                state.abortController.compareAndSet(controller, null);
                 state.streaming.set(false);
             }
         });
     }
 
-    private static void runPrompt(String message, AbortController controller, State state) throws Exception {
+    private static void runPrompt(String message, State state) throws Exception {
         state.session.get().prompt(CliPromptRequestFactory.create(
-                message, state.runtime.defaultModel(), Optional.of(controller.signal())));
+                message, state.runtime.defaultModel(), Optional.empty()));
     }
 
     private void newSession(JsonNode id, State state) throws Exception {
@@ -218,8 +210,6 @@ public final class RpcModeRunner {
         }
         state.session.set(createSession(state.runtime, state.environment, state.sessionDirectory));
         state.sessionName.set(null);
-        state.steering.clear();
-        state.followUps.clear();
         writeResponse(state, id, "new_session", true, JSON.objectNode().put("cancelled", false), null);
     }
 
@@ -246,7 +236,7 @@ public final class RpcModeRunner {
             data.put("sessionName", state.sessionName.get());
         }
         data.put("messageCount", session.conversationContext().transcriptMessages().size());
-        data.put("pendingMessageCount", state.steering.size() + state.followUps.size());
+        data.put("pendingMessageCount", session.pendingMessageCount());
         return data;
     }
 
@@ -310,12 +300,9 @@ public final class RpcModeRunner {
         private final PrintWriter err;
         private final ExecutorService executor;
         private final AtomicReference<AgentSession> session = new AtomicReference<>();
-        private final AtomicReference<AbortController> abortController = new AtomicReference<>();
         private final AtomicReference<String> sessionName = new AtomicReference<>();
         private final AtomicBoolean streaming = new AtomicBoolean();
         private final AtomicBoolean shutdown = new AtomicBoolean();
-        private final ConcurrentLinkedDeque<String> steering = new ConcurrentLinkedDeque<>();
-        private final ConcurrentLinkedDeque<String> followUps = new ConcurrentLinkedDeque<>();
 
         private State(CliRuntime runtime, CliEnvironment environment, Path sessionDirectory, Object outputLock, PrintWriter out, PrintWriter err, ExecutorService executor) {
             this.runtime = runtime;
@@ -328,15 +315,33 @@ public final class RpcModeRunner {
         }
 
         private void abortActive(String reason) {
-            AbortController controller = abortController.get();
-            if (controller != null) {
-                controller.abort(reason);
+            activeSession("abort").abort(reason);
+        }
+
+        private void abortActiveIfPresent(String reason) {
+            if (!streaming.get()) {
+                return;
+            }
+            try {
+                activeSession("abort").abort(reason);
+            } catch (IllegalStateException ignored) {
+                // The prompt completed while shutdown was being processed.
             }
         }
 
-        private String pollNextQueuedMessage() {
-            String steeringMessage = steering.pollFirst();
-            return steeringMessage != null ? steeringMessage : followUps.pollFirst();
+        private AgentSession activeSession(String command) {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < deadline) {
+                AgentSession active = session.get();
+                if (active != null && active.isStreaming()) {
+                    return active;
+                }
+                if (!streaming.get()) {
+                    break;
+                }
+                LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(1));
+            }
+            throw new IllegalStateException(command + " requires an active prompt");
         }
     }
 }

@@ -87,6 +87,10 @@ public final class CodingAgentSession implements AgentSession {
     }
 
     @Override public boolean isStreaming() { return activePrompt.get() != null; }
+    @Override public int pendingMessageCount() {
+        ActivePrompt active = activePrompt.get();
+        return active == null ? 0 : active.queues().size(QueueKind.STEER) + active.queues().size(QueueKind.FOLLOW_UP);
+    }
     @Override public void steer(String message) { queue(message, true); }
     @Override public void followUp(String message) { queue(message, false); }
     @Override public boolean abort(String reason) {
