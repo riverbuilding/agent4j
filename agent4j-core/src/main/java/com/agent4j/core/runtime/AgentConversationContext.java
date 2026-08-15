@@ -9,10 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public final class AgentConversationContext {
-    private final List<AgentMessage> transcriptMessages;
-    private final List<AgentMessage> generatedMessages;
-
+public record AgentConversationContext(List<AgentMessage> transcriptMessages, List<AgentMessage> generatedMessages) {
     public AgentConversationContext(List<AgentMessage> transcriptMessages, List<AgentMessage> generatedMessages) {
         Objects.requireNonNull(transcriptMessages, "transcriptMessages");
         Objects.requireNonNull(generatedMessages, "generatedMessages");
@@ -20,10 +17,12 @@ public final class AgentConversationContext {
         this.generatedMessages = new ArrayList<>(generatedMessages);
     }
 
+    @Override
     public List<AgentMessage> transcriptMessages() {
         return List.copyOf(transcriptMessages);
     }
 
+    @Override
     public List<AgentMessage> generatedMessages() {
         return List.copyOf(generatedMessages);
     }

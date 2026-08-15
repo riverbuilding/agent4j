@@ -590,7 +590,7 @@ Goal: expose a stable Java embedding API equivalent to PI's SDK concepts.
 
 Tasks:
 
-- Mirror PI `AgentSession`, `AgentSessionRuntime`, and harness service
+- Mirror PI `AgentSession`, `CodingAgentRuntime`, and harness service
   responsibilities before adding Java-only conveniences. Initial shape audit is
   done in `docs/sdk-runtime-shape-audit.md`: `agent4j-core` remains the generic
   loop/context layer, `agent4j-coding` owns the coding SDK/runtime API, and
@@ -600,10 +600,10 @@ Tasks:
   `AgentConversationContext`. Interface baseline is done in
   `com.agent4j.coding.sdk.AgentSession`; concrete session implementation is in
   the next creation/resume/prompt slices.
-- Add `AgentSessionRuntime` in `agent4j-coding` as the services/lifecycle owner
+- Add `CodingAgentRuntime` in `agent4j-coding` as the services/lifecycle owner
   for providers, tools, events, resources, settings, sessions, compaction,
   branch summaries, and auth. Interface baseline is done in
-  `com.agent4j.coding.sdk.AgentSessionRuntime`, with lifecycle methods for
+  `com.agent4j.coding.sdk.CodingAgentRuntime`, with lifecycle methods for
   create/resume/import/clone/fork and SDK event subscription.
 - Add request/response records for the runtime API instead of exposing long
   `AgentLoopRequest` constructors to SDK callers. Done for the first API
@@ -613,11 +613,11 @@ Tasks:
   should initialize or refresh `AgentConversationContext` from
   `SessionManager.activeAgentMessages()` and persist generated loop messages
   through `SessionManager.appendAgentLoopResult(...)`. Session creation is done:
-  `CodingAgentSessionRuntime.createSession(...)` creates a PI-shaped JSONL
+  `CodingAgentRuntime.createSession(...)` creates a PI-shaped JSONL
   session, appends optional session-info/model-change entries, initializes an
   empty session-owned `AgentConversationContext`, and returns a
   `CodingAgentSession` handle. Resume is done:
-  `CodingAgentSessionRuntime.resumeSession(...)` opens the JSONL session,
+  `CodingAgentRuntime.resumeSession(...)` opens the JSONL session,
   optionally navigates to a requested active entry, initializes the
   session-owned context from `SessionManager.activeAgentMessages()`, and can
   continue prompting without caller-rebuilt history. Import/clone/fork are done:
@@ -632,26 +632,26 @@ Tasks:
   runs `AgentLoop` with session-owned active history, persists the full
   `AgentLoopResult.messages()` batch through `SessionManager`, and refreshes the
   session context from persisted active messages. Resource/settings preparation
-  is deferred to the runtime services container slice so the SDK does not guess
+  is deferred to the runtime builder slice so the SDK does not guess
   user home or trust state.
 - Add SDK-facing event subscription backed by `AgentEventBus`, keeping
   `AgentEvent` as the Phase 9 listener payload and leaving CLI JSON/RPC event
-  mapping to Phase 10. Done for the SDK baseline: `AgentSessionRuntime`
+  mapping to Phase 10. Done for the SDK baseline: `CodingAgentRuntime`
   exposes runtime-wide `subscribe(...)` plus session-filtered
   `subscribeSession(...)`, and tests pin prompt event delivery, event ordering,
   subscription close behavior, and session-id filtering through real
   `AgentSession.prompt(...)` calls.
-- Add runtime services container. Done with `CodingAgentRuntimeServices`, which
-  centralizes `AgentEventBus`, optional direct `AiModelClient`, `ToolRegistry`,
-  `AgentMessageConverter`, `Clock`, request preparation, session compaction,
-  and branch summarization services. Existing `CodingAgentSessionRuntime`
-  constructors now delegate into this container, and tests pin default services
-  plus custom clock/event-bus usage through real prompt calls.
+- Add runtime service configuration. Done with `CodingAgentRuntime.Builder`,
+  which configures `CodingAgentRuntime`'s event bus, optional direct
+  `AiModelClient`, provider registry, tools, message converter, clock,
+  compaction, branch summaries, and login service. Sessions depend only on
+  their `CodingAgentRuntime`, and tests pin default configuration plus custom
+  clock/event-bus usage through real prompt calls.
 - Add login/auth runtime API before CLI ownership:
   - provider-neutral `LoginService`/`AuthSession` API. Baseline is done with
     `LoginService`, `AuthSession`, `AuthStatus`, `AuthCredentialStore`,
     `InMemoryAuthCredentialStore`, and `DefaultLoginService`, exposed through
-    `AgentSessionRuntime.loginService()` and `CodingAgentRuntimeServices`.
+    `CodingAgentRuntime.loginService()` and `CodingAgentRuntime.Builder`.
   - ChatGPT/Codex subscription login flow, including browser OAuth and device
     code modes, so ChatGPT Plus/Pro/Team/Enterprise-style subscription access is
     a first-class runtime capability rather than a CLI-only concern. API shape
@@ -693,7 +693,7 @@ Tasks:
     in `docs/openai-sdk-guide.md`, with a runnable
     `OpenAiSubscriptionSdkExample` that avoids printing credential secrets.
   - SDK convenience wiring for standard OpenAI runtime setup. Done with
-    `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
+    `OpenAiCodingRuntimeOptions` and `CodingAgentRuntime.builder().openAi(...)`,
     which assemble `OpenAiResponsesProvider`, `AiProviderRegistry`,
     `PersistentAuthCredentialStore`, and an optional
     `OpenAiSubscriptionLoginClient` from one SDK-facing options object.
@@ -726,9 +726,9 @@ Tasks:
     validation. The opt-in `OpenAiSubscriptionLiveIT` is implemented; its
     successful production execution remains the Phase 9 closure gate.
 - Integrate resolved auth into provider-backed runtime creation. Done:
-  `CodingAgentRuntimeServices` can carry an `AiProviderRegistry`,
-  `CodingAgentSessionRuntime.prompt(...)` selects either the configured direct
-  `AiModelClient` or a provider/model from that registry, resolves provider auth
+  `CodingAgentRuntime.Builder` can configure an `AiProviderRegistry`,
+  `CodingAgentSession` selects either the configured direct `AiModelClient` or a
+  provider/model from that registry, resolves provider auth
   through `LoginService.resolveAuth(...)`, and creates a provider-backed
   `AgentLoop` with request-scoped `AiResolvedAuth`. Tests pin API-key auth,
   ChatGPT subscription-token auth, prompt model override, and the missing
@@ -807,7 +807,7 @@ Implementation slices:
      `Agent4jRootCommand` parse PI-shaped baseline options, while
      `DefaultCliRuntimeFactory` discovers global/project resources, resolves
      the configured OpenAI model, installs `CodingTools` in
-     `CodingAgentRuntimeServices`, and returns a `CodingAgentSessionRuntime`.
+     `CodingAgentRuntime.Builder`, and returns a `CodingAgentRuntime`.
      A command-line API key is held only by an in-memory runtime credential
      store; the default path uses Phase 9's persistent credential store. Print,
      JSON, and RPC execution remain the following slices.
@@ -817,7 +817,7 @@ Implementation slices:
    - Cover success, tool use, provider failures, and cancellation with a fake
      provider.
    - Done with `PrintModeRunner`: `agent4j -p <prompt>` creates an isolated
-     temporary SDK session, runs through `AgentSessionRuntime`, writes the final
+     temporary SDK session, runs through `CodingAgentRuntime`, writes the final
      assistant text to stdout, and writes failures/aborts to stderr with a
      nonzero exit code. Fake-model tests cover text, a tool-call round, provider
      failure, cancellation, temporary-session cleanup, and root-command wiring.
@@ -850,11 +850,11 @@ Implementation slices:
      injection remains a Phase 10 parity gap.
 6. **Session Lifecycle Flags**
    - Add new, continue, resume, no-session, explicit session path/ID, fork, and
-     name behavior as thin mappings to `AgentSessionRuntime`.
+     name behavior as thin mappings to `CodingAgentRuntime`.
    - Test persistence, active-path selection, and mutually exclusive flags.
    - Done with `CliSessionLifecycle`: `--session`, `--session-id`, `--continue`,
      noninteractive `--resume`, `--fork`, `--session-dir`, `--no-session`, and
-     `--name` resolve to `AgentSessionRuntime` create/resume/fork calls. Normal
+     `--name` resolve to `CodingAgentRuntime` create/resume/fork calls. Normal
      CLI modes now persist sessions below PI's cwd-encoded `~/.pi/agent/sessions`
      location; only `--no-session` creates a cleaned-up temporary session.
      Tests pin persistent creation, explicit resume, most-recent continuation,
@@ -867,7 +867,7 @@ Implementation slices:
      conflicts or bootstrap-unsupported providers. `--tools`,
      `--exclude-tools`, `--no-tools`, and `--no-builtin-tools` are parsed into a
      typed selection and filtered against the runtime-owned registry before
-     `CodingAgentRuntimeServices` is built. Unknown tools and conflicting
+     `CodingAgentRuntime` is built. Unknown tools and conflicting
      include/disable flags fail clearly; filtering preserves registered tool
      order. All currently supplied CLI tools are built-ins, so
      `--no-builtin-tools` yields an empty registry until extension tools exist.
@@ -877,7 +877,7 @@ Implementation slices:
    - Keep production endpoint verification and live-login evidence owned by
      the Phase 9 gaps above.
    - Done with Picocli subcommands: `login`, `logout`, `auth-status`, and
-     `refresh` delegate to `AgentSessionRuntime.loginService()`. `login`
+     `refresh` delegate to `CodingAgentRuntime.loginService()`. `login`
      invokes the one-call OpenAI browser subscription flow. Status output is
      restricted to provider, authentication mode/state, and expiry: it never
      prints `AuthStatus.metadata()`, access tokens, API keys, or refresh

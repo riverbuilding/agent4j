@@ -23,7 +23,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class CodingAgentLoopRequestFactoryTest {
+class CodingAgentLoopRequestPreparerTest {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
     private final Clock clock = Clock.fixed(Instant.parse("2026-07-30T10:00:00Z"), ZoneOffset.UTC);
 
@@ -84,11 +84,6 @@ class CodingAgentLoopRequestFactoryTest {
         assertThat(prepared.request().maxToolRounds()).isEqualTo(3);
         assertThat(prepared.request().maxModelRetries()).isEqualTo(2);
 
-        @SuppressWarnings("deprecation")
-        PreparedAgentLoopRequest compatibilityPrepared = new CodingAgentLoopRequestFactory().prepare(request, home);
-
-        assertThat(compatibilityPrepared.request().systemPrompt()).isEqualTo(prepared.request().systemPrompt());
-        assertThat(compatibilityPrepared.discovery()).isEqualTo(prepared.discovery());
     }
 
     @Test

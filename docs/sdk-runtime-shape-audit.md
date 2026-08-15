@@ -16,7 +16,7 @@ The Java implementation should mirror the ownership model rather than copy
 TypeScript syntax:
 
 - `AgentSession` is the user-facing handle for one persisted conversation.
-- `AgentSessionRuntime` owns services and lifecycle operations for new, resume,
+- `CodingAgentRuntime` owns services and lifecycle operations for new, resume,
   fork, clone, import, prompt, login/auth, and event subscription.
 - The runtime owns canonical conversation context. Callers should not rebuild
   history manually between prompts.
@@ -48,7 +48,7 @@ that composes them in the PI style.
 `agent4j-coding` should own the coding SDK/runtime:
 
 - `com.agent4j.coding.sdk.AgentSession`
-- `com.agent4j.coding.sdk.AgentSessionRuntime`
+- `com.agent4j.coding.sdk.CodingAgentRuntime`
 - session creation/resume/fork/clone/import flows backed by `SessionManager`
 - prompt flows that build `AgentLoopRequest`, prepare resources/settings, run
   `AgentLoop`, persist `AgentLoopResult.messages()`, and refresh session context
@@ -65,7 +65,7 @@ that composes them in the PI style.
 
 Initial SDK classes should be small and explicit:
 
-- `AgentSessionRuntime`
+- `CodingAgentRuntime`
   - `createSession(CreateSessionRequest)`
   - `resumeSession(ResumeSessionRequest)`
   - `importSession(ImportSessionRequest)`

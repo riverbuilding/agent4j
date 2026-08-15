@@ -56,7 +56,7 @@ public final class PrintModeRunner {
             AgentSession session;
             if (lifecycle == null) {
                 sessionDirectory = OwnedTemporaryDirectory.create(temporaryDirectory, "agent4j-print-");
-                session = runtime.sessionRuntime().createSession(new CreateSessionRequest(
+                session = runtime.runtime().createSession(new CreateSessionRequest(
                         sessionDirectory.path().resolve("session.jsonl"), environment.cwd(), Optional.empty(), Optional.of(runtime.defaultModel())));
             } else {
                 session = lifecycle.open();

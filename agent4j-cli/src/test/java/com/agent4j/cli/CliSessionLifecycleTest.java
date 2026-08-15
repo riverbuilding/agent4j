@@ -4,9 +4,8 @@ import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.coding.sdk.CreateSessionRequest;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
 import com.agent4j.coding.session.SessionManager;
 import com.agent4j.core.tool.InMemoryToolRegistry;
 import com.agent4j.testkit.ai.FakeModelClient;
@@ -82,11 +81,11 @@ class CliSessionLifecycleTest {
         CliEnvironment environment = environment();
         Files.createDirectories(environment.cwd());
         ResourceDiscovery discovery = new ResourceLoader().discover(ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
-        return new CliRuntime(new CodingAgentSessionRuntime(CodingAgentRuntimeServices.builder()
+        return new CliRuntime(CodingAgentRuntime.builder()
                 .modelClient(new FakeModelClient())
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC())
-                .build()), discovery, new AiModelReference("openai", "gpt-test"));
+                .build(), discovery, new AiModelReference("openai", "gpt-test"));
     }
 
     private CliEnvironment environment() {

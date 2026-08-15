@@ -40,14 +40,14 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class CodingAgentSessionRuntimeTest {
+class CodingAgentRuntimeLifecycleTest {
     @TempDir
     Path tempDir;
 
     @Test
     void createSessionCreatesJsonlSessionAndReturnsHandle() throws Exception {
         Path sessionFile = tempDir.resolve("session.jsonl");
-        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime();
+        CodingAgentRuntime runtime = new CodingAgentRuntime();
 
         AgentSession session = runtime.createSession(new CreateSessionRequest(sessionFile, tempDir));
 
@@ -68,7 +68,7 @@ class CodingAgentSessionRuntimeTest {
     @Test
     void createSessionAppendsOptionalNameAndModelEntries() throws Exception {
         Path sessionFile = tempDir.resolve("named.jsonl");
-        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime();
+        CodingAgentRuntime runtime = new CodingAgentRuntime();
 
         AgentSession session = runtime.createSession(new CreateSessionRequest(
                 sessionFile,
@@ -96,7 +96,7 @@ class CodingAgentSessionRuntimeTest {
         Path sessionFile = tempDir.resolve("existing.jsonl");
         Files.writeString(sessionFile, "");
 
-        assertThatThrownBy(() -> new CodingAgentSessionRuntime()
+        assertThatThrownBy(() -> new CodingAgentRuntime()
                         .createSession(new CreateSessionRequest(sessionFile, tempDir)))
                 .isInstanceOf(java.io.IOException.class)
                 .hasMessageContaining("already exists");
@@ -106,7 +106,7 @@ class CodingAgentSessionRuntimeTest {
     void promptRunsModelPersistsResultAndRefreshesConversationContext() throws Exception {
         Path sessionFile = tempDir.resolve("prompt.jsonl");
         FakeModelClient model = new FakeModelClient().enqueue(assistantText("assistant-1", "hello", new AiUsage(3, 2, 1, 0)));
-        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime(model);
+        CodingAgentRuntime runtime = new CodingAgentRuntime(model);
         AgentSession session = runtime.createSession(new CreateSessionRequest(sessionFile, tempDir));
 
         PromptResult result = session.prompt(new PromptRequest("say hello"));
@@ -138,7 +138,7 @@ class CodingAgentSessionRuntimeTest {
         FakeModelClient model = new FakeModelClient()
                 .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero()))
                 .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero()));
-        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime(model);
+        CodingAgentRuntime runtime = new CodingAgentRuntime(model);
         AgentSession session = runtime.createSession(new CreateSessionRequest(sessionFile, tempDir));
 
         session.prompt(new PromptRequest("first prompt"));
@@ -159,7 +159,7 @@ class CodingAgentSessionRuntimeTest {
 
     @Test
     void promptRequiresConfiguredModelClient() throws Exception {
-        AgentSession session = new CodingAgentSessionRuntime()
+        AgentSession session = new CodingAgentRuntime()
                 .createSession(new CreateSessionRequest(tempDir.resolve("missing-model.jsonl"), tempDir));
 
         assertThatThrownBy(() -> session.prompt(new PromptRequest("hello")))
@@ -177,14 +177,14 @@ class CodingAgentSessionRuntimeTest {
                 "fake-provider",
                 "sk-test",
                 Optional.of("https://api.example.test")));
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .providerRegistry(AiProviderRegistry.builder()
                         .add(provider)
                         .defaultModel(model.reference())
                         .build())
                 .loginService(loginService)
                 .build();
-        AgentSession session = new CodingAgentSessionRuntime(services)
+        AgentSession session = runtime
                 .createSession(new CreateSessionRequest(sessionFile, tempDir));
 
         session.prompt(new PromptRequest("hello provider"));
@@ -208,14 +208,14 @@ class CodingAgentSessionRuntimeTest {
                 Optional.of("https://codex.example.test"),
                 Optional.empty(),
                 Map.of("plan", "plus")));
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .providerRegistry(AiProviderRegistry.builder()
                         .add(provider)
                         .defaultModel(model.reference())
                         .build())
                 .loginService(loginService)
                 .build();
-        AgentSession session = new CodingAgentSessionRuntime(services)
+        AgentSession session = runtime
                 .createSession(new CreateSessionRequest(sessionFile, tempDir));
 
         session.prompt(new PromptRequest("hello subscription"));
@@ -236,13 +236,13 @@ class CodingAgentSessionRuntimeTest {
                 "fake-provider",
                 List.of(defaultModel, requestedModel),
                 "provider answer");
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .providerRegistry(AiProviderRegistry.builder()
                         .add(provider)
                         .defaultModel(defaultModel.reference())
                         .build())
                 .build();
-        AgentSession session = new CodingAgentSessionRuntime(services)
+        AgentSession session = runtime
                 .createSession(new CreateSessionRequest(sessionFile, tempDir));
 
         session.prompt(new PromptRequest(
@@ -266,14 +266,14 @@ class CodingAgentSessionRuntimeTest {
     @Test
     void resumeSessionRestoresActiveConversationAndCanContinuePrompting() throws Exception {
         Path sessionFile = tempDir.resolve("resume.jsonl");
-        new CodingAgentSessionRuntime(new FakeModelClient()
+        new CodingAgentRuntime(new FakeModelClient()
                         .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero())))
                 .createSession(new CreateSessionRequest(sessionFile, tempDir))
                 .prompt(new PromptRequest("first prompt"));
         FakeModelClient resumedModel = new FakeModelClient()
                 .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero()));
 
-        AgentSession resumed = new CodingAgentSessionRuntime(resumedModel)
+        AgentSession resumed = new CodingAgentRuntime(resumedModel)
                 .resumeSession(new ResumeSessionRequest(sessionFile));
 
         assertThat(resumed.sessionFile()).isEqualTo(sessionFile.toAbsolutePath().normalize());
@@ -296,7 +296,7 @@ class CodingAgentSessionRuntimeTest {
     @Test
     void resumeSessionCanNavigateToSpecificActiveEntryBeforeContinuing() throws Exception {
         Path sessionFile = tempDir.resolve("resume-branch.jsonl");
-        AgentSession session = new CodingAgentSessionRuntime(new FakeModelClient()
+        AgentSession session = new CodingAgentRuntime(new FakeModelClient()
                         .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero()))
                         .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero())))
                 .createSession(new CreateSessionRequest(sessionFile, tempDir));
@@ -306,7 +306,7 @@ class CodingAgentSessionRuntimeTest {
         FakeModelClient branchedModel = new FakeModelClient()
                 .enqueue(assistantText("assistant-3", "branched answer", AiUsage.zero()));
 
-        AgentSession resumed = new CodingAgentSessionRuntime(branchedModel)
+        AgentSession resumed = new CodingAgentRuntime(branchedModel)
                 .resumeSession(new ResumeSessionRequest(
                         sessionFile,
                         Optional.of(firstAssistantId),
@@ -334,7 +334,7 @@ class CodingAgentSessionRuntimeTest {
                 """);
         Path targetFile = tempDir.resolve("import-target.jsonl");
 
-        AgentSession imported = new CodingAgentSessionRuntime()
+        AgentSession imported = new CodingAgentRuntime()
                 .importSession(new ImportSessionRequest(sourceFile, targetFile));
 
         assertThat(Files.readString(targetFile)).isEqualTo(Files.readString(sourceFile));
@@ -349,7 +349,7 @@ class CodingAgentSessionRuntimeTest {
     @Test
     void cloneSessionCopiesFullDocumentAndReturnsClonedSessionHandle() throws Exception {
         Path sourceFile = tempDir.resolve("clone-source.jsonl");
-        AgentSession source = new CodingAgentSessionRuntime(new FakeModelClient()
+        AgentSession source = new CodingAgentRuntime(new FakeModelClient()
                         .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero()))
                         .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero())))
                 .createSession(new CreateSessionRequest(sourceFile, tempDir));
@@ -357,7 +357,7 @@ class CodingAgentSessionRuntimeTest {
         source.prompt(new PromptRequest("second prompt"));
         Path targetFile = tempDir.resolve("clone-target.jsonl");
 
-        AgentSession clone = new CodingAgentSessionRuntime()
+        AgentSession clone = new CodingAgentRuntime()
                 .cloneSession(new CloneSessionRequest(source, targetFile));
 
         assertThat(Files.readString(targetFile)).isEqualTo(Files.readString(sourceFile));
@@ -371,7 +371,7 @@ class CodingAgentSessionRuntimeTest {
     @Test
     void forkSessionWritesOnlySelectedActivePathWithDerivedHeader() throws Exception {
         Path sourceFile = tempDir.resolve("fork-source.jsonl");
-        AgentSession source = new CodingAgentSessionRuntime(new FakeModelClient()
+        AgentSession source = new CodingAgentRuntime(new FakeModelClient()
                         .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero()))
                         .enqueue(assistantText("assistant-2", "second answer", AiUsage.zero())))
                 .createSession(new CreateSessionRequest(sourceFile, tempDir));
@@ -380,7 +380,7 @@ class CodingAgentSessionRuntimeTest {
         source.prompt(new PromptRequest("second prompt"));
         Path forkFile = tempDir.resolve("fork-target.jsonl");
 
-        AgentSession fork = new CodingAgentSessionRuntime()
+        AgentSession fork = new CodingAgentRuntime()
                 .forkSession(new ForkSessionRequest(source, forkFile, Optional.of(firstAssistantId)));
 
         assertThat(fork.sessionFile()).isEqualTo(forkFile.toAbsolutePath().normalize());
@@ -400,7 +400,7 @@ class CodingAgentSessionRuntimeTest {
         Path sessionFile = tempDir.resolve("events.jsonl");
         FakeModelClient model = new FakeModelClient()
                 .enqueue(assistantStream("assistant-1", "hello", AiUsage.zero()));
-        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime(model);
+        CodingAgentRuntime runtime = new CodingAgentRuntime(model);
         AgentSession session = runtime.createSession(new CreateSessionRequest(sessionFile, tempDir));
         List<AgentEvent> events = new ArrayList<>();
         EventSubscription subscription = runtime.subscribe(events::add);
@@ -436,7 +436,7 @@ class CodingAgentSessionRuntimeTest {
         FakeModelClient model = new FakeModelClient()
                 .enqueue(assistantText("assistant-1", "first", AiUsage.zero()))
                 .enqueue(assistantText("assistant-2", "second", AiUsage.zero()));
-        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime(model);
+        CodingAgentRuntime runtime = new CodingAgentRuntime(model);
         AgentSession first = runtime.createSession(new CreateSessionRequest(tempDir.resolve("first.jsonl"), tempDir));
         AgentSession second = runtime.createSession(new CreateSessionRequest(tempDir.resolve("second.jsonl"), tempDir));
         List<AgentEvent> firstEvents = new ArrayList<>();
@@ -466,14 +466,14 @@ class CodingAgentSessionRuntimeTest {
         FakeModelClient model = new FakeModelClient()
                 .enqueue(assistantText("assistant-1", "answer", AiUsage.zero()));
         Clock clock = Clock.fixed(Instant.parse("2026-08-05T12:34:56Z"), ZoneOffset.UTC);
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .eventBus(eventBus)
                 .modelClient(model)
                 .clock(clock)
                 .build();
         List<AgentEvent> events = new ArrayList<>();
         eventBus.subscribe(events::add);
-        AgentSession session = new CodingAgentSessionRuntime(services)
+        AgentSession session = runtime
                 .createSession(new CreateSessionRequest(sessionFile, tempDir));
 
         PromptResult result = session.prompt(new PromptRequest("prompt"));

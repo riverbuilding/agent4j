@@ -12,9 +12,9 @@ account can use:
 ```java
 AiModelReference model = new AiModelReference("openai", "<enabled-model-id>");
 
-CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
-        OpenAiCodingRuntimeOptions.builder(model).build());
-AgentSessionRuntime runtime = new CodingAgentSessionRuntime(services);
+CodingAgentRuntime runtime = CodingAgentRuntime.builder()
+        .openAi(OpenAiCodingRuntimeOptions.builder(model).build())
+        .build();
 LoginService login = runtime.loginService();
 ```
 

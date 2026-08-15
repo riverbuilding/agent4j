@@ -64,7 +64,7 @@ final class InteractiveSessionController implements AutoCloseable {
         } catch (IOException error) {
             throw new IllegalStateException("cannot read session model selection", error);
         }
-        subscription = runtime.sessionRuntime().subscribeSession(next.id(), renderer::render);
+        subscription = runtime.runtime().subscribeSession(next.id(), renderer::render);
     }
 
     @Override

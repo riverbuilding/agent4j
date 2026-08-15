@@ -148,16 +148,15 @@ class LoginServiceTest {
     }
 
     @Test
-    void runtimeServicesExposeDefaultAndConfiguredLoginService() {
+    void runtimeExposesDefaultAndConfiguredLoginService() {
         LoginService configured = service();
 
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .loginService(configured)
                 .build();
 
-        assertThat(CodingAgentRuntimeServices.defaults().loginService()).isNotNull();
-        assertThat(services.loginService()).isSameAs(configured);
-        assertThat(new CodingAgentSessionRuntime(services).loginService()).isSameAs(configured);
+        assertThat(new CodingAgentRuntime().loginService()).isNotNull();
+        assertThat(runtime.loginService()).isSameAs(configured);
     }
 
     @Test

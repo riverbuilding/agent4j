@@ -73,7 +73,7 @@ public final class RpcModeRunner {
             }
             State state = new State(runtime, environment, sessionDirectory, outputLock, out, err, executor);
             state.session.set(initialSession);
-            subscription = runtime.sessionRuntime().subscribe(event -> {
+            subscription = runtime.runtime().subscribe(event -> {
                 AgentSession session = state.session.get();
                 if (session != null && session.id().equals(event.sessionId())) {
                     write(out, outputLock, eventSerializer.serialize(eventSerializer.event(event)));
@@ -261,7 +261,7 @@ public final class RpcModeRunner {
     private static AgentSession createSession(CliRuntime runtime, CliEnvironment environment, Path directory) throws Exception {
         Path sessionFile = Files.createTempFile(directory, "session-", ".jsonl");
         Files.deleteIfExists(sessionFile);
-        return runtime.sessionRuntime().createSession(new CreateSessionRequest(
+        return runtime.runtime().createSession(new CreateSessionRequest(
                 sessionFile, environment.cwd(), Optional.empty(), Optional.of(runtime.defaultModel())));
     }
 

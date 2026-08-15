@@ -11,9 +11,7 @@ import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.AgentSessionRuntime;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.coding.sdk.AuthSession;
 import com.agent4j.coding.sdk.AuthStatus;
 import com.agent4j.coding.sdk.LoginService;
@@ -258,15 +256,14 @@ class Agent4jCliTest {
         Files.createDirectories(environment.cwd());
         ResourceDiscovery discovery = new ResourceLoader().discover(
                 ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
-        CodingAgentRuntimeServices.Builder services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime.Builder runtime = CodingAgentRuntime.builder()
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC())
                 .loginService(loginService);
         if (model != null) {
-            services.modelClient(model);
+            runtime.modelClient(model);
         }
-        AgentSessionRuntime runtime = new CodingAgentSessionRuntime(services.build());
-        return new CliRuntime(runtime, discovery, new AiModelReference("openai", "gpt-test"));
+        return new CliRuntime(runtime.build(), discovery, new AiModelReference("openai", "gpt-test"));
     }
 
     private static final class FakeLoginService implements LoginService {

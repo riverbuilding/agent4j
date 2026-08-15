@@ -10,8 +10,7 @@ import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
 import com.agent4j.core.runtime.AbortController;
@@ -134,11 +133,11 @@ class PrintModeRunnerTest {
         ResourceDiscovery discovery = new ResourceLoader().discover(
                 ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
         return new CliRuntime(
-                new CodingAgentSessionRuntime(CodingAgentRuntimeServices.builder()
+                CodingAgentRuntime.builder()
                         .modelClient(model)
                         .toolRegistry(tools)
                         .clock(Clock.systemUTC())
-                        .build()),
+                        .build(),
                 discovery,
                 new AiModelReference("openai", "gpt-test"));
     }

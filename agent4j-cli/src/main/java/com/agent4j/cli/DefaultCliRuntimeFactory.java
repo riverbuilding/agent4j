@@ -5,11 +5,9 @@ import com.agent4j.coding.resource.AgentSettings;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
-import com.agent4j.coding.sdk.AgentSessionRuntime;
 import com.agent4j.coding.sdk.ApiKeyLoginRequest;
 import com.agent4j.coding.sdk.AuthCredentialStore;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.coding.sdk.InMemoryAuthCredentialStore;
 import com.agent4j.coding.sdk.OpenAiCodingRuntimeOptions;
 import com.agent4j.coding.sdk.PersistentAuthCredentialStore;
@@ -65,18 +63,17 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
 
         boolean runtimeApiKey = request.apiKey().isPresent();
         AuthCredentialStore runtimeCredentialStore = runtimeApiKey ? new InMemoryAuthCredentialStore() : credentialStore;
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .openAi(OpenAiCodingRuntimeOptions.builder(model)
                         .credentialStore(runtimeCredentialStore)
                         .clock(clock)
                         .build())
                 .toolRegistry(CliToolSelector.select(toolRegistry, request.toolSelection()))
                 .build();
-        request.apiKey().ifPresent(apiKey -> services.loginService().loginApiKey(
+        request.apiKey().ifPresent(apiKey -> runtime.loginService().loginApiKey(
                 new ApiKeyLoginRequest(model.providerId(), apiKey)));
 
-        AgentSessionRuntime runtime = new CodingAgentSessionRuntime(services);
-        return new CliRuntime(runtime, discovery, model, services.optionalProviderRegistry());
+        return new CliRuntime(runtime, discovery, model, runtime.optionalProviderRegistry());
     }
 
     private static AiModelReference resolveModel(CliRuntimeRequest request, AgentSettings settings) {

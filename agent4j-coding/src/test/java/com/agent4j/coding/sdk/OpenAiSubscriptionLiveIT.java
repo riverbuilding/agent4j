@@ -27,11 +27,11 @@ class OpenAiSubscriptionLiveIT {
         Path credentialFile = Path.of(requiredEnvironment("AGENT4J_LIVE_OPENAI_AUTH_FILE"));
         AiModelReference model = new AiModelReference("openai", requiredEnvironment("AGENT4J_LIVE_OPENAI_MODEL"));
         PersistentAuthCredentialStore credentialStore = new PersistentAuthCredentialStore(credentialFile);
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder().openAi(
                 OpenAiCodingRuntimeOptions.builder(model)
                         .credentialStore(credentialStore)
-                        .build());
-        LoginService loginService = services.loginService();
+                        .build()).build();
+        LoginService loginService = runtime.loginService();
 
         AuthStatus browserLogin = loginService.loginOpenAiSubscription();
         assertThat(browserLogin.authenticated()).isTrue();
@@ -56,7 +56,6 @@ class OpenAiSubscriptionLiveIT {
         assertThat(resolvedAuth.accessToken()).isPresent();
         assertThat(resolvedAuth.baseUrl()).isPresent();
 
-        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime(services);
         AgentSession session = runtime.createSession(new CreateSessionRequest(
                 temporaryDirectory.resolve("live-openai-session.jsonl"),
                 temporaryDirectory));

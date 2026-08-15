@@ -45,7 +45,7 @@ class DefaultCliRuntimeFactoryTest {
 
         assertThat(runtime.defaultModel().displayName()).isEqualTo("openai/gpt-from-settings");
         assertThat(runtime.resourceDiscovery().directories().projectAgentDir()).isEqualTo(workspace.resolve(".pi"));
-        assertThat(runtime.sessionRuntime()).isNotNull();
+        assertThat(runtime.runtime()).isNotNull();
         assertThat(persistentStore.find("openai")).isEmpty();
     }
 

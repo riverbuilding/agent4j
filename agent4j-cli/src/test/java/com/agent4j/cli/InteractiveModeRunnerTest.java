@@ -9,8 +9,7 @@ import com.agent4j.ai.AiUsage;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.core.tool.InMemoryToolRegistry;
 import com.agent4j.testkit.ai.FakeModelClient;
 import org.junit.jupiter.api.Test;
@@ -121,13 +120,13 @@ class InteractiveModeRunnerTest {
         Files.createDirectories(environment.cwd());
         ResourceDiscovery discovery = new ResourceLoader().discover(
                 ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
-        CodingAgentRuntimeServices.Builder services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime.Builder runtime = CodingAgentRuntime.builder()
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC());
         if (model != null) {
-            services.modelClient(model);
+            runtime.modelClient(model);
         }
-        return new CliRuntime(new CodingAgentSessionRuntime(services.build()), discovery, new AiModelReference("openai", "gpt-test"));
+        return new CliRuntime(runtime.build(), discovery, new AiModelReference("openai", "gpt-test"));
     }
 
     private CliEnvironment environment() {

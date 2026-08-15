@@ -37,7 +37,7 @@ final class CliSessionLifecycle implements AutoCloseable {
         }
         if (options.fork().isPresent()) {
             AgentSession source = resume(resolve(options.fork().orElseThrow()));
-            return runtime.sessionRuntime().forkSession(new ForkSessionRequest(source, newSessionFile(), Optional.empty()));
+            return runtime.runtime().forkSession(new ForkSessionRequest(source, newSessionFile(), Optional.empty()));
         }
         if (options.session().isPresent()) {
             AgentSession session = resume(resolve(options.session().orElseThrow()));
@@ -78,7 +78,7 @@ final class CliSessionLifecycle implements AutoCloseable {
         Path sessionCwd = Path.of(manager.document().header().header().orElseThrow().cwd()).toAbsolutePath().normalize();
         if (confirmCrossProject && !sessionCwd.equals(environment.cwd())) {
             AgentSession source = resume(path);
-            return runtime.sessionRuntime().forkSession(new ForkSessionRequest(
+            return runtime.runtime().forkSession(new ForkSessionRequest(
                     source, newSessionFile(), Optional.empty(), Optional.of(environment.cwd())));
         }
         return resume(path);
@@ -110,12 +110,12 @@ final class CliSessionLifecycle implements AutoCloseable {
     }
 
     private AgentSession create(Path file, Optional<String> sessionId) throws Exception {
-        return runtime.sessionRuntime().createSession(new CreateSessionRequest(
+        return runtime.runtime().createSession(new CreateSessionRequest(
                 file, environment.cwd(), options.name(), Optional.of(runtime.defaultModel()), sessionId));
     }
 
     private AgentSession resume(Path file) throws Exception {
-        return runtime.sessionRuntime().resumeSession(new ResumeSessionRequest(file, Optional.empty(), Optional.of(runtime.defaultModel())));
+        return runtime.runtime().resumeSession(new ResumeSessionRequest(file, Optional.empty(), Optional.of(runtime.defaultModel())));
     }
 
     private void appendName(AgentSession session) throws IOException {

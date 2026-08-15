@@ -115,12 +115,12 @@ class LiveAgentSessionControlTest {
         }
     }
 
-    private CodingAgentSessionRuntime runtime(AiModelClient model) {
-        return new CodingAgentSessionRuntime(CodingAgentRuntimeServices.builder()
+    private CodingAgentRuntime runtime(AiModelClient model) {
+        return CodingAgentRuntime.builder()
                 .modelClient(model)
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC())
-                .build());
+                .build();
     }
 
     private static AiStreamEvent.MessageCompleted completed(String id, String text) {
