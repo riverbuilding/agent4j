@@ -8,16 +8,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.StringReader;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,7 +22,7 @@ public final class SessionManager {
     private static final int CURRENT_SESSION_VERSION = 3;
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
 
-    private final Path sessionFile;
+    private final SessionFileStore store;
     private final SessionJsonlCodec codec;
     private final SessionIdGenerator idGenerator;
     private final Clock clock;
@@ -46,7 +38,7 @@ public final class SessionManager {
             SessionEntry header,
             List<SessionEntry> entries
     ) {
-        this.sessionFile = Objects.requireNonNull(sessionFile, "sessionFile");
+        this.store = new SessionFileStore(sessionFile, codec);
         this.codec = Objects.requireNonNull(codec, "codec");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -82,9 +74,6 @@ public final class SessionManager {
             Clock clock
     ) throws IOException {
         Objects.requireNonNull(cwd, "cwd");
-        if (Files.exists(sessionFile)) {
-            throw new IOException("session file already exists: " + sessionFile);
-        }
         ObjectNode headerPayload = codec.createObjectNode();
         headerPayload.put("type", SessionEntryType.SESSION.wireName());
         headerPayload.put("version", CURRENT_SESSION_VERSION);
@@ -92,9 +81,8 @@ public final class SessionManager {
         headerPayload.put("timestamp", Instant.now(clock).toString());
         headerPayload.put("cwd", cwd.toAbsolutePath().normalize().toString());
 
-        Files.createDirectories(sessionFile.toAbsolutePath().getParent());
         SessionEntry header = codec.parseLine(codec.writeJson(headerPayload), 1);
-        appendLineWithLock(sessionFile, codec.writeLine(header));
+        new SessionFileStore(sessionFile, codec).create(new SessionDocument(header, List.of()));
         return new SessionManager(sessionFile, codec, idGenerator, clock, header, List.of());
     }
 
@@ -108,11 +96,7 @@ public final class SessionManager {
             SessionIdGenerator idGenerator,
             Clock clock
     ) throws IOException {
-        SessionDocument document;
-        try (StringReader reader = new StringReader(Files.readString(sessionFile))) {
-            document = codec.read(reader);
-        }
-        SessionDocumentValidator.validate(document);
+        SessionDocument document = new SessionFileStore(sessionFile, codec).read();
         return new SessionManager(sessionFile, codec, idGenerator, clock, document.header(), document.entries());
     }
 
@@ -129,15 +113,8 @@ public final class SessionManager {
     ) throws IOException {
         Objects.requireNonNull(sourceFile, "sourceFile");
         Objects.requireNonNull(targetFile, "targetFile");
-        if (Files.exists(targetFile)) {
-            throw new IOException("target session file already exists: " + targetFile);
-        }
-        SessionDocument document;
-        try (StringReader reader = new StringReader(Files.readString(sourceFile))) {
-            document = codec.read(reader);
-        }
-        SessionDocumentValidator.validate(document);
-        writeDocument(targetFile, codec, document);
+        SessionDocument document = new SessionFileStore(sourceFile, codec).read();
+        new SessionFileStore(targetFile, codec).create(document);
         return open(targetFile, codec, idGenerator, clock);
     }
 
@@ -162,7 +139,7 @@ public final class SessionManager {
         String line = codec.writeJson(payload);
         SessionEntry entry = codec.parseLine(line, entries.size() + 2);
         validateAppendBatch(List.of(entry));
-        appendFreshLineWithLock(line);
+        store.appendIfFresh(document(), List.of(line));
         entries.add(entry);
         activeEntryId = entry.id();
         return entry;
@@ -195,7 +172,7 @@ public final class SessionManager {
             parentId = agentMessage.id();
         }
         validateAppendBatch(appended);
-        appendFreshLinesWithLock(lines);
+        store.appendIfFresh(document(), lines);
         entries.addAll(appended);
         activeEntryId = appended.getLast().id();
         return List.copyOf(appended);
@@ -312,7 +289,7 @@ public final class SessionManager {
     }
 
     public Path sessionFile() {
-        return sessionFile;
+        return store.sessionFile();
     }
 
     public String activeEntryId() {
@@ -321,10 +298,7 @@ public final class SessionManager {
 
     public SessionManager cloneTo(Path targetFile) throws IOException {
         Objects.requireNonNull(targetFile, "targetFile");
-        if (Files.exists(targetFile)) {
-            throw new IOException("target session file already exists: " + targetFile);
-        }
-        writeDocument(targetFile, codec, document());
+        new SessionFileStore(targetFile, codec).create(document());
         return open(targetFile, codec, idGenerator, clock);
     }
 
@@ -334,12 +308,9 @@ public final class SessionManager {
 
     public SessionManager forkToActivePath(Path targetFile, Path cwd) throws IOException {
         Objects.requireNonNull(targetFile, "targetFile");
-        if (Files.exists(targetFile)) {
-            throw new IOException("target session file already exists: " + targetFile);
-        }
         SessionEntry derivedHeader = derivedHeader(cwd);
         SessionDocument forkedDocument = new SessionDocument(derivedHeader, activePath());
-        writeDocument(targetFile, codec, forkedDocument);
+        new SessionFileStore(targetFile, codec).create(forkedDocument);
         return open(targetFile, codec, idGenerator, clock);
     }
 
@@ -375,57 +346,16 @@ public final class SessionManager {
         String line = codec.writeJson(payload);
         SessionEntry entry = codec.parseLine(line, entries.size() + 2);
         validateAppendBatch(List.of(entry));
-        appendFreshLineWithLock(line);
+        store.appendIfFresh(document(), List.of(line));
         entries.add(entry);
         activeEntryId = entry.id();
         return entry;
-    }
-
-    private void appendFreshLineWithLock(String line) throws IOException {
-        appendFreshLinesWithLock(List.of(line));
-    }
-
-    private void appendFreshLinesWithLock(List<String> lines) throws IOException {
-        Files.createDirectories(sessionFile.toAbsolutePath().getParent());
-        try (FileChannel channel = FileChannel.open(
-                sessionFile,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.WRITE,
-                StandardOpenOption.APPEND);
-             FileLock ignored = channel.lock()) {
-            assertSessionSnapshotIsFresh();
-            for (String line : lines) {
-                byte[] bytes = (line + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
-                channel.write(ByteBuffer.wrap(bytes));
-            }
-        }
     }
 
     private void validateAppendBatch(List<SessionEntry> appended) {
         SessionDocumentValidator.validate(new SessionDocument(header, java.util.stream.Stream
                 .concat(entries.stream(), appended.stream())
                 .toList()));
-    }
-
-    private void assertSessionSnapshotIsFresh() throws IOException {
-        SessionDocument diskDocument;
-        try (StringReader reader = new StringReader(Files.readString(sessionFile))) {
-            diskDocument = codec.read(reader);
-        }
-        SessionDocumentValidator.validate(diskDocument);
-        if (!header.payload().equals(diskDocument.header().payload())
-                || entries.size() != diskDocument.entries().size()) {
-            throw staleSessionSnapshot();
-        }
-        for (int i = 0; i < entries.size(); i++) {
-            if (!entries.get(i).payload().equals(diskDocument.entries().get(i).payload())) {
-                throw staleSessionSnapshot();
-            }
-        }
-    }
-
-    private IllegalStateException staleSessionSnapshot() {
-        return new IllegalStateException("session file changed on disk; reopen before appending: " + sessionFile);
     }
 
     private ObjectNode toSessionMessage(AgentMessage agentMessage) {
@@ -501,27 +431,4 @@ public final class SessionManager {
         return codec.parseLine(codec.writeJson(payload), 1);
     }
 
-    private static void writeDocument(Path path, SessionJsonlCodec codec, SessionDocument document) throws IOException {
-        Files.createDirectories(path.toAbsolutePath().getParent());
-        try (BufferedWriter writer = Files.newBufferedWriter(
-                path,
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE_NEW,
-                StandardOpenOption.WRITE)) {
-            codec.write(document, writer);
-        }
-    }
-
-    private static void appendLineWithLock(Path path, String line) throws IOException {
-        Files.createDirectories(path.toAbsolutePath().getParent());
-        byte[] bytes = (line + System.lineSeparator()).getBytes(StandardCharsets.UTF_8);
-        try (FileChannel channel = FileChannel.open(
-                path,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.WRITE,
-                StandardOpenOption.APPEND);
-             FileLock ignored = channel.lock()) {
-            channel.write(ByteBuffer.wrap(bytes));
-        }
-    }
 }
