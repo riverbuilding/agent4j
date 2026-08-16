@@ -12,10 +12,10 @@ public final class ToolCallingExample {
     }
 
     public static void main(String[] args) throws Exception {
-        try (LiveExampleConfiguration configuration = LiveExampleConfiguration.open()) {
-            CodingAgentRuntime runtime = configuration.createRuntime(WorkspaceStatusTool.registry());
-            CodingAgentSession session = runtime.createSession(
-                    configuration.sessionFile("03-tool-calling.jsonl"), configuration.workspace());
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open();
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig(WorkspaceStatusTool.registry()));
+        try (runtime) {
+            CodingAgentSession session = runtime.createSession("03-tool-calling.jsonl");
             PromptResult result;
             try (EventSubscription ignored = runtime.subscribe(event -> {
                 if (event instanceof AgentEvent.ToolExecutionStarted started) {
@@ -36,6 +36,8 @@ public final class ToolCallingExample {
             }
             LiveExampleHelper.printMessage(System.out, result);
             LiveExampleHelper.printUsage(System.out, result);
+        } finally {
+            runtime.cleanupOwnedFiles();
         }
     }
 }

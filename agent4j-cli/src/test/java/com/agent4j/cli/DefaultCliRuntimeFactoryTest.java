@@ -12,7 +12,6 @@ import java.time.Clock;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DefaultCliRuntimeFactoryTest {
     @TempDir
@@ -70,20 +69,42 @@ class DefaultCliRuntimeFactoryTest {
     }
 
     @Test
-    void rejectsAProviderTheBootstrapCannotConstruct() {
+    void loadsTheProjectModelsJsonBeforeSelectingTheDefaultModel() throws Exception {
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace.resolve(".pi"));
+        Files.writeString(workspace.resolve(".pi/models.json"), """
+                {
+                  "models": [{"provider": "openai", "id": "company-model", "name": "Company Model"}],
+                  "defaultModel": "openai/company-model"
+                }
+                """);
         DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
                 new ResourceLoader(),
                 new InMemoryAuthCredentialStore(),
                 CodingTools.localDefaults().registry(),
                 Clock.systemUTC());
 
-        assertThatThrownBy(() -> factory.create(new CliRuntimeRequest(
-                        temporaryDirectory.resolve("workspace"),
-                        temporaryDirectory.resolve("home"),
-                        Optional.of("anthropic"),
-                        Optional.of("claude"),
-                        Optional.empty())))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("not configured");
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                workspace, temporaryDirectory.resolve("home"), Optional.empty(), Optional.empty(), Optional.empty()));
+
+        assertThat(runtime.defaultModel().displayName()).isEqualTo("openai/company-model");
+    }
+
+    @Test
+    void buildsAnAnthropicRuntimeFromTheBuiltInCatalog() throws Exception {
+        DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
+                new ResourceLoader(),
+                new InMemoryAuthCredentialStore(),
+                CodingTools.localDefaults().registry(),
+                Clock.systemUTC());
+
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                temporaryDirectory.resolve("workspace"),
+                temporaryDirectory.resolve("home"),
+                Optional.of("anthropic"),
+                Optional.of("claude"),
+                Optional.empty()));
+
+        assertThat(runtime.defaultModel().displayName()).isEqualTo("anthropic/claude");
     }
 }

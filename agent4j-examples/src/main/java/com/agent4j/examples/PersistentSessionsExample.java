@@ -13,10 +13,11 @@ public final class PersistentSessionsExample {
     }
 
     public static void main(String[] args) throws Exception {
-        try (LiveExampleConfiguration configuration = LiveExampleConfiguration.open()) {
-            CodingAgentRuntime runtime = configuration.createRuntime();
-            Path sessionFile = configuration.sessionFile("04-persistent-sessions.jsonl");
-            String sessionId = createAndPrompt(runtime, configuration, sessionFile);
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open();
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
+        try (runtime) {
+            Path sessionFile = runtime.sessionFile("04-persistent-sessions.jsonl");
+            String sessionId = createAndPrompt(runtime, sessionFile);
 
             System.out.println("Persisted JSONL: " + sessionFile);
             System.out.println("Persisted entries: " + Files.readAllLines(sessionFile).size());
@@ -34,15 +35,16 @@ public final class PersistentSessionsExample {
                     0));
             LiveExampleHelper.printMessage(System.out, resumedResult);
             LiveExampleHelper.printUsage(System.out, resumedResult);
+        } finally {
+            runtime.cleanupOwnedFiles();
         }
     }
 
     private static String createAndPrompt(
             CodingAgentRuntime runtime,
-            LiveExampleConfiguration configuration,
             Path sessionFile
     ) throws Exception {
-        CodingAgentSession session = runtime.createSession(sessionFile, configuration.workspace());
+        CodingAgentSession session = runtime.createSession(sessionFile, runtime.workspace());
         PromptResult initialResult = session.prompt(LiveExampleHelper.buildPromptRequest(
                 runtime.defaultModel(),
                 "Remember the exact phrase PERSISTED_SESSION_READY. Reply with only that phrase.",

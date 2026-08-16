@@ -20,15 +20,19 @@ import com.agent4j.core.runtime.AgentMessageConverter;
 import com.agent4j.core.tool.InMemoryToolRegistry;
 import com.agent4j.core.tool.ToolRegistry;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 
 /** Public entry point for configuring a coding agent, its authentication, and its sessions. */
-public final class CodingAgentRuntime {
+public final class CodingAgentRuntime implements AutoCloseable {
     private static final String OPENAI_PROVIDER_ID = "openai";
 
     private final AgentEventBus eventBus;
@@ -39,6 +43,7 @@ public final class CodingAgentRuntime {
     private final CodingSessionCompactor sessionCompactor;
     private final CodingBranchSummarizer branchSummarizer;
     private final LoginService loginService;
+    private final RuntimeFiles runtimeFiles;
 
     public CodingAgentRuntime() {
         this(builder().buildState());
@@ -57,10 +62,36 @@ public final class CodingAgentRuntime {
         this.sessionCompactor = state.sessionCompactor();
         this.branchSummarizer = state.branchSummarizer();
         this.loginService = state.loginService();
+        this.runtimeFiles = state.runtimeFiles();
     }
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    public static CodingAgentRuntime create(CodingAgentConfig config) throws IOException {
+        Objects.requireNonNull(config, "config");
+        LoginService loginService = new DefaultLoginService(new InMemoryAuthCredentialStore(), config.clock());
+        ModelRuntime.Builder models = ModelRuntime.builder(loginService)
+                .catalog(config.providerCatalog())
+                .extensionProviders(config.extensionProviders())
+                .providerRequestTransformer(request -> withMaxOutputTokens(request, config.maxOutputTokens()));
+        for (Path file : config.modelsJsonFiles()) {
+            models.modelsJson(file);
+        }
+        ModelRuntime modelRuntime = models.build();
+        AiModelReference model = modelRuntime.resolve(config.provider(), Optional.of(config.model()));
+        loginService.loginApiKey(new ApiKeyLoginRequest(model.providerId(), config.apiKey(), config.baseUrl()));
+        Files.createDirectories(config.workspace());
+        Files.createDirectories(config.sessionDirectory());
+        Builder runtime = builder()
+                .providerRegistry(modelRuntime.registry(model))
+                .loginService(loginService)
+                .clock(config.clock())
+                .runtimeFiles(new RuntimeFiles(
+                        config.workspace(), config.sessionDirectory(), config.ownsWorkspace(), config.ownsSessionDirectory()));
+        config.toolRegistry().ifPresent(runtime::toolRegistry);
+        return runtime.build();
     }
 
     public static CodingAgentRuntime openAi(OpenAiCodingAgentConfig config) {
@@ -102,6 +133,45 @@ public final class CodingAgentRuntime {
 
     public CodingAgentSession createSession(Path sessionFile, Path workspace) throws Exception {
         return createSession(new CreateSessionRequest(sessionFile, workspace, Optional.empty(), Optional.of(defaultModel())));
+    }
+
+    public CodingAgentSession createSession(String fileName) throws Exception {
+        return createSession(sessionFile(fileName), workspace());
+    }
+
+    public Path workspace() {
+        return requireRuntimeFiles().workspace();
+    }
+
+    public Path sessionDirectory() {
+        return requireRuntimeFiles().sessionDirectory();
+    }
+
+    public Path sessionFile(String fileName) {
+        Objects.requireNonNull(fileName, "fileName");
+        Path name = Path.of(fileName);
+        if (name.getNameCount() != 1 || !fileName.endsWith(".jsonl")) {
+            throw new IllegalArgumentException("session file name must be a single .jsonl file name");
+        }
+        return sessionDirectory().resolve(name).normalize();
+    }
+
+    /** Deletes only workspace and session paths explicitly marked runtime-owned in the config. */
+    public void cleanupOwnedFiles() throws IOException {
+        RuntimeFiles files = requireRuntimeFiles();
+        LinkedHashSet<Path> owned = new LinkedHashSet<>();
+        if (files.ownsSessionDirectory()) owned.add(files.sessionDirectory());
+        if (files.ownsWorkspace()) owned.add(files.workspace());
+        IOException failure = null;
+        for (Path path : owned) {
+            failure = deleteDirectory(path, failure);
+        }
+        if (failure != null) throw failure;
+    }
+
+    @Override
+    public void close() {
+        // Runtime shutdown intentionally retains configured files; cleanupOwnedFiles() is explicit.
     }
 
     public CodingAgentSession createSession(CreateSessionRequest request) throws Exception {
@@ -193,6 +263,26 @@ public final class CodingAgentRuntime {
         return SessionManager.open(source.sessionFile());
     }
 
+    private RuntimeFiles requireRuntimeFiles() {
+        if (runtimeFiles == null) {
+            throw new IllegalStateException("workspace and session directory are not configured");
+        }
+        return runtimeFiles;
+    }
+
+    private static IOException deleteDirectory(Path directory, IOException priorFailure) throws IOException {
+        if (!Files.exists(directory)) return priorFailure;
+        try (var paths = Files.walk(directory)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        } catch (IOException error) {
+            if (priorFailure == null) return error;
+            priorFailure.addSuppressed(error);
+        }
+        return priorFailure;
+    }
+
     public static final class Builder {
         private AgentEventBus eventBus;
         private AiProviderRegistry providerRegistry;
@@ -202,6 +292,7 @@ public final class CodingAgentRuntime {
         private CodingSessionCompactor sessionCompactor;
         private CodingBranchSummarizer branchSummarizer;
         private LoginService loginService;
+        private RuntimeFiles runtimeFiles;
 
         public Builder eventBus(AgentEventBus eventBus) {
             this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
@@ -243,6 +334,11 @@ public final class CodingAgentRuntime {
             return this;
         }
 
+        Builder runtimeFiles(RuntimeFiles runtimeFiles) {
+            this.runtimeFiles = Objects.requireNonNull(runtimeFiles, "runtimeFiles");
+            return this;
+        }
+
         public Builder openAi(OpenAiCodingRuntimeOptions options) {
             Objects.requireNonNull(options, "options");
             providerRegistry(AiProviderRegistry.builder()
@@ -278,7 +374,8 @@ public final class CodingAgentRuntime {
                     resolvedClock,
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
                     branchSummarizer == null ? new CodingBranchSummarizer() : branchSummarizer,
-                    resolvedLoginService);
+                    resolvedLoginService,
+                    runtimeFiles);
         }
     }
 
@@ -290,8 +387,12 @@ public final class CodingAgentRuntime {
             Clock clock,
             CodingSessionCompactor sessionCompactor,
             CodingBranchSummarizer branchSummarizer,
-            LoginService loginService
+            LoginService loginService,
+            RuntimeFiles runtimeFiles
     ) {
+    }
+
+    private record RuntimeFiles(Path workspace, Path sessionDirectory, boolean ownsWorkspace, boolean ownsSessionDirectory) {
     }
 
     private static AiProviderRequest withMaxOutputTokens(

@@ -11,10 +11,10 @@ public final class StreamingEventsExample {
     }
 
     public static void main(String[] args) throws Exception {
-        try (LiveExampleConfiguration configuration = LiveExampleConfiguration.open()) {
-            CodingAgentRuntime runtime = configuration.createRuntime();
-            CodingAgentSession session = runtime.createSession(
-                    configuration.sessionFile("02-streaming-events.jsonl"), configuration.workspace());
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open();
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
+        try (runtime) {
+            CodingAgentSession session = runtime.createSession("02-streaming-events.jsonl");
             PromptResult result;
             try (EventSubscription ignored = runtime.subscribe(event ->
                     System.out.println("event: " + event.wireName()))) {
@@ -25,6 +25,8 @@ public final class StreamingEventsExample {
             }
             LiveExampleHelper.printMessage(System.out, result);
             LiveExampleHelper.printUsage(System.out, result);
+        } finally {
+            runtime.cleanupOwnedFiles();
         }
     }
 }

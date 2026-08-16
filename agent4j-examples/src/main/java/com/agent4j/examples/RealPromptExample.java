@@ -11,10 +11,10 @@ public final class RealPromptExample {
     }
 
     public static void main(String[] args) throws Exception {
-        try (LiveExampleConfiguration configuration = LiveExampleConfiguration.open()) {
-            CodingAgentRuntime runtime = configuration.createRuntime();
-            CodingAgentSession session = runtime.createSession(
-                    configuration.sessionFile("01-real-prompt.jsonl"), configuration.workspace());
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open();
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
+        try (runtime) {
+            CodingAgentSession session = runtime.createSession("01-real-prompt.jsonl");
             System.out.println("Assistant: ");
             PromptResult result;
             try (EventSubscription ignored = LiveExampleHelper.streamAssistantText(runtime, System.out)) {
@@ -24,6 +24,8 @@ public final class RealPromptExample {
                         0));
             }
             LiveExampleHelper.printUsage(System.out, result);
+        } finally {
+            runtime.cleanupOwnedFiles();
         }
     }
 }

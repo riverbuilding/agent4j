@@ -1,5 +1,6 @@
 package com.agent4j.examples;
 
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,20 +15,23 @@ class LiveExampleConfigurationTest {
     Path temporaryDirectory;
 
     @Test
-    void readsConfigurationAndCleansDefaultDirectories() throws Exception {
+    void translatesConfigurationAndLetsTheRuntimeCleanOwnedDirectories() throws Exception {
         LiveExampleConfiguration configuration = LiveExampleConfiguration.open(Map.of(
-                LiveExampleConfiguration.OPENAI_API_KEY, "test-key-must-not-appear",
-                LiveExampleConfiguration.OPENAI_MODEL, "gpt-test"));
+                LiveExampleConfiguration.API_KEY, "test-key-must-not-appear",
+                LiveExampleConfiguration.MODEL, "gpt-5"));
         Path workspace = configuration.workspace();
         Path sessions = configuration.sessionDirectory();
 
-        assertThat(configuration.model()).isEqualTo("gpt-test");
+        assertThat(configuration.model()).isEqualTo("gpt-5");
         assertThat(configuration.temporaryWorkspace()).isTrue();
         assertThat(configuration.temporarySessionDirectory()).isTrue();
+        assertThat(workspace).doesNotExist();
+        assertThat(sessions).doesNotExist();
+
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
         assertThat(workspace).exists();
         assertThat(sessions).exists();
-
-        configuration.close();
+        runtime.cleanupOwnedFiles();
 
         assertThat(workspace).doesNotExist();
         assertThat(sessions).doesNotExist();
@@ -38,14 +42,15 @@ class LiveExampleConfigurationTest {
         Path workspace = temporaryDirectory.resolve("workspace");
         Path sessions = temporaryDirectory.resolve("sessions");
         LiveExampleConfiguration configuration = LiveExampleConfiguration.open(Map.of(
-                LiveExampleConfiguration.OPENAI_API_KEY, "test-key",
-                LiveExampleConfiguration.OPENAI_MODEL, "gpt-test",
+                LiveExampleConfiguration.API_KEY, "test-key",
+                LiveExampleConfiguration.MODEL, "gpt-5",
                 LiveExampleConfiguration.WORKSPACE, workspace.toString(),
                 LiveExampleConfiguration.SESSION_DIRECTORY, sessions.toString(),
                 LiveExampleConfiguration.MAX_OUTPUT_TOKENS, "128",
                 LiveExampleConfiguration.MAX_TOOL_ROUNDS, "2"));
 
-        configuration.close();
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
+        runtime.cleanupOwnedFiles();
 
         assertThat(workspace).exists();
         assertThat(sessions).exists();
@@ -53,31 +58,38 @@ class LiveExampleConfigurationTest {
 
     @Test
     void readsAnOptionalOpenAiCompatibleBaseUrl() throws Exception {
-        try (LiveExampleConfiguration configuration = LiveExampleConfiguration.open(Map.of(
-                LiveExampleConfiguration.OPENAI_API_KEY, "test-key",
-                LiveExampleConfiguration.OPENAI_BASE_URL, "https://openrouter.example/api/v1/ ",
-                LiveExampleConfiguration.OPENAI_MODEL, "openrouter/free"))) {
-            assertThat(configuration.baseUrl()).contains("https://openrouter.example/api/v1/");
-            assertThat(configuration.openAiConfig().baseUrl())
-                    .contains("https://openrouter.example/api/v1/");
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open(Map.of(
+                LiveExampleConfiguration.API_KEY, "test-key",
+                LiveExampleConfiguration.BASE_URL, "https://openrouter.example/api/v1/ ",
+                LiveExampleConfiguration.MODEL, "openai/openrouter/free"));
+        assertThat(configuration.baseUrl()).contains("https://openrouter.example/api/v1/");
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
+        try (runtime) {
+            assertThat(runtime.defaultModel().displayName()).isEqualTo("openai/openrouter/free");
+        } finally {
+            runtime.cleanupOwnedFiles();
         }
     }
 
     @Test
     void rejectsMissingCredentialsAndUnsafeSessionNames() throws Exception {
         assertThatThrownBy(() -> LiveExampleConfiguration.open(Map.of(
-                LiveExampleConfiguration.OPENAI_MODEL, "gpt-test")))
+                LiveExampleConfiguration.MODEL, "gpt-5")))
                 .isInstanceOf(IllegalStateException.class)
                 .satisfies(error -> assertThat(error.getMessage())
-                        .contains(LiveExampleConfiguration.OPENAI_API_KEY)
+                        .contains(LiveExampleConfiguration.API_KEY)
                         .doesNotContain("test-key"));
 
-        try (LiveExampleConfiguration configuration = LiveExampleConfiguration.open(Map.of(
-                LiveExampleConfiguration.OPENAI_API_KEY, "test-key",
-                LiveExampleConfiguration.OPENAI_MODEL, "gpt-test"))) {
-            assertThatThrownBy(() -> configuration.sessionFile("../session.jsonl"))
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open(Map.of(
+                LiveExampleConfiguration.API_KEY, "test-key",
+                LiveExampleConfiguration.MODEL, "gpt-5"));
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
+        try (runtime) {
+            assertThatThrownBy(() -> runtime.sessionFile("../session.jsonl"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("single .jsonl");
+        } finally {
+            runtime.cleanupOwnedFiles();
         }
     }
 }

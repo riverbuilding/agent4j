@@ -1,7 +1,9 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiAuthMode;
+import com.agent4j.ai.AiAuthStore;
 import com.agent4j.ai.AiResolvedAuth;
+import com.agent4j.ai.EnvironmentAiAuthStore;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -23,9 +25,15 @@ public final class DefaultLoginService implements LoginService {
     private final Clock clock;
     private final SubscriptionLoginClient subscriptionLoginClient;
     private final BrowserLauncher browserLauncher;
+    private final AiAuthStore environmentAuthStore;
 
     public DefaultLoginService(AuthCredentialStore credentialStore, Clock clock) {
-        this(credentialStore, clock, SubscriptionLoginClient.unsupported(), BrowserLauncher.system());
+        this(credentialStore, clock, SubscriptionLoginClient.unsupported(), BrowserLauncher.system(),
+                BuiltInProviderCatalog.defaults().environmentAuthStore());
+    }
+
+    public DefaultLoginService(AuthCredentialStore credentialStore, Clock clock, AiAuthStore environmentAuthStore) {
+        this(credentialStore, clock, SubscriptionLoginClient.unsupported(), BrowserLauncher.system(), environmentAuthStore);
     }
 
     public DefaultLoginService(
@@ -33,7 +41,8 @@ public final class DefaultLoginService implements LoginService {
             Clock clock,
             SubscriptionLoginClient subscriptionLoginClient
     ) {
-        this(credentialStore, clock, subscriptionLoginClient, BrowserLauncher.system());
+        this(credentialStore, clock, subscriptionLoginClient, BrowserLauncher.system(),
+                BuiltInProviderCatalog.defaults().environmentAuthStore());
     }
 
     DefaultLoginService(
@@ -42,10 +51,22 @@ public final class DefaultLoginService implements LoginService {
             SubscriptionLoginClient subscriptionLoginClient,
             BrowserLauncher browserLauncher
     ) {
+        this(credentialStore, clock, subscriptionLoginClient, browserLauncher,
+                BuiltInProviderCatalog.defaults().environmentAuthStore());
+    }
+
+    DefaultLoginService(
+            AuthCredentialStore credentialStore,
+            Clock clock,
+            SubscriptionLoginClient subscriptionLoginClient,
+            BrowserLauncher browserLauncher,
+            AiAuthStore environmentAuthStore
+    ) {
         this.credentialStore = Objects.requireNonNull(credentialStore, "credentialStore");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.subscriptionLoginClient = Objects.requireNonNull(subscriptionLoginClient, "subscriptionLoginClient");
         this.browserLauncher = Objects.requireNonNull(browserLauncher, "browserLauncher");
+        this.environmentAuthStore = Objects.requireNonNull(environmentAuthStore, "environmentAuthStore");
     }
 
     @Override
@@ -180,7 +201,11 @@ public final class DefaultLoginService implements LoginService {
                         session.expiresAt(),
                         session.auth().source(),
                         session.auth().metadata()))
-                .orElseGet(() -> AuthStatus.unauthenticated(providerId));
+                .orElseGet(() -> environmentAuthStore.resolve(providerId)
+                        .filter(AiResolvedAuth::hasAuthentication)
+                        .map(auth -> new AuthStatus(
+                                providerId, auth.mode(), true, false, auth.expiresAt(), auth.source(), auth.metadata()))
+                        .orElseGet(() -> AuthStatus.unauthenticated(providerId)));
     }
 
     @Override
@@ -190,6 +215,7 @@ public final class DefaultLoginService implements LoginService {
                 .map(this::refreshIfExpired)
                 .filter(session -> !session.expired(now()))
                 .map(AuthSession::auth)
+                .or(() -> environmentAuthStore.resolve(providerId))
                 .orElseGet(AiResolvedAuth::none);
     }
 

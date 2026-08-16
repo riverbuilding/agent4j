@@ -1,7 +1,6 @@
 package com.agent4j.cli;
 
 import com.agent4j.ai.AiModelReference;
-import com.agent4j.coding.resource.AgentSettings;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
@@ -9,7 +8,9 @@ import com.agent4j.coding.sdk.ApiKeyLoginRequest;
 import com.agent4j.coding.sdk.AuthCredentialStore;
 import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.coding.sdk.InMemoryAuthCredentialStore;
-import com.agent4j.coding.sdk.OpenAiCodingRuntimeOptions;
+import com.agent4j.coding.sdk.DefaultLoginService;
+import com.agent4j.coding.sdk.LoginService;
+import com.agent4j.coding.sdk.ModelRuntime;
 import com.agent4j.coding.sdk.PersistentAuthCredentialStore;
 import com.agent4j.coding.tool.CodingTools;
 import com.agent4j.core.tool.ToolRegistry;
@@ -23,7 +24,6 @@ import java.util.Objects;
  * loop, tool, provider, or credential behavior in the CLI module.
  */
 public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
-    private static final String OPENAI_PROVIDER = "openai";
 
     private final ResourceLoader resourceLoader;
     private final AuthCredentialStore credentialStore;
@@ -55,54 +55,33 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
         Objects.requireNonNull(request, "request");
         ResourceDiscovery discovery = resourceLoader.discover(
                 ResourceDiscoveryOptions.enabled(request.homeDirectory(), request.cwd()));
-        AiModelReference model = resolveModel(request, discovery.settings());
-        if (!OPENAI_PROVIDER.equals(model.providerId())) {
-            throw new IllegalArgumentException(
-                    "provider is not configured by the current CLI bootstrap: " + model.providerId());
-        }
-
         boolean runtimeApiKey = request.apiKey().isPresent();
         AuthCredentialStore runtimeCredentialStore = runtimeApiKey ? new InMemoryAuthCredentialStore() : credentialStore;
+        LoginService loginService = new DefaultLoginService(runtimeCredentialStore, clock);
+        Optional<String> requestedProvider = request.provider().or(() -> discovery.settings().textField("defaultProvider"));
+        Optional<String> requestedModel = request.model().or(() -> discovery.settings().textField("defaultModel"));
+        if (request.apiKey().isPresent() && requestedProvider.isEmpty() && requestedModel.isEmpty()) {
+            throw new IllegalArgumentException("--api-key requires --model or --provider");
+        }
+        if (request.apiKey().isPresent() && requestedProvider.isPresent()) {
+            loginService.loginApiKey(new ApiKeyLoginRequest(requestedProvider.orElseThrow(), request.apiKey().orElseThrow()));
+        }
+        ModelRuntime modelRuntime = ModelRuntime.builder(loginService)
+                .modelsJson(discovery.directories().globalAgentDir().resolve("models.json"))
+                .modelsJson(discovery.directories().projectAgentDir().resolve("models.json"))
+                .build();
+        AiModelReference model = modelRuntime.resolve(requestedProvider, requestedModel);
+        if (request.apiKey().isPresent() && requestedProvider.isEmpty()) {
+            loginService.loginApiKey(new ApiKeyLoginRequest(model.providerId(), request.apiKey().orElseThrow()));
+        }
         CodingAgentRuntime runtime = CodingAgentRuntime.builder()
-                .openAi(OpenAiCodingRuntimeOptions.builder(model)
-                        .credentialStore(runtimeCredentialStore)
-                        .clock(clock)
-                        .build())
+                .providerRegistry(modelRuntime.registry(model))
+                .loginService(loginService)
+                .clock(clock)
                 .toolRegistry(CliToolSelector.select(toolRegistry, request.toolSelection()))
                 .build();
-        request.apiKey().ifPresent(apiKey -> runtime.loginService().loginApiKey(
-                new ApiKeyLoginRequest(model.providerId(), apiKey)));
 
         return new CliRuntime(runtime, discovery, model, runtime.optionalProviderRegistry());
-    }
-
-    private static AiModelReference resolveModel(CliRuntimeRequest request, AgentSettings settings) {
-        Optional<String> configuredProvider = request.provider().or(() -> settings.textField("defaultProvider"));
-        Optional<String> configuredModel = request.model().or(() -> settings.textField("defaultModel"));
-        if (configuredModel.isPresent() && configuredModel.orElseThrow().contains("/")) {
-            String[] parts = configuredModel.orElseThrow().split("/", 2);
-            if (parts[0].isBlank() || parts[1].isBlank()) {
-                throw new IllegalArgumentException("model must use provider/model form");
-            }
-            if (configuredProvider.isPresent() && !configuredProvider.orElseThrow().equals(parts[0])) {
-                throw new IllegalArgumentException("--provider conflicts with the provider encoded in --model");
-            }
-            return new AiModelReference(parts[0], parts[1]);
-        }
-        String provider = configuredProvider.orElseThrow(() -> new IllegalArgumentException(
-                "provider is required; pass --provider or configure defaultProvider"));
-        String model = configuredModel.orElseGet(() -> providerDefaultModel(settings, provider)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "model is required; pass --model or configure defaultModel")));
-        return new AiModelReference(provider, model);
-    }
-
-    private static Optional<String> providerDefaultModel(AgentSettings settings, String provider) {
-        return Optional.ofNullable(settings.values().at("/models/" + provider + "/default"))
-                .filter(com.fasterxml.jackson.databind.JsonNode::isTextual)
-                .map(com.fasterxml.jackson.databind.JsonNode::asText)
-                .map(String::strip)
-                .filter(value -> !value.isEmpty());
     }
 
 }

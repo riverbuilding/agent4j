@@ -1,22 +1,20 @@
 package com.agent4j.examples;
 
-import com.agent4j.coding.sdk.CodingAgentRuntime;
-import com.agent4j.coding.sdk.OpenAiCodingAgentConfig;
+import com.agent4j.coding.sdk.CodingAgentConfig;
 import com.agent4j.core.tool.ToolRegistry;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
-/** Environment-derived configuration and temporary paths for opt-in live examples. */
-public final class LiveExampleConfiguration implements AutoCloseable {
-    public static final String OPENAI_API_KEY = "OPENAI_API_KEY";
-    public static final String OPENAI_BASE_URL = "OPENAI_BASE_URL";
-    public static final String OPENAI_MODEL = "AGENT4J_OPENAI_MODEL";
+/** Provider-neutral environment inputs for opt-in live examples. */
+public final class LiveExampleConfiguration {
+    public static final String API_KEY = "AGENT4J_API_KEY";
+    public static final String BASE_URL = "AGENT4J_BASE_URL";
+    public static final String MODEL = "AGENT4J_MODEL";
     public static final String WORKSPACE = "AGENT4J_EXAMPLES_WORKSPACE";
     public static final String SESSION_DIRECTORY = "AGENT4J_EXAMPLES_SESSION_DIRECTORY";
     public static final String MAX_OUTPUT_TOKENS = "AGENT4J_EXAMPLES_MAX_OUTPUT_TOKENS";
@@ -63,47 +61,30 @@ public final class LiveExampleConfiguration implements AutoCloseable {
 
     static LiveExampleConfiguration open(Map<String, String> environment) throws IOException {
         Objects.requireNonNull(environment, "environment");
+        String apiKey = requireEnvironment(environment, API_KEY);
+        String model = requireEnvironment(environment, MODEL);
         ManagedDirectory workspace = directory(environment, WORKSPACE, "agent4j-example-workspace-");
         ManagedDirectory sessionDirectory = directory(environment, SESSION_DIRECTORY, "agent4j-example-sessions-");
-        try {
-            return new LiveExampleConfiguration(
-                    requireEnvironment(environment, OPENAI_API_KEY),
-                    requireEnvironment(environment, OPENAI_MODEL),
-                    optionalEnvironment(environment, OPENAI_BASE_URL),
-                    workspace.path(),
-                    sessionDirectory.path(),
-                    positiveInt(environment, MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
-                    positiveInt(environment, MAX_TOOL_ROUNDS, DEFAULT_MAX_TOOL_ROUNDS),
-                    workspace.temporary(),
-                    sessionDirectory.temporary());
-        } catch (RuntimeException error) {
-            cleanup(workspace);
-            cleanup(sessionDirectory);
-            throw error;
-        }
+        return new LiveExampleConfiguration(
+                apiKey, model, optionalEnvironment(environment, BASE_URL), workspace.path(), sessionDirectory.path(),
+                positiveInt(environment, MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
+                positiveInt(environment, MAX_TOOL_ROUNDS, DEFAULT_MAX_TOOL_ROUNDS),
+                workspace.temporary(), sessionDirectory.temporary());
     }
 
-    public CodingAgentRuntime createRuntime() {
-        return CodingAgentRuntime.openAi(openAiConfig());
+    public CodingAgentConfig toCodingAgentConfig() {
+        return configBuilder().build();
     }
 
-    public CodingAgentRuntime createRuntime(ToolRegistry toolRegistry) {
-        return CodingAgentRuntime.openAi(openAiConfig(toolRegistry));
+    public CodingAgentConfig toCodingAgentConfig(ToolRegistry toolRegistry) {
+        return configBuilder().toolRegistry(toolRegistry).build();
     }
 
-    OpenAiCodingAgentConfig openAiConfig() {
-        return openAiConfigBuilder().build();
-    }
-
-    OpenAiCodingAgentConfig openAiConfig(ToolRegistry toolRegistry) {
-        return openAiConfigBuilder()
-                .toolRegistry(toolRegistry)
-                .build();
-    }
-
-    private OpenAiCodingAgentConfig.Builder openAiConfigBuilder() {
-        OpenAiCodingAgentConfig.Builder config = OpenAiCodingAgentConfig.builder(apiKey, model)
-                .maxOutputTokens(maxOutputTokens);
+    private CodingAgentConfig.Builder configBuilder() {
+        CodingAgentConfig.Builder config = CodingAgentConfig.builder(apiKey, model, workspace, sessionDirectory)
+                .maxOutputTokens(maxOutputTokens)
+                .ownsWorkspace(cleanupWorkspace)
+                .ownsSessionDirectory(cleanupSessionDirectory);
         baseUrl.ifPresent(config::baseUrl);
         return config;
     }
@@ -140,43 +121,19 @@ public final class LiveExampleConfiguration implements AutoCloseable {
         return cleanupSessionDirectory;
     }
 
-    public Path sessionFile(String fileName) {
-        Objects.requireNonNull(fileName, "fileName");
-        Path name = Path.of(fileName);
-        if (name.getNameCount() != 1 || !fileName.endsWith(".jsonl")) {
-            throw new IllegalArgumentException("session file name must be a single .jsonl file name");
-        }
-        return sessionDirectory.resolve(name).normalize();
-    }
-
-    @Override
-    public void close() throws IOException {
-        IOException failure = null;
-        if (cleanupSessionDirectory) {
-            failure = deleteDirectory(sessionDirectory, failure);
-        }
-        if (cleanupWorkspace) {
-            failure = deleteDirectory(workspace, failure);
-        }
-        if (failure != null) {
-            throw failure;
-        }
-    }
-
     private static ManagedDirectory directory(Map<String, String> environment, String name, String prefix) throws IOException {
         String configured = environment.get(name);
         if (configured == null || configured.isBlank()) {
-            return new ManagedDirectory(Files.createTempDirectory(prefix), true);
+            return new ManagedDirectory(Path.of(System.getProperty("java.io.tmpdir"), prefix + UUID.randomUUID()), true);
         }
         Path path = Path.of(configured).toAbsolutePath().normalize();
-        Files.createDirectories(path);
         return new ManagedDirectory(path, false);
     }
 
     private static String requireEnvironment(Map<String, String> environment, String name) {
         String value = environment.get(name);
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException(name + " must be set before running a live OpenAI example");
+            throw new IllegalStateException(name + " must be set before running a live example");
         }
         return value.strip();
     }
@@ -199,34 +156,6 @@ public final class LiveExampleConfiguration implements AutoCloseable {
         } catch (NumberFormatException error) {
             throw new IllegalArgumentException(name + " must be a positive integer", error);
         }
-    }
-
-    private static void cleanup(ManagedDirectory directory) {
-        if (!directory.temporary()) {
-            return;
-        }
-        try {
-            deleteDirectory(directory.path(), null);
-        } catch (IOException ignored) {
-            // A failed constructor must retain the original setup error.
-        }
-    }
-
-    private static IOException deleteDirectory(Path directory, IOException priorFailure) throws IOException {
-        if (!Files.exists(directory)) {
-            return priorFailure;
-        }
-        try (var paths = Files.walk(directory)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
-            }
-        } catch (IOException error) {
-            if (priorFailure == null) {
-                return error;
-            }
-            priorFailure.addSuppressed(error);
-        }
-        return priorFailure;
     }
 
     private record ManagedDirectory(Path path, boolean temporary) {

@@ -10,10 +10,12 @@ public final class LiveExamplePreflight {
             usage();
             return;
         }
-        try (LiveExampleConfiguration configuration = LiveExampleConfiguration.open()) {
-            System.out.println("Live OpenAI example runtime is ready.");
-            System.out.println("Model: openai/" + configuration.model());
-            System.out.println("Base URL: " + configuration.baseUrl().orElse("https://api.openai.com/v1"));
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open();
+        var runtime = com.agent4j.coding.sdk.CodingAgentRuntime.create(configuration.toCodingAgentConfig());
+        try (runtime) {
+            System.out.println("Live example runtime is ready.");
+            System.out.println("Model: " + configuration.model());
+            System.out.println("Base URL: " + configuration.baseUrl().orElse("provider default"));
             System.out.println("Workspace: " + configuration.workspace());
             System.out.println("Session directory: " + configuration.sessionDirectory());
             System.out.println("Max output tokens: " + configuration.maxOutputTokens());
@@ -21,12 +23,15 @@ public final class LiveExamplePreflight {
             System.out.println("Temporary workspace: " + configuration.temporaryWorkspace());
             System.out.println("Temporary session directory: " + configuration.temporarySessionDirectory());
             System.out.println("No API request was sent by this preflight check.");
+        } finally {
+            runtime.cleanupOwnedFiles();
         }
     }
 
     private static void usage() {
         System.out.println("Usage: LiveExamplePreflight [help]");
-        System.out.println("Set OPENAI_API_KEY and AGENT4J_OPENAI_MODEL before running the preflight check.");
-        System.out.println("Optionally set OPENAI_BASE_URL for an OpenAI Responses-compatible provider.");
+        System.out.println("Set AGENT4J_API_KEY and AGENT4J_MODEL before running the preflight check.");
+        System.out.println("Set AGENT4J_MODEL to a catalog model (for example gpt-5 or claude-sonnet-4-5).");
+        System.out.println("Optionally set AGENT4J_BASE_URL for a compatible endpoint.");
     }
 }

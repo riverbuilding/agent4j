@@ -123,6 +123,11 @@ public record AiResolvedAuth(
         return apiKey.isPresent() || accessToken.isPresent() || !headers.isEmpty() || baseUrl.isPresent();
     }
 
+    /** Returns whether this resolution includes credentials that can authenticate a request. */
+    public boolean hasAuthentication() {
+        return apiKey.isPresent() || accessToken.isPresent() || !headers.isEmpty();
+    }
+
     private static AiAuthMode normalizeMode(
             AiAuthMode mode,
             Optional<String> apiKey,
