@@ -11,18 +11,18 @@ Create an API key in the OpenAI Platform and export it only in your shell. Do
 not pass a key on the command line, add it to a settings file, or commit it.
 
 ```bash
-export OPENAI_API_KEY="..."
-export AGENT4J_OPENAI_MODEL="<enabled-model-id>"
+export AGENT4J_API_KEY="..."
+export AGENT4J_MODEL="<enabled-model-id>"
 ```
 
 To use an OpenAI Responses-compatible provider, retain the provider API key in
-`OPENAI_API_KEY`, select its model identifier, and set its API base URL. For
+`AGENT4J_API_KEY`, select its model identifier, and set its API base URL. For
 example, OpenRouter's free-model router is configured as follows:
 
 ```bash
-export OPENAI_API_KEY="<your-openrouter-api-key>"
-export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
-export AGENT4J_OPENAI_MODEL="openrouter/free"
+export AGENT4J_API_KEY="<your-openrouter-api-key>"
+export AGENT4J_BASE_URL="https://openrouter.ai/api/v1"
+export AGENT4J_MODEL="openrouter/free"
 ```
 
 The live runtime keeps this credential and base URL only in memory for the
@@ -103,9 +103,30 @@ mvn -pl agent4j-examples -am test \
   -Dagent4j.liveExample.mainClass=com.agent4j.examples.PersistentSessionsExample
 ```
 
+### 05-live-session-control
+
+Runs three real streamed prompts in one persisted session. It pauses for one
+terminal command during each active stream: `/steer <text>`, `/follow-up <text>`,
+and `/abort`. The first two commands are consumed in a subsequent model turn;
+the last produces the public aborted event and ends the active prompt locally.
+
+Run this from an interactive terminal. As soon as streamed text appears for a
+stage, enter the command it displays and press Enter. The model can finish a
+short response before a command is entered; if that happens, the walkthrough
+reports that completed response and automatically restarts the stage before
+applying your already-entered command. Cancellation stops the local streamed
+session at the next received provider event, so a small amount of
+already-buffered text may still be printed.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.LiveSessionControlExample
+```
+
 ## Bounds and cost
 
-Future walkthroughs pass these defaults from `LiveExampleConfiguration` to
+The walkthroughs pass these defaults from `LiveExampleConfiguration` to
 `CodingAgentRuntime`:
 
 - maximum output tokens: `256`
