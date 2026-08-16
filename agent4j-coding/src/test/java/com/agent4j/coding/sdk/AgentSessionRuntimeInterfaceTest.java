@@ -1,6 +1,8 @@
 package com.agent4j.coding.sdk;
 
+import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelReference;
+import com.agent4j.ai.AiProviderRegistry;
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.event.EventSubscription;
@@ -175,7 +177,7 @@ class CodingSdkApiTest {
         CodingAgentRuntime runtime = new CodingAgentRuntime();
 
         assertThat(runtime.eventBus()).isNotNull();
-        assertThat(runtime.optionalModelClient()).isEmpty();
+        assertThat(runtime.optionalProviderRegistry()).isEmpty();
         assertThat(runtime.toolRegistry()).isNotNull();
         assertThat(runtime.messageConverter()).isNotNull();
         assertThat(runtime.clock()).isNotNull();
@@ -191,12 +193,13 @@ class CodingSdkApiTest {
 
         CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .eventBus(eventBus)
-                .modelClient(modelClient)
+                .providerRegistry(AiProviderRegistry.fixedClient(
+                        new AiModel(new AiModelReference("test", "fixed"), "Fixed model"), modelClient))
                 .clock(clock)
                 .build();
 
         assertThat(runtime.eventBus()).isSameAs(eventBus);
-        assertThat(runtime.optionalModelClient()).containsSame(modelClient);
+        assertThat(runtime.optionalProviderRegistry()).isPresent();
         assertThat(runtime.clock()).isSameAs(clock);
     }
 
@@ -209,7 +212,6 @@ class CodingSdkApiTest {
 
         CodingAgentRuntime runtime = CodingAgentRuntime.builder().openAi(options).build();
 
-        assertThat(runtime.optionalModelClient()).isEmpty();
         assertThat(runtime.optionalProviderRegistry()).isPresent();
         assertThat(runtime.optionalProviderRegistry().orElseThrow().requireDefault().model().reference())
                 .isEqualTo(model);

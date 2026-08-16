@@ -114,7 +114,8 @@ class JsonEventModeRunnerTest {
                 ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
         return new CliRuntime(
                 CodingAgentRuntime.builder()
-                        .modelClient(model)
+                        .providerRegistry(com.agent4j.ai.AiProviderRegistry.fixedClient(
+                                new com.agent4j.ai.AiModel(new AiModelReference("openai", "gpt-test"), "Test model"), model))
                         .toolRegistry(InMemoryToolRegistry.builder().build())
                         .clock(Clock.systemUTC())
                         .build(),

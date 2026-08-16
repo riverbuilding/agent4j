@@ -82,7 +82,9 @@ class CliSessionLifecycleTest {
         Files.createDirectories(environment.cwd());
         ResourceDiscovery discovery = new ResourceLoader().discover(ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
         return new CliRuntime(CodingAgentRuntime.builder()
-                .modelClient(new FakeModelClient())
+                .providerRegistry(com.agent4j.ai.AiProviderRegistry.fixedClient(
+                        new com.agent4j.ai.AiModel(new AiModelReference("openai", "gpt-test"), "Test model"),
+                        new FakeModelClient()))
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC())
                 .build(), discovery, new AiModelReference("openai", "gpt-test"));

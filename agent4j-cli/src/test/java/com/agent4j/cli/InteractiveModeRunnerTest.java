@@ -124,7 +124,8 @@ class InteractiveModeRunnerTest {
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC());
         if (model != null) {
-            runtime.modelClient(model);
+            runtime.providerRegistry(com.agent4j.ai.AiProviderRegistry.fixedClient(
+                    new com.agent4j.ai.AiModel(new AiModelReference("openai", "gpt-test"), "Test model"), model));
         }
         return new CliRuntime(runtime.build(), discovery, new AiModelReference("openai", "gpt-test"));
     }

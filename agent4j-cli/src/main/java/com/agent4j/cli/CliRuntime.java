@@ -23,4 +23,8 @@ public record CliRuntime(
     public CliRuntime(CodingAgentRuntime runtime, ResourceDiscovery resourceDiscovery, AiModelReference defaultModel) {
         this(runtime, resourceDiscovery, defaultModel, java.util.Optional.empty());
     }
+
+    public java.util.Optional<AiModelReference> promptModel() {
+        return providerRegistry.map(ignored -> defaultModel);
+    }
 }

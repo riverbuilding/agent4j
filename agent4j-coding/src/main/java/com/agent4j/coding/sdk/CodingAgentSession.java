@@ -135,18 +135,14 @@ public final class CodingAgentSession implements AgentSession {
     private AgentLoop agentLoop(PromptRequest request) {
         ToolRegistry toolRegistry = runtime.toolRegistry();
         AgentMessageConverter messageConverter = runtime.messageConverter();
-        return runtime.optionalModelClient()
-                .map(modelClient -> new AgentLoop(modelClient, toolRegistry, runtime.eventBus(), messageConverter))
-                .orElseGet(() -> {
-                    AiProviderSelection selection = providerSelection(request);
-                    AiResolvedAuth auth = runtime.loginService().resolveAuth(selection.provider().id());
-                    return new AgentLoop(selection, auth, toolRegistry, runtime.eventBus(), messageConverter);
-                });
+        AiProviderSelection selection = providerSelection(request);
+        AiResolvedAuth auth = runtime.loginService().resolveAuth(selection.provider().id());
+        return new AgentLoop(selection, auth, toolRegistry, runtime.eventBus(), messageConverter);
     }
 
     private AiProviderSelection providerSelection(PromptRequest request) {
         AiProviderRegistry registry = runtime.optionalProviderRegistry()
-                .orElseThrow(() -> new IllegalStateException("model client or provider registry is not configured"));
+                .orElseThrow(() -> new IllegalStateException("provider registry is not configured"));
         return request.model().map(registry::require).orElseGet(registry::requireDefault);
     }
 

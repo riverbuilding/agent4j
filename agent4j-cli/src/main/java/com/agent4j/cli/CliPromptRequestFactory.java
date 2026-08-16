@@ -15,10 +15,10 @@ final class CliPromptRequestFactory {
     private CliPromptRequestFactory() {
     }
 
-    static PromptRequest create(String prompt, AiModelReference model, Optional<AbortSignal> abortSignal) {
+    static PromptRequest create(String prompt, Optional<AiModelReference> model, Optional<AbortSignal> abortSignal) {
         return new PromptRequest(
                 Objects.requireNonNull(prompt, "prompt"),
-                Optional.of(Objects.requireNonNull(model, "model")),
+                model == null ? Optional.empty() : model,
                 DEFAULT_MAX_TOOL_ROUNDS,
                 0,
                 Optional.empty(),

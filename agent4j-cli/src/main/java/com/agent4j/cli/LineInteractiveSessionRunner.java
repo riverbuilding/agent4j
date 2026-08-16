@@ -186,7 +186,7 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
         }
         return prompts.submit(() -> {
             try {
-                controller.session().prompt(CliPromptRequestFactory.create(prompt, controller.model(), Optional.empty()));
+                controller.session().prompt(CliPromptRequestFactory.create(prompt, controller.promptModel(), Optional.empty()));
             } catch (Exception error) {
                 terminal.err().println("Error: " + error.getMessage());
                 terminal.err().flush();

@@ -1,5 +1,6 @@
 package com.agent4j.coding.sdk;
 
+import com.agent4j.ai.AiModelReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -40,4 +41,5 @@ class CodingAgentRuntimeTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxOutputTokens");
     }
+
 }

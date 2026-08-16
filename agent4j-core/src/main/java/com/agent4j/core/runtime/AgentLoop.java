@@ -3,7 +3,6 @@ package com.agent4j.core.runtime;
 import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiAbortSignal;
 import com.agent4j.ai.AiModel;
-import com.agent4j.ai.AiModelClient;
 import com.agent4j.ai.AiProvider;
 import com.agent4j.ai.AiProviderContext;
 import com.agent4j.ai.AiProviderRequest;
@@ -48,38 +47,6 @@ public final class AgentLoop {
     private final AgentEventBus eventBus;
     private final AgentMessageConverter messageConverter;
     private final AgentLoopCompactor compactor;
-
-    public AgentLoop(AiModelClient modelClient, ToolRegistry toolRegistry, AgentEventBus eventBus) {
-        this(modelClient, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE);
-    }
-
-    public AgentLoop(
-            AiModelClient modelClient,
-            ToolRegistry toolRegistry,
-            AgentEventBus eventBus,
-            AgentMessageConverter messageConverter
-    ) {
-        this(modelClient, toolRegistry, eventBus, messageConverter, List.of());
-    }
-
-    public AgentLoop(
-            AiModelClient modelClient,
-            ToolRegistry toolRegistry,
-            AgentEventBus eventBus,
-            AgentMessageConverter messageConverter,
-            List<ToolExecutionHook> toolExecutionHooks
-    ) {
-        this(
-                adaptModelClient(modelClient),
-                toolRegistry,
-                eventBus,
-                messageConverter,
-                toolExecutionHooks,
-                null,
-                null,
-                null,
-                null);
-    }
 
     public AgentLoop(
             AiProvider provider,
@@ -200,15 +167,6 @@ public final class AgentLoop {
                 compactionModel,
                 compactionAuth == null ? AiResolvedAuth.none() : compactionAuth,
                 eventBus);
-    }
-
-    public AgentLoop(
-            AiModelClient modelClient,
-            ToolRegistry toolRegistry,
-            AgentEventBus eventBus,
-            List<ToolExecutionHook> toolExecutionHooks
-    ) {
-        this(modelClient, toolRegistry, eventBus, DefaultAgentMessageConverter.INSTANCE, toolExecutionHooks);
     }
 
     public AgentLoopResult runTurn(AgentLoopRequest request) throws Exception {
@@ -552,11 +510,6 @@ public final class AgentLoop {
     @FunctionalInterface
     private interface ModelRoundStreamer {
         void stream(AgentLoopRequest request, AiTurnRequest turnRequest, Consumer<AiStreamEvent> sink) throws Exception;
-    }
-
-    private static ModelRoundStreamer adaptModelClient(AiModelClient modelClient) {
-        Objects.requireNonNull(modelClient, "modelClient");
-        return (request, turnRequest, sink) -> modelClient.stream(turnRequest, sink);
     }
 
     private static ModelRoundStreamer adaptProvider(AiProvider provider, AiModel model, AiResolvedAuth auth) {

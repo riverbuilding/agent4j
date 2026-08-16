@@ -17,7 +17,7 @@ class CliPromptRequestFactoryTest {
         var signal = controller.signal();
 
         var request = CliPromptRequestFactory.create(
-                "hello", new AiModelReference("openai", "gpt-test"), Optional.of(signal));
+                "hello", Optional.of(new AiModelReference("openai", "gpt-test")), Optional.of(signal));
 
         assertThat(request.prompt()).isEqualTo("hello");
         assertThat(request.model()).contains(new AiModelReference("openai", "gpt-test"));

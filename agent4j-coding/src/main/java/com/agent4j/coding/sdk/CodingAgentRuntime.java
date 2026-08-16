@@ -2,7 +2,6 @@ package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiModel;
-import com.agent4j.ai.AiModelClient;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProviderRegistry;
 import com.agent4j.ai.AiProviderRequest;
@@ -33,7 +32,6 @@ public final class CodingAgentRuntime {
     private static final String OPENAI_PROVIDER_ID = "openai";
 
     private final AgentEventBus eventBus;
-    private final AiModelClient modelClient;
     private final AiProviderRegistry providerRegistry;
     private final ToolRegistry toolRegistry;
     private final AgentMessageConverter messageConverter;
@@ -41,31 +39,17 @@ public final class CodingAgentRuntime {
     private final CodingSessionCompactor sessionCompactor;
     private final CodingBranchSummarizer branchSummarizer;
     private final LoginService loginService;
-    private final Optional<AiModelReference> defaultModel;
 
     public CodingAgentRuntime() {
         this(builder().buildState());
-    }
-
-    public CodingAgentRuntime(AiModelClient modelClient) {
-        this(builder().modelClient(modelClient).buildState());
     }
 
     public CodingAgentRuntime(AgentEventBus eventBus) {
         this(builder().eventBus(eventBus).buildState());
     }
 
-    public CodingAgentRuntime(
-            AgentEventBus eventBus, AiModelClient modelClient, ToolRegistry toolRegistry,
-            AgentMessageConverter messageConverter, Clock clock
-    ) {
-        this(builder().eventBus(eventBus).modelClient(modelClient).toolRegistry(toolRegistry)
-                .messageConverter(messageConverter).clock(clock).buildState());
-    }
-
     private CodingAgentRuntime(RuntimeState state) {
         this.eventBus = state.eventBus();
-        this.modelClient = state.modelClient();
         this.providerRegistry = state.providerRegistry();
         this.toolRegistry = state.toolRegistry();
         this.messageConverter = state.messageConverter();
@@ -73,7 +57,6 @@ public final class CodingAgentRuntime {
         this.sessionCompactor = state.sessionCompactor();
         this.branchSummarizer = state.branchSummarizer();
         this.loginService = state.loginService();
-        this.defaultModel = state.defaultModel();
     }
 
     public static Builder builder() {
@@ -106,7 +89,11 @@ public final class CodingAgentRuntime {
     }
 
     public AiModelReference defaultModel() {
-        return defaultModel.orElseThrow(() -> new IllegalStateException("the runtime has no configured default model"));
+        return optionalProviderRegistry()
+                .orElseThrow(() -> new IllegalStateException("the runtime has no configured default model"))
+                .requireDefault()
+                .model()
+                .reference();
     }
 
     public Optional<AiProviderRegistry> optionalProviderRegistry() {
@@ -177,10 +164,6 @@ public final class CodingAgentRuntime {
         return eventBus;
     }
 
-    Optional<AiModelClient> optionalModelClient() {
-        return Optional.ofNullable(modelClient);
-    }
-
     ToolRegistry toolRegistry() {
         return toolRegistry;
     }
@@ -212,7 +195,6 @@ public final class CodingAgentRuntime {
 
     public static final class Builder {
         private AgentEventBus eventBus;
-        private AiModelClient modelClient;
         private AiProviderRegistry providerRegistry;
         private ToolRegistry toolRegistry;
         private AgentMessageConverter messageConverter;
@@ -220,15 +202,9 @@ public final class CodingAgentRuntime {
         private CodingSessionCompactor sessionCompactor;
         private CodingBranchSummarizer branchSummarizer;
         private LoginService loginService;
-        private Optional<AiModelReference> defaultModel = Optional.empty();
 
         public Builder eventBus(AgentEventBus eventBus) {
             this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
-            return this;
-        }
-
-        public Builder modelClient(AiModelClient modelClient) {
-            this.modelClient = modelClient;
             return this;
         }
 
@@ -283,7 +259,6 @@ public final class CodingAgentRuntime {
                     .orElseGet(() -> new DefaultLoginService(options.credentialStore(), options.clock()));
             loginService(resolvedLoginService);
             clock(options.clock());
-            defaultModel = Optional.of(options.defaultModel());
             return this;
         }
 
@@ -297,28 +272,25 @@ public final class CodingAgentRuntime {
             LoginService resolvedLoginService = loginService == null
                     ? new DefaultLoginService(PersistentAuthCredentialStore.userDefault(), resolvedClock)
                     : loginService;
-            return new RuntimeState(resolvedEventBus, modelClient, providerRegistry,
+            return new RuntimeState(resolvedEventBus, providerRegistry,
                     toolRegistry == null ? InMemoryToolRegistry.builder().build() : toolRegistry,
                     messageConverter == null ? CodingAgentMessageConverter.INSTANCE : messageConverter,
                     resolvedClock,
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
                     branchSummarizer == null ? new CodingBranchSummarizer() : branchSummarizer,
-                    resolvedLoginService,
-                    defaultModel);
+                    resolvedLoginService);
         }
     }
 
     private record RuntimeState(
             AgentEventBus eventBus,
-            AiModelClient modelClient,
             AiProviderRegistry providerRegistry,
             ToolRegistry toolRegistry,
             AgentMessageConverter messageConverter,
             Clock clock,
             CodingSessionCompactor sessionCompactor,
             CodingBranchSummarizer branchSummarizer,
-            LoginService loginService,
-            Optional<AiModelReference> defaultModel
+            LoginService loginService
     ) {
     }
 

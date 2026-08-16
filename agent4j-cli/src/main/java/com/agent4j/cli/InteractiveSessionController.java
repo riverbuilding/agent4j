@@ -40,6 +40,8 @@ final class InteractiveSessionController implements AutoCloseable {
 
     AiModelReference model() { return model; }
 
+    java.util.Optional<AiModelReference> promptModel() { return runtime.promptModel(); }
+
     void selectModel(String value) throws IOException {
         String[] parts = value.split("/", 2);
         AiModelReference next = parts.length == 2
