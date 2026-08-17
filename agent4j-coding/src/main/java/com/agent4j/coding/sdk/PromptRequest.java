@@ -24,7 +24,8 @@ public record PromptRequest(
         List<AgentMessage> followUpMessages,
         QueueMode steeringMode,
         QueueMode followUpMode,
-        Optional<AbortSignal> abortSignal
+        Optional<AbortSignal> abortSignal,
+        Optional<String> systemPrompt
 ) {
     public PromptRequest(String prompt) {
         this(
@@ -39,6 +40,37 @@ public record PromptRequest(
                 List.of(),
                 QueueMode.ONE_AT_A_TIME,
                 QueueMode.ONE_AT_A_TIME,
+                Optional.empty(),
+                Optional.empty());
+    }
+
+    public PromptRequest(
+            String prompt,
+            Optional<AiModelReference> model,
+            int maxToolRounds,
+            int maxModelRetries,
+            Optional<Duration> modelTimeout,
+            ToolExecutionMode toolExecutionMode,
+            Map<String, Object> toolAttributes,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode,
+            Optional<AbortSignal> abortSignal
+    ) {
+        this(
+                prompt,
+                model,
+                maxToolRounds,
+                maxModelRetries,
+                modelTimeout,
+                toolExecutionMode,
+                toolAttributes,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode,
+                abortSignal,
                 Optional.empty());
     }
 
@@ -67,5 +99,6 @@ public record PromptRequest(
         steeringMode = steeringMode == null ? QueueMode.ONE_AT_A_TIME : steeringMode;
         followUpMode = followUpMode == null ? QueueMode.ONE_AT_A_TIME : followUpMode;
         abortSignal = abortSignal == null ? Optional.empty() : abortSignal;
+        systemPrompt = systemPrompt == null ? Optional.empty() : systemPrompt.map(String::strip).filter(value -> !value.isBlank());
     }
 }

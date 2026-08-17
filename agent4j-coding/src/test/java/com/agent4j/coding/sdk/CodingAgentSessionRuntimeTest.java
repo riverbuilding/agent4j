@@ -8,6 +8,7 @@ import com.agent4j.ai.AiProvider;
 import com.agent4j.ai.AiProviderApi;
 import com.agent4j.ai.AiProviderRegistry;
 import com.agent4j.ai.AiProviderRequest;
+import com.agent4j.ai.AiSystemMessage;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiTextContent;
@@ -130,6 +131,32 @@ class CodingAgentRuntimeLifecycleTest {
         assertThat(model.requests()).hasSize(1);
         assertThat(((AiTextContent) ((AiUserMessage) model.requests().getFirst().messages().getFirst())
                 .content().getFirst()).text()).isEqualTo("say hello");
+    }
+
+    @Test
+    void promptIncludesItsRequestScopedSystemPromptWithoutPersistingIt() throws Exception {
+        FakeModelClient model = new FakeModelClient().enqueue(assistantText("assistant-1", "hello", AiUsage.zero()));
+        AgentSession session = runtime(model).createSession(new CreateSessionRequest(tempDir.resolve("system.jsonl"), tempDir));
+
+        session.prompt(new PromptRequest(
+                "say hello",
+                Optional.empty(),
+                0,
+                0,
+                Optional.empty(),
+                null,
+                Map.of(),
+                List.of(),
+                List.of(),
+                null,
+                null,
+                Optional.empty(),
+                Optional.of("workspace policy")));
+
+        assertThat(model.requests().getFirst().messages().getFirst())
+                .isEqualTo(new AiSystemMessage("workspace policy"));
+        assertThat(session.conversationContext().transcriptMessages()).extracting(AgentMessage::role)
+                .doesNotContain(AgentMessageRole.SYSTEM);
     }
 
     @Test

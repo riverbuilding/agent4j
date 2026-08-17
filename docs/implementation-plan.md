@@ -1035,7 +1035,7 @@ Tasks:
    - The foundation registers no filesystem-writing or process-executing tools.
      Future tool walkthroughs must constrain any side effects to the example
      workspace and document them before execution.
-2. Add progressive real OpenAI walkthroughs. The first five are complete.
+2. Add progressive real OpenAI walkthroughs. The first six are complete.
    - `01-real-prompt` creates the standard OpenAI runtime, sends one prompt,
      prints streaming assistant text and provider usage.
    - `02-streaming-events` reuses the runtime/session setup and renders public
@@ -1048,9 +1048,9 @@ Tasks:
    - `05-live-session-control` demonstrates steering, follow-up, and
      cancellation during streamed real-provider runs, with terminal timing
      guidance for manual execution rather than exact-text assertions.
-   - `06-resources-and-coding-tools`: add a safe sample workspace, resource
-     discovery, settings, system-prompt construction, selected built-in tools,
-     and workspace-scoped behavior.
+   - `06-resources-and-coding-tools` creates a disposable sample workspace,
+     discovers its settings/resources, builds a request-scoped system prompt,
+     and exposes only workspace-scoped read-only built-in tools.
    - `07-compaction-and-branching`: demonstrate manual compaction, fork,
      resume, active-path behavior, and persisted summaries; document token cost
      and generated-session cleanup.
@@ -1129,8 +1129,8 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Continue Phase 12 with `06-resources-and-coding-tools`, building directly on
-   the completed prompt, event, no-side-effect tool, persistent-session, and
-   live-session-control walkthroughs.
+1. Continue Phase 12 with `07-compaction-and-branching`, building directly on
+   the completed prompt, event, no-side-effect tool, persistent-session,
+   live-session-control, and resources-and-coding-tools walkthroughs.
 2. Keep Phase 9 production OAuth verification separate; record live-provider
    example evidence without treating it as sufficient OAuth closure evidence.

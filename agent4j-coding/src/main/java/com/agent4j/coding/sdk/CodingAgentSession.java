@@ -170,6 +170,7 @@ public final class CodingAgentSession implements AgentSession {
                         .promptMessages(List.of(promptMessage))
                         .steeringMode(request.steeringMode())
                         .followUpMode(request.followUpMode())
+                        .systemPrompt(request.systemPrompt().orElse(null))
                         .build(),
                 queues);
     }

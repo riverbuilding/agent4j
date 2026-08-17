@@ -124,6 +124,27 @@ mvn -pl agent4j-examples -am test \
   -Dagent4j.liveExample.mainClass=com.agent4j.examples.LiveSessionControlExample
 ```
 
+### 06-resources-and-coding-tools
+
+Creates a disposable `Lantern Library` workspace containing `README.md`, a
+source file, `AGENTS.md`, project `.pi` settings, and system-prompt resources.
+It discovers those resources from a temporary example home and workspace,
+prints the discovered settings/context files, builds a request-scoped system
+prompt, and sends one real prompt.
+
+Only the built-in `read`, `ls`, `grep`, and `find` tools are registered. The
+example asks the model to read `README.md`; the coding-tool path policy rejects
+paths outside the workspace, and no write, edit, or shell tool is available.
+The sample files live in a newly created child directory, so an explicitly
+configured workspace is never overwritten. They are deleted with the temporary
+workspace unless you set an explicit workspace path.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ResourcesAndCodingToolsExample
+```
+
 ## Bounds and cost
 
 The walkthroughs pass these defaults from `LiveExampleConfiguration` to
@@ -161,5 +182,7 @@ export AGENT4J_EXAMPLES_SESSION_DIRECTORY="/private/path/to/example-sessions"
 ```
 
 The foundation does not register filesystem-writing or process-executing tools.
-Future tool walkthroughs must keep their default tool sets constrained to the
-example workspace and document any side effects before they run.
+The resources-and-coding-tools walkthrough adds only workspace-scoped,
+read-only filesystem tools. Future tool walkthroughs must keep their default
+tool sets constrained to the example workspace and document any side effects
+before they run.

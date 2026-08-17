@@ -16,6 +16,24 @@ final class LiveExampleHelper {
     }
 
     static PromptRequest buildPromptRequest(AiModelReference model, String prompt, int maxToolRounds) {
+        return buildPromptRequest(model, prompt, maxToolRounds, Optional.empty());
+    }
+
+    static PromptRequest buildPromptRequest(
+            AiModelReference model,
+            String prompt,
+            int maxToolRounds,
+            String systemPrompt
+    ) {
+        return buildPromptRequest(model, prompt, maxToolRounds, Optional.of(systemPrompt));
+    }
+
+    private static PromptRequest buildPromptRequest(
+            AiModelReference model,
+            String prompt,
+            int maxToolRounds,
+            Optional<String> systemPrompt
+    ) {
         return new PromptRequest(
                 prompt,
                 Optional.of(model),
@@ -28,7 +46,8 @@ final class LiveExampleHelper {
                 java.util.List.of(),
                 null,
                 null,
-                Optional.empty());
+                Optional.empty(),
+                systemPrompt);
     }
 
     static EventSubscription streamAssistantText(CodingAgentRuntime runtime, PrintStream output) {
