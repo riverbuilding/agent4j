@@ -5,6 +5,7 @@ import com.agent4j.coding.sdk.CodingAgentRuntime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
@@ -88,6 +89,20 @@ class LiveExampleConfigurationTest {
         } finally {
             runtime.cleanupOwnedFiles();
         }
+    }
+
+    @Test
+    void cleansOnlyItsTemporaryWorkspaceAndSessionDirectories() throws Exception {
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open(Map.of(
+                LiveExampleConfiguration.API_KEY, "test-key",
+                LiveExampleConfiguration.MODEL, "gpt-5"));
+        Files.createDirectories(configuration.workspace());
+        Files.createDirectories(configuration.sessionDirectory());
+
+        configuration.cleanupTemporaryDirectories();
+
+        assertThat(configuration.workspace()).doesNotExist();
+        assertThat(configuration.sessionDirectory()).doesNotExist();
     }
 
     @Test

@@ -5,11 +5,14 @@ import com.agent4j.coding.sdk.CodingAgentConfig;
 import com.agent4j.core.tool.ToolRegistry;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /** Provider-neutral environment inputs for opt-in live examples. */
 public final class LiveExampleConfiguration {
@@ -132,6 +135,15 @@ public final class LiveExampleConfiguration {
         return cleanupSessionDirectory;
     }
 
+    public void cleanupTemporaryDirectories() throws IOException {
+        if (cleanupSessionDirectory) {
+            deleteDirectory(sessionDirectory);
+        }
+        if (cleanupWorkspace) {
+            deleteDirectory(workspace);
+        }
+    }
+
     private static ManagedDirectory directory(Map<String, String> environment, String name, String prefix) throws IOException {
         String configured = environment.get(name);
         if (configured == null || configured.isBlank()) {
@@ -139,6 +151,17 @@ public final class LiveExampleConfiguration {
         }
         Path path = Path.of(configured).toAbsolutePath().normalize();
         return new ManagedDirectory(path, false);
+    }
+
+    private static void deleteDirectory(Path directory) throws IOException {
+        if (!Files.exists(directory)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(directory)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
     }
 
     private static String requireEnvironment(Map<String, String> environment, String name) {

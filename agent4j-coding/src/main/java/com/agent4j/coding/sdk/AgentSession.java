@@ -1,6 +1,7 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.core.runtime.AgentConversationContext;
+import com.agent4j.core.compaction.CompactionConfig;
 import com.agent4j.core.compaction.CompactionResult;
 
 /**
@@ -34,6 +35,10 @@ public interface AgentSession {
     }
 
     default CompactionResult compact(String focusInstructions) throws Exception {
+        return compact(focusInstructions, CompactionConfig.defaults());
+    }
+
+    default CompactionResult compact(String focusInstructions, CompactionConfig config) throws Exception {
         throw new IllegalStateException("manual compaction is not supported by this session");
     }
 

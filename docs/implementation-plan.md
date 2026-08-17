@@ -1035,7 +1035,7 @@ Tasks:
    - The foundation registers no filesystem-writing or process-executing tools.
      Future tool walkthroughs must constrain any side effects to the example
      workspace and document them before execution.
-2. Add progressive real OpenAI walkthroughs. The first eight are complete.
+2. Add progressive real OpenAI walkthroughs. The first ten are complete.
    - `01-real-prompt` creates the standard OpenAI runtime, sends one prompt,
      prints streaming assistant text and provider usage.
    - `02-streaming-events` reuses the runtime/session setup and renders public
@@ -1055,11 +1055,11 @@ Tasks:
      turns in one persisted session.
    - `08-prompt-model-override` uses the default then a per-prompt model
      override across consecutive turns in one persisted session.
-   - `09-compaction-and-branching`: demonstrate manual compaction, fork,
-     resume, active-path behavior, and persisted summaries; document token cost
-     and generated-session cleanup.
-   - `10-cli-modes`: invoke the actual CLI with the same environment-based
-     credentials for print, JSON, RPC, and session lifecycle flows.
+   - `09-compaction-and-branching` manually compacts a session, persists its
+     summary, forks a selected active path, resumes the compacted path, and
+     documents summary-token cost and generated-session cleanup.
+   - `10-cli-modes` invokes the actual CLI with the same environment-based
+     credentials for print, JSON, RPC, and session resume/fork flows.
    - `11-interactive-shell`: demonstrate real interactive streaming, tool
      activity, `/status`, `/model`, `/new`, `/resume`, `/follow-up`, and
      `/abort`, with an ANSI/plain-terminal manual QA checklist.
@@ -1133,9 +1133,9 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Continue Phase 12 with `09-compaction-and-branching`, building directly on
+1. Continue Phase 12 with `11-interactive-shell`, building directly on
     the completed prompt, event, no-side-effect tool, persistent-session,
     live-session-control, resources-and-coding-tools, model-switching, and
-    prompt-model-override walkthroughs.
+    prompt-model-override, compaction-and-branching, and CLI-modes walkthroughs.
 2. Keep Phase 9 production OAuth verification separate; record live-provider
    example evidence without treating it as sufficient OAuth closure evidence.

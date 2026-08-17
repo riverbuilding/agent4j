@@ -179,6 +179,55 @@ mvn -pl agent4j-examples -am test \
   -Dagent4j.liveExample.mainClass=com.agent4j.examples.PromptModelOverrideExample
 ```
 
+### 09-compaction-and-branching
+
+Creates two turns in one JSONL session, runs manual compaction with a small
+retained tail, and prints the summary plus estimated before/after context
+tokens. It then forks from the first turn's active entry, showing that the fork
+contains only that selected path, while the original session is resumed from
+its latest compacted path and continued with one final prompt.
+
+Manual compaction sends a separate provider request whose input includes the
+history selected for summarization. This walkthrough makes four provider
+requests: two setup turns, one summary, and one resumed turn. The summary's
+input grows with the compacted history, so inspect the printed token counts and
+use a low-cost model before trying it on a large session.
+
+The original and forked JSONL paths are printed. Temporary paths are cleaned on
+normal exit; set `AGENT4J_EXAMPLES_SESSION_DIRECTORY` to retain them for
+inspection, or remove interrupted-run paths manually.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.CompactionAndBranchingExample
+```
+
+### 10-cli-modes
+
+Runs composed Java calls to the actual CLI command boundary: print mode, JSON
+event mode, JSONL RPC mode, session resume, and session fork. The example uses
+the live-example model/session configuration but the CLI reads standard provider
+environment variables, so map the existing key and base URL into its process
+environment without putting the key on a command line:
+
+```bash
+export OPENAI_API_KEY="$AGENT4J_API_KEY"
+export OPENAI_BASE_URL="$AGENT4J_BASE_URL"
+```
+
+For OpenRouter, retain the `openai/` provider prefix in `AGENT4J_MODEL`, for
+example `openai/openrouter/free`. The Java example composes each argument list
+with `--no-tools`, `--model`, and an explicit `--session-dir`, so it has no
+workspace side effects. Its temporary session files are cleaned on normal exit;
+set `AGENT4J_EXAMPLES_SESSION_DIRECTORY` to retain and inspect them.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.CliModesExample
+```
+
 ## Bounds and cost
 
 The walkthroughs pass these defaults from `LiveExampleConfiguration` to

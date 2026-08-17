@@ -20,6 +20,8 @@ import com.agent4j.coding.session.SessionManager;
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.event.EventSubscription;
+import com.agent4j.core.compaction.CompactionConfig;
+import com.agent4j.core.compaction.CompactionResult;
 import com.agent4j.core.message.AgentMessage;
 import com.agent4j.core.message.AgentMessageRole;
 import com.agent4j.core.runtime.Usage;
@@ -157,6 +159,25 @@ class CodingAgentRuntimeLifecycleTest {
                 .isEqualTo(new AiSystemMessage("workspace policy"));
         assertThat(session.conversationContext().transcriptMessages()).extracting(AgentMessage::role)
                 .doesNotContain(AgentMessageRole.SYSTEM);
+    }
+
+    @Test
+    void compactAcceptsAnExplicitRetainedTailConfiguration() throws Exception {
+        FakeModelClient model = new FakeModelClient()
+                .enqueue(assistantText("assistant-1", "first answer", AiUsage.zero()))
+                .enqueue(assistantText("summary-1", "compaction summary", AiUsage.zero()));
+        AgentSession session = runtime(model).createSession(new CreateSessionRequest(tempDir.resolve("compact.jsonl"), tempDir));
+        session.prompt(new PromptRequest("first prompt"));
+
+        CompactionResult result = session.compact("preserve the first prompt", CompactionConfig.builder()
+                .keepTokens(0)
+                .keepMessages(1)
+                .build());
+
+        assertThat(result.compacted()).isTrue();
+        assertThat(result.summaryMessage().textContent()).contains("compaction summary");
+        assertThat(SessionManager.open(session.sessionFile()).activeAgentMessages()).extracting(AgentMessage::textContent)
+                .anySatisfy(message -> assertThat(message).contains("compaction summary"));
     }
 
     @Test

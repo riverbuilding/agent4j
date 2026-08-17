@@ -101,6 +101,11 @@ public final class CodingAgentSession implements AgentSession {
 
     @Override
     public CompactionResult compact(String focusInstructions) throws Exception {
+        return compact(focusInstructions, CompactionConfig.defaults());
+    }
+
+    @Override
+    public CompactionResult compact(String focusInstructions, CompactionConfig config) throws Exception {
         if (isStreaming()) {
             throw new IllegalStateException("cannot compact while a prompt is active");
         }
@@ -109,7 +114,7 @@ public final class CodingAgentSession implements AgentSession {
                 .requireDefault();
         AiResolvedAuth auth = runtime.loginService().resolveAuth(selection.provider().id());
         CompactionResult result = runtime.sessionCompactor().compact(new ManualCompactionRequest(
-                sessionManager, selection, auth, cwd(), null, CompactionConfig.defaults(),
+                sessionManager, selection, auth, cwd(), null, config == null ? CompactionConfig.defaults() : config,
                 focusInstructions == null ? "" : focusInstructions, AiStreamOptions.defaults()));
         refreshConversationContext(new AgentConversationContext(sessionManager.activeAgentMessages(), List.of()));
         return result;
