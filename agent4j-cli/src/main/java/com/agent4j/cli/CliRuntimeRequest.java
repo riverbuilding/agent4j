@@ -10,10 +10,11 @@ public record CliRuntimeRequest(
         Optional<String> provider,
         Optional<String> model,
         Optional<String> apiKey,
+        Optional<String> baseUrl,
         CliToolSelection toolSelection
 ) {
     public CliRuntimeRequest(Path cwd, Path homeDirectory, Optional<String> provider, Optional<String> model, Optional<String> apiKey) {
-        this(cwd, homeDirectory, provider, model, apiKey, CliToolSelection.defaults());
+        this(cwd, homeDirectory, provider, model, apiKey, Optional.empty(), CliToolSelection.defaults());
     }
 
     public CliRuntimeRequest {
@@ -22,6 +23,7 @@ public record CliRuntimeRequest(
         provider = normalize(provider, "provider");
         model = normalize(model, "model");
         apiKey = normalize(apiKey, "apiKey");
+        baseUrl = normalize(baseUrl, "baseUrl");
         toolSelection = toolSelection == null ? CliToolSelection.defaults() : toolSelection;
         cwd = cwd.toAbsolutePath().normalize();
         homeDirectory = homeDirectory.toAbsolutePath().normalize();

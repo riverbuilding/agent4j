@@ -206,15 +206,10 @@ mvn -pl agent4j-examples -am test \
 ### 10-cli-modes
 
 Runs composed Java calls to the actual CLI command boundary: print mode, JSON
-event mode, JSONL RPC mode, session resume, and session fork. The example uses
-the live-example model/session configuration but the CLI reads standard provider
-environment variables, so map the existing key and base URL into its process
-environment without putting the key on a command line:
-
-```bash
-export OPENAI_API_KEY="$AGENT4J_API_KEY"
-export OPENAI_BASE_URL="$AGENT4J_BASE_URL"
-```
+event mode, JSONL RPC mode, session resume, and session fork. The example
+passes its existing in-memory live-example credential and optional base URL to
+each CLI request with `--api-key` and `--base-url`; it does not require a
+second set of provider environment variables.
 
 For OpenRouter, retain the `openai/` provider prefix in `AGENT4J_MODEL`, for
 example `openai/openrouter/free`. The Java example composes each argument list

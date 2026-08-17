@@ -103,6 +103,10 @@ public final class LiveExampleConfiguration {
         return model;
     }
 
+    public String apiKey() {
+        return apiKey;
+    }
+
     public AiModelReference requireSwitchModel() {
         return switchModel.orElseThrow(() -> new IllegalStateException(SWITCH_MODEL + " must be set before running this example"));
     }

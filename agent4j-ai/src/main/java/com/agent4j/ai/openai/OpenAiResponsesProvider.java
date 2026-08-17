@@ -95,6 +95,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
             hooked.options().signal().throwIfAborted();
             normalizer.acceptLine(line);
         });
+        normalizer.completeIfNecessary();
     }
 
     public ObjectNode toRequestJson(AiProviderRequest request) {
@@ -241,6 +242,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
         private final Map<Integer, OutputSlot> outputSlots = new LinkedHashMap<>();
         private String messageId;
         private boolean started;
+        private boolean terminal;
 
         private OpenAiStreamNormalizer(ObjectMapper mapper, Consumer<AiStreamEvent> sink) {
             this.mapper = mapper;
@@ -253,6 +255,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
             }
             String data = line.substring("data:".length()).trim();
             if (data.equals("[DONE]")) {
+                completeIfNecessary();
                 return;
             }
             try {
@@ -268,14 +271,14 @@ public final class OpenAiResponsesProvider implements AiProvider {
                 case "response.created" -> ensureStarted(event.path("response").path("id").asText("response"));
                 case "response.output_item.added" -> outputItemAdded(event);
                 case "response.content_part.added" -> contentPartAdded(event);
-                case "response.output_text.delta", "response.refusal.delta" -> textDelta(event);
+                case "response.output_text.delta", "response.content_part.delta", "response.refusal.delta" -> textDelta(event);
                 case "response.output_text.done", "response.output_item.done" -> outputItemDone(event);
                 case "response.reasoning_text.delta", "response.reasoning_summary_text.delta" -> thinkingDelta(event);
                 case "response.reasoning_text.done", "response.reasoning_summary_text.done" -> thinkingDone(event);
                 case "response.function_call_arguments.delta" -> functionCallDelta(event);
                 case "response.function_call_arguments.done" -> functionCallDone(event);
-                case "response.completed" -> completed(event);
-                case "response.failed", "response.incomplete", "error" -> error(event);
+                case "response.completed", "response.done" -> completed(event);
+                case "response.failed", "response.incomplete", "response.error", "error" -> error(event);
                 default -> {
                 }
             }
@@ -400,6 +403,9 @@ public final class OpenAiResponsesProvider implements AiProvider {
         }
 
         private void completed(JsonNode event) {
+            if (terminal) {
+                return;
+            }
             ensureStarted(event.path("response").path("id").asText("response"));
             JsonNode response = event.path("response");
             sink.accept(new AiStreamEvent.MessageCompleted(
@@ -408,12 +414,27 @@ public final class OpenAiResponsesProvider implements AiProvider {
                             content,
                             stopReason(response.path("status").asText("completed"), content),
                             usage(response.path("usage")))));
+            terminal = true;
         }
 
         private void error(JsonNode event) {
+            if (terminal) {
+                return;
+            }
             ensureStarted(event.path("response").path("id").asText(event.path("item_id").asText("response")));
-            String message = event.path("message").asText(event.path("response").path("error").path("message").asText("OpenAI stream error"));
+            String message = event.path("message").asText(event.path("error").path("message").asText(event.path("response").path("error").path("message").asText("OpenAI stream error")));
             sink.accept(new AiStreamEvent.MessageErrored(messageId, message));
+            terminal = true;
+        }
+
+        private void completeIfNecessary() {
+            if (!started || terminal) {
+                return;
+            }
+            sink.accept(new AiStreamEvent.MessageCompleted(
+                    messageId,
+                    new AiAssistantMessage(content, stopReason("completed", content), AiUsage.zero())));
+            terminal = true;
         }
 
         private void ensureStarted(String id) {

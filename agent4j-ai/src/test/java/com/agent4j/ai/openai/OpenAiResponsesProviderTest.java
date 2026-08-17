@@ -333,6 +333,46 @@ class OpenAiResponsesProviderTest {
                 assertThat(event.message().content()).containsExactly(new AiTextContent("Hello")));
     }
 
+    @Test
+    void normalizesOpenRouterResponseAliasesAndCompletesAtTheSseTerminator() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("openai", "openrouter/free"), "OpenRouter Free");
+        CapturingTransport transport = new CapturingTransport(List.of(
+                "data: {\"type\":\"response.created\",\"response\":{\"id\":\"res_1\"}}",
+                "data: {\"type\":\"response.content_part.delta\",\"item_id\":\"msg_1\",\"output_index\":0,\"delta\":\"Hello\"}",
+                "data: [DONE]"));
+        OpenAiResponsesProvider provider = new OpenAiResponsesProvider(
+                OpenAiResponsesProviderOptions.defaults(List.of(model)), transport);
+        List<AiStreamEvent> events = new ArrayList<>();
+
+        provider.stream(new AiProviderRequest(
+                model,
+                new AiTurnRequest(List.of(AiUserMessage.text("hello")), List.of()),
+                AiProviderContext.empty(),
+                AiStreamOptions.defaults()), events::add);
+
+        assertThat(events.getLast()).isInstanceOfSatisfying(AiStreamEvent.MessageCompleted.class, event ->
+                assertThat(event.message().content()).containsExactly(new AiTextContent("Hello")));
+    }
+
+    @Test
+    void normalizesOpenRouterStreamErrors() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("openai", "openrouter/free"), "OpenRouter Free");
+        CapturingTransport transport = new CapturingTransport(List.of(
+                "data: {\"type\":\"response.error\",\"error\":{\"message\":\"upstream unavailable\"}}"));
+        OpenAiResponsesProvider provider = new OpenAiResponsesProvider(
+                OpenAiResponsesProviderOptions.defaults(List.of(model)), transport);
+        List<AiStreamEvent> events = new ArrayList<>();
+
+        provider.stream(new AiProviderRequest(
+                model,
+                new AiTurnRequest(List.of(AiUserMessage.text("hello")), List.of()),
+                AiProviderContext.empty(),
+                AiStreamOptions.defaults()), events::add);
+
+        assertThat(events).containsExactly(new AiStreamEvent.MessageStarted("response"),
+                new AiStreamEvent.MessageErrored("response", "upstream unavailable"));
+    }
+
     private static final class CapturingTransport implements OpenAiTransport {
         private final List<String> lines;
         private OpenAiHttpRequest request;

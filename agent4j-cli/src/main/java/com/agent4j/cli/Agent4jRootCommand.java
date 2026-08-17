@@ -55,6 +55,9 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     @Option(names = "--api-key", description = "Non-persistent provider API key")
     private String apiKey;
 
+    @Option(names = "--base-url", description = "Non-persistent provider base URL")
+    private String baseUrl;
+
     @Option(names = {"--tools", "-t"}, split = ",", description = "Comma-separated enabled tool names")
     private List<String> includedTools = new ArrayList<>();
     @Option(names = {"--exclude-tools", "-xt"}, split = ",", description = "Comma-separated disabled tool names")
@@ -132,6 +135,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
                 Optional.ofNullable(provider),
                 Optional.ofNullable(model),
                 Optional.ofNullable(apiKey),
+                Optional.ofNullable(baseUrl),
                 new CliToolSelection(
                         includedTools.isEmpty() ? Optional.empty() : Optional.of(includedTools),
                         excludedTools,
@@ -151,7 +155,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
             resolvedModel = Optional.of("gpt-5");
         }
         return new CliRuntimeRequest(environment.cwd(), environment.homeDirectory(), resolvedProvider, resolvedModel,
-                Optional.ofNullable(apiKey), CliToolSelection.defaults());
+                Optional.ofNullable(apiKey), Optional.ofNullable(baseUrl), CliToolSelection.defaults());
     }
 
     CommandSpec commandSpec() {

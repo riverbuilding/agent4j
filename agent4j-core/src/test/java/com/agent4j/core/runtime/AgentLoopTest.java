@@ -98,6 +98,18 @@ class AgentLoopTest {
     }
 
     @Test
+    void reportsAProviderStreamErrorInsteadOfClaimingTheStreamHadNoMessage() {
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(
+                new AiStreamEvent.MessageStarted("assistant-1"),
+                new AiStreamEvent.MessageErrored("assistant-1", "upstream unavailable")));
+
+        assertThatThrownBy(() -> loop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus())
+                .runTurn(request(List.of(userMessage("user-1", "say hi")), 2)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("model stream error: upstream unavailable");
+    }
+
+    @Test
     void prependsSystemPromptToModelRequestWithoutPersistingItInTranscript() throws Exception {
         FakeModelClient model = new FakeModelClient().enqueue(List.of(
                 new AiStreamEvent.MessageStarted("assistant-1"),

@@ -68,7 +68,12 @@ public final class CliModesExample {
         List<String> args = new ArrayList<>(List.of(
                 "--no-tools",
                 "--model", configuration.model(),
+                "--api-key", configuration.apiKey(),
                 "--session-dir", configuration.sessionDirectory().toString()));
+        configuration.baseUrl().ifPresent(baseUrl -> {
+            args.add("--base-url");
+            args.add(baseUrl);
+        });
         args.addAll(List.of(command));
         return args.toArray(String[]::new);
     }

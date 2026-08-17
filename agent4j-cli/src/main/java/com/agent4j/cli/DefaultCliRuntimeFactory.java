@@ -64,7 +64,8 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
             throw new IllegalArgumentException("--api-key requires --model or --provider");
         }
         if (request.apiKey().isPresent() && requestedProvider.isPresent()) {
-            loginService.loginApiKey(new ApiKeyLoginRequest(requestedProvider.orElseThrow(), request.apiKey().orElseThrow()));
+            loginService.loginApiKey(new ApiKeyLoginRequest(
+                    requestedProvider.orElseThrow(), request.apiKey().orElseThrow(), request.baseUrl()));
         }
         ModelRuntime modelRuntime = ModelRuntime.builder(loginService)
                 .modelsJson(discovery.directories().globalAgentDir().resolve("models.json"))
@@ -72,7 +73,7 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                 .build();
         AiModelReference model = modelRuntime.resolve(requestedProvider, requestedModel);
         if (request.apiKey().isPresent() && requestedProvider.isEmpty()) {
-            loginService.loginApiKey(new ApiKeyLoginRequest(model.providerId(), request.apiKey().orElseThrow()));
+            loginService.loginApiKey(new ApiKeyLoginRequest(model.providerId(), request.apiKey().orElseThrow(), request.baseUrl()));
         }
         CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .providerRegistry(modelRuntime.registry(model))

@@ -370,6 +370,13 @@ public final class AgentLoop {
             events.add(event);
             publishModelEvent(request, event);
         });
+        events.stream()
+                .filter(AiStreamEvent.MessageErrored.class::isInstance)
+                .map(AiStreamEvent.MessageErrored.class::cast)
+                .reduce((first, second) -> second)
+                .ifPresent(error -> {
+                    throw new IllegalStateException("model stream error: " + error.error());
+                });
         AiStreamEvent.MessageCompleted completed = events.stream()
                 .filter(AiStreamEvent.MessageCompleted.class::isInstance)
                 .map(AiStreamEvent.MessageCompleted.class::cast)

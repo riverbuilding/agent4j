@@ -72,6 +72,7 @@ class Agent4jCliTest {
                 "--provider", "openai",
                 "--model", "gpt-test",
                 "--api-key", "sk-runtime-only",
+                "--base-url", "https://openrouter.example/api/v1",
                 "hello");
 
         assertThat(exitCode).isZero();
@@ -80,6 +81,7 @@ class Agent4jCliTest {
         assertThat(received.get().provider()).contains("openai");
         assertThat(received.get().model()).contains("gpt-test");
         assertThat(received.get().apiKey()).contains("sk-runtime-only");
+        assertThat(received.get().baseUrl()).contains("https://openrouter.example/api/v1");
     }
 
     @Test
