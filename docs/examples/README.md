@@ -226,6 +226,62 @@ mvn -pl agent4j-examples -am test \
   -Dagent4j.liveExample.mainClass=com.agent4j.examples.CliModesExample
 ```
 
+### 11-interactive-shell
+
+Starts the actual interactive CLI in the current project directory. Its initial
+real streamed prompt requires the model to read `pom.xml`, so a compatible
+tool-calling model shows `read` tool activity before the `agent4j>` prompt is
+displayed. The walkthrough enables only that read-only tool: it cannot write,
+edit, delete, or execute commands. Run it from the repository root so that
+`pom.xml` is in the CLI workspace.
+
+The shell itself is deliberately manual. After the initial turn, use `/status`
+to record the session ID and JSONL path, `/model` to inspect the selection, and
+`/model <[provider/]model>` to change the model used by the next prompt. `/new`
+creates another session; `/resume` opens the picker, where you can select the
+session ID recorded from `/status`. To exercise live controls, submit a long
+response request and, while text is still arriving, enter `/follow-up <text>`
+or `/abort`. The former reports a queued follow-up and runs it after the active
+turn; the latter reports a local abort. A model can finish before a command is
+entered, so use a longer request and enter the command as soon as the first
+text appears.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.InteractiveShellExample
+```
+
+For an ANSI-capable run, use an attached terminal with `TERM` not set to `dumb`
+and with `NO_COLOR` unset. For the plain-terminal fallback, run the same
+command with `NO_COLOR=1`:
+
+```bash
+NO_COLOR=1 mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.InteractiveShellExample
+```
+
+Manual QA checklist for both runs:
+
+- Confirm streamed assistant text arrives before the prompt returns and the
+  initial `read` call reports both started and completed tool rows.
+- Run `/status`, `/model`, `/model <[provider/]model>`, `/new`, then `/resume`;
+  select the session ID previously recorded from `/status` and confirm a
+  `resumed session` row.
+- Enter a long request such as `Write 100 short numbered facts about terminal
+  streaming.` As soon as text starts, enter `/follow-up End with the word
+  queued.` Confirm a follow-up queue row and a subsequent follow-up turn.
+- Repeat the long request and enter `/abort` immediately after the first text
+  arrives. Confirm an aborted diagnostic; a small amount of buffered text can
+  still appear after cancellation.
+- In the ANSI run, confirm tool/status rows are styled and no ANSI escape
+  sequences are printed literally. In the `NO_COLOR` run, confirm the same
+  information is readable as unstyled bracketed rows with no escape sequences.
+- Exit with `/exit`. Temporary session artifacts are cleaned on normal exit;
+  set `AGENT4J_EXAMPLES_SESSION_DIRECTORY` first if you want to retain the
+  JSONL files after the walkthrough.
+
 ## Bounds and cost
 
 The walkthroughs pass these defaults from `LiveExampleConfiguration` to

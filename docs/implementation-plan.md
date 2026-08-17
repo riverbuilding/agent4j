@@ -1035,7 +1035,7 @@ Tasks:
    - The foundation registers no filesystem-writing or process-executing tools.
      Future tool walkthroughs must constrain any side effects to the example
      workspace and document them before execution.
-2. Add progressive real OpenAI walkthroughs. The first ten are complete.
+2. Add progressive real OpenAI walkthroughs. The first eleven are complete.
    - `01-real-prompt` creates the standard OpenAI runtime, sends one prompt,
      prints streaming assistant text and provider usage.
    - `02-streaming-events` reuses the runtime/session setup and renders public
@@ -1060,9 +1060,11 @@ Tasks:
      documents summary-token cost and generated-session cleanup.
    - `10-cli-modes` invokes the actual CLI with the same environment-based
      credentials for print, JSON, RPC, and session resume/fork flows.
-   - `11-interactive-shell`: demonstrate real interactive streaming, tool
-     activity, `/status`, `/model`, `/new`, `/resume`, `/follow-up`, and
-     `/abort`, with an ANSI/plain-terminal manual QA checklist.
+   - `11-interactive-shell` is complete: `InteractiveShellExample` starts the
+     real interactive CLI with only the read-only `read` tool and an initial
+     tool-use prompt. The example guide covers real streaming and tool activity,
+     `/status`, `/model`, `/new`, `/resume`, `/follow-up`, `/abort`, and an
+     ANSI/plain-terminal manual QA checklist.
    - `12-reference-application`: combine the preceding pieces in a small,
      safe workspace coding-assistant application that becomes the recommended
      onboarding path.
