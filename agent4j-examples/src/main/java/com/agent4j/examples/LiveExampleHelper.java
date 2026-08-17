@@ -1,5 +1,6 @@
 package com.agent4j.examples;
 
+import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.coding.sdk.PromptRequest;
 import com.agent4j.coding.sdk.PromptResult;
@@ -18,6 +19,14 @@ final class LiveExampleHelper {
         return buildPromptRequest(prompt, maxToolRounds, Optional.empty());
     }
 
+    static PromptRequest buildPromptRequestWithModelOverride(
+            AiModelReference model,
+            String prompt,
+            int maxToolRounds
+    ) {
+        return buildPromptRequest(prompt, maxToolRounds, Optional.empty(), Optional.of(model));
+    }
+
     static PromptRequest buildPromptRequest(
             String prompt,
             int maxToolRounds,
@@ -31,9 +40,18 @@ final class LiveExampleHelper {
             int maxToolRounds,
             Optional<String> systemPrompt
     ) {
+        return buildPromptRequest(prompt, maxToolRounds, systemPrompt, Optional.empty());
+    }
+
+    private static PromptRequest buildPromptRequest(
+            String prompt,
+            int maxToolRounds,
+            Optional<String> systemPrompt,
+            Optional<AiModelReference> model
+    ) {
         return new PromptRequest(
                 prompt,
-                Optional.empty(),
+                model,
                 maxToolRounds,
                 0,
                 Optional.empty(),

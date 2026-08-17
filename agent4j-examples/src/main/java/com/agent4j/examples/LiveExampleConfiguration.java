@@ -1,5 +1,6 @@
 package com.agent4j.examples;
 
+import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.sdk.CodingAgentConfig;
 import com.agent4j.core.tool.ToolRegistry;
 
@@ -15,6 +16,7 @@ public final class LiveExampleConfiguration {
     public static final String API_KEY = "AGENT4J_API_KEY";
     public static final String BASE_URL = "AGENT4J_BASE_URL";
     public static final String MODEL = "AGENT4J_MODEL";
+    public static final String SWITCH_MODEL = "AGENT4J_SWITCH_MODEL";
     public static final String WORKSPACE = "AGENT4J_EXAMPLES_WORKSPACE";
     public static final String SESSION_DIRECTORY = "AGENT4J_EXAMPLES_SESSION_DIRECTORY";
     public static final String MAX_OUTPUT_TOKENS = "AGENT4J_EXAMPLES_MAX_OUTPUT_TOKENS";
@@ -25,6 +27,7 @@ public final class LiveExampleConfiguration {
 
     private final String apiKey;
     private final String model;
+    private final Optional<AiModelReference> switchModel;
     private final Optional<String> baseUrl;
     private final Path workspace;
     private final Path sessionDirectory;
@@ -36,6 +39,7 @@ public final class LiveExampleConfiguration {
     private LiveExampleConfiguration(
             String apiKey,
             String model,
+            Optional<AiModelReference> switchModel,
             Optional<String> baseUrl,
             Path workspace,
             Path sessionDirectory,
@@ -46,6 +50,7 @@ public final class LiveExampleConfiguration {
     ) {
         this.apiKey = Objects.requireNonNull(apiKey, "apiKey");
         this.model = Objects.requireNonNull(model, "model");
+        this.switchModel = Objects.requireNonNull(switchModel, "switchModel");
         this.baseUrl = Objects.requireNonNull(baseUrl, "baseUrl");
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.sessionDirectory = Objects.requireNonNull(sessionDirectory, "sessionDirectory");
@@ -66,7 +71,8 @@ public final class LiveExampleConfiguration {
         ManagedDirectory workspace = directory(environment, WORKSPACE, "agent4j-example-workspace-");
         ManagedDirectory sessionDirectory = directory(environment, SESSION_DIRECTORY, "agent4j-example-sessions-");
         return new LiveExampleConfiguration(
-                apiKey, model, optionalEnvironment(environment, BASE_URL), workspace.path(), sessionDirectory.path(),
+                apiKey, model, optionalEnvironment(environment, SWITCH_MODEL).map(LiveExampleConfiguration::modelReference),
+                optionalEnvironment(environment, BASE_URL), workspace.path(), sessionDirectory.path(),
                 positiveInt(environment, MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
                 positiveInt(environment, MAX_TOOL_ROUNDS, DEFAULT_MAX_TOOL_ROUNDS),
                 workspace.temporary(), sessionDirectory.temporary());
@@ -86,11 +92,16 @@ public final class LiveExampleConfiguration {
                 .ownsWorkspace(cleanupWorkspace)
                 .ownsSessionDirectory(cleanupSessionDirectory);
         baseUrl.ifPresent(config::baseUrl);
+        switchModel.ifPresent(config::additionalModel);
         return config;
     }
 
     public String model() {
         return model;
+    }
+
+    public AiModelReference requireSwitchModel() {
+        return switchModel.orElseThrow(() -> new IllegalStateException(SWITCH_MODEL + " must be set before running this example"));
     }
 
     public Optional<String> baseUrl() {
@@ -140,6 +151,14 @@ public final class LiveExampleConfiguration {
 
     private static Optional<String> optionalEnvironment(Map<String, String> environment, String name) {
         return Optional.ofNullable(environment.get(name)).map(String::strip).filter(value -> !value.isBlank());
+    }
+
+    private static AiModelReference modelReference(String value) {
+        String[] parts = value.split("/", 2);
+        if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+            throw new IllegalArgumentException(SWITCH_MODEL + " must use provider/model form");
+        }
+        return new AiModelReference(parts[0], parts[1]);
     }
 
     private static int positiveInt(Map<String, String> environment, String name, int defaultValue) {

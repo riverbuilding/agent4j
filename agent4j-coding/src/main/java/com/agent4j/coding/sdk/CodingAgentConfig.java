@@ -1,5 +1,6 @@
 package com.agent4j.coding.sdk;
 
+import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProvider;
 import com.agent4j.core.tool.ToolRegistry;
 
@@ -18,6 +19,7 @@ public final class CodingAgentConfig {
     private final String model;
     private final BuiltInProviderCatalog providerCatalog;
     private final List<Path> modelsJsonFiles;
+    private final List<AiModelReference> additionalModels;
     private final List<AiProvider> extensionProviders;
     private final Optional<ToolRegistry> toolRegistry;
     private final Optional<Integer> maxOutputTokens;
@@ -34,6 +36,7 @@ public final class CodingAgentConfig {
         this.model = builder.model;
         this.providerCatalog = builder.providerCatalog;
         this.modelsJsonFiles = List.copyOf(builder.modelsJsonFiles);
+        this.additionalModels = List.copyOf(builder.additionalModels);
         this.extensionProviders = List.copyOf(builder.extensionProviders);
         this.toolRegistry = builder.toolRegistry;
         this.maxOutputTokens = builder.maxOutputTokens;
@@ -54,6 +57,7 @@ public final class CodingAgentConfig {
     public String model() { return model; }
     public BuiltInProviderCatalog providerCatalog() { return providerCatalog; }
     public List<Path> modelsJsonFiles() { return modelsJsonFiles; }
+    public List<AiModelReference> additionalModels() { return additionalModels; }
     public List<AiProvider> extensionProviders() { return extensionProviders; }
     public Optional<ToolRegistry> toolRegistry() { return toolRegistry; }
     public Optional<Integer> maxOutputTokens() { return maxOutputTokens; }
@@ -72,6 +76,7 @@ public final class CodingAgentConfig {
         private Optional<String> provider = Optional.empty();
         private BuiltInProviderCatalog providerCatalog = BuiltInProviderCatalog.defaults();
         private final List<Path> modelsJsonFiles = new ArrayList<>();
+        private final List<AiModelReference> additionalModels = new ArrayList<>();
         private final List<AiProvider> extensionProviders = new ArrayList<>();
         private Optional<ToolRegistry> toolRegistry = Optional.empty();
         private Optional<Integer> maxOutputTokens = Optional.empty();
@@ -92,6 +97,9 @@ public final class CodingAgentConfig {
             this.providerCatalog = Objects.requireNonNull(catalog, "catalog"); return this;
         }
         public Builder modelsJson(Path file) { modelsJsonFiles.add(normalize(file, "modelsJson")); return this; }
+        public Builder additionalModel(AiModelReference model) {
+            additionalModels.add(Objects.requireNonNull(model, "model")); return this;
+        }
         public Builder extensionProvider(AiProvider provider) {
             extensionProviders.add(Objects.requireNonNull(provider, "provider")); return this;
         }

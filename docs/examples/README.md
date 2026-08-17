@@ -22,12 +22,19 @@ example, OpenRouter's free-model router is configured as follows:
 ```bash
 export AGENT4J_API_KEY="<your-openrouter-api-key>"
 export AGENT4J_BASE_URL="https://openrouter.ai/api/v1"
-export AGENT4J_MODEL="openrouter/free"
+export AGENT4J_MODEL="openai/openrouter/free"
+export AGENT4J_SWITCH_MODEL="openai/meta-llama/llama-3.2-3b-instruct:free"
 ```
 
 The live runtime keeps this credential and base URL only in memory for the
 example process; it does not write either to the user credential store. The
 configured URL must expose the OpenAI Responses endpoint at `/responses`.
+
+`AGENT4J_SWITCH_MODEL` is optional except for the model-switching walkthroughs.
+It must use `provider/model` form; for OpenRouter-compatible calls the provider
+is `openai` and the remainder is OpenRouter's exact model ID. Choose models
+currently available to your account, including `:free` variants when using an
+OpenRouter free-tier key.
 
 Choose a model enabled for your account. The [official OpenAI model
 guidance](https://developers.openai.com/api/docs/guides/latest-model) recommends
@@ -143,6 +150,33 @@ workspace unless you set an explicit workspace path.
 mvn -pl agent4j-examples -am test \
   -Dagent4j.liveOpenAiExamples=true \
   -Dagent4j.liveExample.mainClass=com.agent4j.examples.ResourcesAndCodingToolsExample
+```
+
+### 07-model-switching
+
+Uses one persisted session and an application-owned selected-model value. The
+first turn uses the initially selected model; the example then changes that
+value and sends the second turn with the configured switch model. A model is
+selected when a `PromptRequest` begins, so the change affects the next turn,
+not a request that is already streaming.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ModelSwitchingExample
+```
+
+### 08-prompt-model-override
+
+Sends two consecutive `PromptRequest`s through one persisted session. The first
+relies on the runtime/provider default; the second supplies
+`PromptRequest.model` with `AGENT4J_SWITCH_MODEL`. The second turn retains the
+first turn's conversation history while using its own model selection.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.PromptModelOverrideExample
 ```
 
 ## Bounds and cost

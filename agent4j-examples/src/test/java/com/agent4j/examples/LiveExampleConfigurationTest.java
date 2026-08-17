@@ -1,5 +1,6 @@
 package com.agent4j.examples;
 
+import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.sdk.CodingAgentRuntime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -66,6 +67,24 @@ class LiveExampleConfigurationTest {
         CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
         try (runtime) {
             assertThat(runtime.defaultModel().displayName()).isEqualTo("openai/openrouter/free");
+        } finally {
+            runtime.cleanupOwnedFiles();
+        }
+    }
+
+    @Test
+    void registersTheOptionalSwitchModelForPromptOverrides() throws Exception {
+        LiveExampleConfiguration configuration = LiveExampleConfiguration.open(Map.of(
+                LiveExampleConfiguration.API_KEY, "test-key",
+                LiveExampleConfiguration.MODEL, "openai/openrouter/free",
+                LiveExampleConfiguration.SWITCH_MODEL, "openai/meta-llama/llama-3.2-3b-instruct:free"));
+
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(configuration.toCodingAgentConfig());
+        try (runtime) {
+            assertThat(configuration.requireSwitchModel())
+                    .isEqualTo(new AiModelReference("openai", "meta-llama/llama-3.2-3b-instruct:free"));
+            assertThat(runtime.optionalProviderRegistry().orElseThrow().resolve(configuration.requireSwitchModel()))
+                    .isPresent();
         } finally {
             runtime.cleanupOwnedFiles();
         }

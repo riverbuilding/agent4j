@@ -79,6 +79,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
         for (Path file : config.modelsJsonFiles()) {
             models.modelsJson(file);
         }
+        config.additionalModels().forEach(models::model);
         ModelRuntime modelRuntime = models.build();
         AiModelReference model = modelRuntime.resolve(config.provider(), Optional.of(config.model()));
         loginService.loginApiKey(new ApiKeyLoginRequest(model.providerId(), config.apiKey(), config.baseUrl()));

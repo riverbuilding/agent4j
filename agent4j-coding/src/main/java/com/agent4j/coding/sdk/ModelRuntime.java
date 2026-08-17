@@ -251,6 +251,12 @@ public final class ModelRuntime {
             return this;
         }
 
+        public Builder model(AiModelReference model) {
+            Objects.requireNonNull(model, "model");
+            addModel(model.providerId(), model.modelId(), model.modelId());
+            return this;
+        }
+
         public Builder extensionProvider(AiProvider provider) {
             extensionProviders.add(Objects.requireNonNull(provider, "provider"));
             return this;
