@@ -26,7 +26,6 @@ public final class ToolCallingExample {
                 }
             })) {
                 result = session.prompt(LiveExampleHelper.buildPromptRequest(
-                        runtime.defaultModel(),
                         "Call the workspace_status tool exactly once, then state the reported workspace path. "
                                 + "Do not request any other tool.",
                         1));

@@ -30,7 +30,6 @@ public final class PersistentSessionsExample {
             }
 
             PromptResult resumedResult = resumed.prompt(LiveExampleHelper.buildPromptRequest(
-                    runtime.defaultModel(),
                     "What exact phrase did I ask you to remember? Reply with only that phrase.",
                     0));
             LiveExampleHelper.printMessage(System.out, resumedResult);
@@ -46,7 +45,6 @@ public final class PersistentSessionsExample {
     ) throws Exception {
         CodingAgentSession session = runtime.createSession(sessionFile, runtime.workspace());
         PromptResult initialResult = session.prompt(LiveExampleHelper.buildPromptRequest(
-                runtime.defaultModel(),
                 "Remember the exact phrase PERSISTED_SESSION_READY. Reply with only that phrase.",
                 0));
         LiveExampleHelper.printMessage(System.out, initialResult);

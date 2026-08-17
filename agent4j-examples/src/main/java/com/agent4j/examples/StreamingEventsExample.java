@@ -19,7 +19,6 @@ public final class StreamingEventsExample {
             try (EventSubscription ignored = runtime.subscribe(event ->
                     System.out.println("event: " + event.wireName()))) {
                 result = session.prompt(LiveExampleHelper.buildPromptRequest(
-                        runtime.defaultModel(),
                         "Reply with exactly: lifecycle events observed.",
                         0));
             }

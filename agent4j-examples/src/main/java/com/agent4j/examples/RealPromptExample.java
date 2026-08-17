@@ -19,7 +19,6 @@ public final class RealPromptExample {
             PromptResult result;
             try (EventSubscription ignored = LiveExampleHelper.streamAssistantText(runtime, System.out)) {
                 result = session.prompt(LiveExampleHelper.buildPromptRequest(
-                        runtime.defaultModel(),
                         "Reply with exactly one short sentence that says live streaming is working.",
                         0));
             }

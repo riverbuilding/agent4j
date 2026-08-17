@@ -1,6 +1,5 @@
 package com.agent4j.examples;
 
-import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.coding.sdk.CodingAgentSession;
 import com.agent4j.coding.sdk.PromptResult;
@@ -33,13 +32,13 @@ public final class LiveSessionControlExample {
 
             try (BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
                  EventSubscription ignored = subscribe(runtime)) {
-                runCompletionStage(session, executor, input, runtime.defaultModel(), "steering", "/steer ",
+                runCompletionStage(session, executor, input, "steering", "/steer ",
                         "Write twelve short numbered facts about the number twelve, one per line. "
                                 + "Keep generating until all twelve are complete.");
-                runCompletionStage(session, executor, input, runtime.defaultModel(), "follow-up", "/follow-up ",
+                runCompletionStage(session, executor, input, "follow-up", "/follow-up ",
                         "Write twelve short numbered facts about the number thirteen, one per line. "
                                 + "Keep generating until all twelve are complete.");
-                runCancellationStage(session, executor, input, runtime.defaultModel());
+                runCancellationStage(session, executor, input);
             }
         } finally {
             runtime.cleanupOwnedFiles();
@@ -66,13 +65,12 @@ public final class LiveSessionControlExample {
             CodingAgentSession session,
             ExecutorService executor,
             BufferedReader input,
-            AiModelReference model,
             String name,
             String command,
             String prompt
     ) throws Exception {
         System.out.println("\n--- " + name + " ---");
-        RunningPrompt running = start(session, executor, model, prompt);
+        RunningPrompt running = start(session, executor, prompt);
         waitForStreaming(session);
         System.out.println("\nType " + command + "<message> and press Enter now:");
         String message = readCommand(input, command);
@@ -90,7 +88,7 @@ public final class LiveSessionControlExample {
                     throw error;
                 }
                 reportCompletedBeforeControl(running, command);
-                running = restart(session, executor, model, prompt, command);
+                running = restart(session, executor, prompt, command);
             }
         }
     }
@@ -98,19 +96,18 @@ public final class LiveSessionControlExample {
     private static void runCancellationStage(
             CodingAgentSession session,
             ExecutorService executor,
-            BufferedReader input,
-            AiModelReference model
+            BufferedReader input
     ) throws Exception {
         System.out.println("\n--- cancellation ---");
         String prompt = "Write twelve short numbered facts about the number fourteen, one per line. "
                 + "Keep generating until all twelve are complete.";
-        RunningPrompt running = start(session, executor, model, prompt);
+        RunningPrompt running = start(session, executor, prompt);
         waitForStreaming(session);
         System.out.println("\nType /abort and press Enter now:");
         readCommand(input, "/abort");
         while (!session.abort("cancelled by 05-live-session-control")) {
             reportCompletedBeforeControl(running, "/abort");
-            running = restart(session, executor, model, prompt, "/abort");
+            running = restart(session, executor, prompt, "/abort");
         }
         try {
             running.future().get();
@@ -127,12 +124,11 @@ public final class LiveSessionControlExample {
     private static RunningPrompt start(
             CodingAgentSession session,
             ExecutorService executor,
-            AiModelReference model,
             String prompt
     ) {
         Instant started = Instant.now();
         Future<PromptResult> future = executor.submit(() -> session.prompt(
-                LiveExampleHelper.buildPromptRequest(model, prompt, 0)));
+                LiveExampleHelper.buildPromptRequest(prompt, 0)));
         return new RunningPrompt(future, started);
     }
 
@@ -149,12 +145,11 @@ public final class LiveSessionControlExample {
     private static RunningPrompt restart(
             CodingAgentSession session,
             ExecutorService executor,
-            AiModelReference model,
             String prompt,
             String command
     ) throws InterruptedException {
         System.out.println("The stream ended before " + command + " could be applied. Restarting this stage now.");
-        RunningPrompt running = start(session, executor, model, prompt);
+        RunningPrompt running = start(session, executor, prompt);
         waitForStreaming(session);
         return running;
     }

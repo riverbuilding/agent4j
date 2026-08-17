@@ -44,7 +44,6 @@ public final class ResourcesAndCodingToolsExample {
                 }
             })) {
                 result = session.prompt(LiveExampleHelper.buildPromptRequest(
-                        runtime.defaultModel(),
                         "Call the read tool exactly once with path README.md. Then report the project name and explain "
                                 + "that the available tools cannot write files or run commands outside this workspace.",
                         configuration.maxToolRounds(),
