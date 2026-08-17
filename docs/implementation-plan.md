@@ -1035,7 +1035,7 @@ Tasks:
    - The foundation registers no filesystem-writing or process-executing tools.
      Future tool walkthroughs must constrain any side effects to the example
      workspace and document them before execution.
-2. Add progressive real OpenAI walkthroughs. The first eleven are complete.
+2. Add progressive real OpenAI walkthroughs. All twelve are complete.
    - `01-real-prompt` creates the standard OpenAI runtime, sends one prompt,
      prints streaming assistant text and provider usage.
    - `02-streaming-events` reuses the runtime/session setup and renders public
@@ -1065,9 +1065,10 @@ Tasks:
      tool-use prompt. The example guide covers real streaming and tool activity,
      `/status`, `/model`, `/new`, `/resume`, `/follow-up`, `/abort`, and an
      ANSI/plain-terminal manual QA checklist.
-   - `12-reference-application`: combine the preceding pieces in a small,
-     safe workspace coding-assistant application that becomes the recommended
-     onboarding path.
+   - `12-reference-application` is complete: `ReferenceApplicationExample`
+     combines the public production runtime, a persisted session, streaming,
+     discovered workspace resources, and a workspace-scoped read-only tool
+     allowlist into the recommended safe onboarding application.
 3. Validate and close out the examples.
    - Add compile-time/example-structure checks to normal CI.
    - Add environment-gated live verification commands that assert stable facts
@@ -1135,9 +1136,5 @@ Exit criteria:
 
 ## Current Next Actions
 
-1. Continue Phase 12 with `11-interactive-shell`, building directly on
-    the completed prompt, event, no-side-effect tool, persistent-session,
-    live-session-control, resources-and-coding-tools, model-switching, and
-    prompt-model-override, compaction-and-branching, and CLI-modes walkthroughs.
-2. Keep Phase 9 production OAuth verification separate; record live-provider
+1. Keep Phase 9 production OAuth verification separate; record live-provider
    example evidence without treating it as sufficient OAuth closure evidence.

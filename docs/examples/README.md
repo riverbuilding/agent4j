@@ -282,6 +282,44 @@ Manual QA checklist for both runs:
   set `AGENT4J_EXAMPLES_SESSION_DIRECTORY` first if you want to retain the
   JSONL files after the walkthrough.
 
+### 12-reference-application
+
+This is the recommended starting point for a small coding-assistant
+application. It combines the production runtime, a persisted JSONL session,
+streaming output, workspace resources, and a workspace-scoped tool registry.
+It creates a disposable `Lantern Library` workspace and passes its discovered
+instructions to the model. Only `read`, `ls`, `grep`, and `find` are enabled;
+the assistant cannot write, edit, delete, or execute commands, and the path
+policy rejects locations outside that sample workspace.
+
+The default request reads the sample `README.md`. Supply an optional request
+through the Maven example arguments to ask a different read-only question. The
+application requires a tool call, so choose a model that supports function
+calling. Its session path is printed for inspection and is removed on normal
+exit unless you set `AGENT4J_EXAMPLES_SESSION_DIRECTORY`.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ReferenceApplicationExample
+```
+
+For example, inspect the bundled source file while retaining the standard safe
+tool boundary:
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ReferenceApplicationExample \
+  -Dagent4j.liveExample.args="Read src/Library.java and explain its package and class declaration."
+```
+
+The expected observable behavior is a streamed response with `tool started`
+and `tool completed` rows, followed by usage totals. Treat this as the
+onboarding baseline for production applications: replace the sample workspace
+and request text, retain the explicit tool allowlist, and add mutating tools
+only after defining and testing their workspace and user-confirmation policy.
+
 ## Bounds and cost
 
 The walkthroughs pass these defaults from `LiveExampleConfiguration` to
