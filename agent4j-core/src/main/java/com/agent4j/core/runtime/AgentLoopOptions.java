@@ -16,6 +16,7 @@ public record AgentLoopOptions(
         int maxToolRounds,
         int maxModelRetries,
         Optional<Duration> modelTimeout,
+        Optional<String> toolChoice,
         ToolExecutionMode toolExecutionMode,
         List<AgentMessage> promptMessages,
         QueueMode steeringMode,
@@ -37,6 +38,7 @@ public record AgentLoopOptions(
                 throw new IllegalArgumentException("modelTimeout must be positive");
             }
         });
+        toolChoice = toolChoice == null ? Optional.empty() : toolChoice.map(String::strip).filter(value -> !value.isBlank());
         toolExecutionMode = toolExecutionMode == null ? ToolExecutionMode.PARALLEL : toolExecutionMode;
         promptMessages = promptMessages == null ? List.of() : List.copyOf(promptMessages);
         steeringMode = steeringMode == null ? QueueMode.ONE_AT_A_TIME : steeringMode;
@@ -57,6 +59,7 @@ public record AgentLoopOptions(
                 .maxToolRounds(maxToolRounds)
                 .maxModelRetries(maxModelRetries)
                 .modelTimeout(modelTimeout)
+                .toolChoice(toolChoice)
                 .toolExecutionMode(toolExecutionMode)
                 .promptMessages(promptMessages)
                 .steeringMode(steeringMode)
@@ -70,6 +73,7 @@ public record AgentLoopOptions(
         private int maxToolRounds;
         private int maxModelRetries;
         private Optional<Duration> modelTimeout = Optional.empty();
+        private Optional<String> toolChoice = Optional.empty();
         private ToolExecutionMode toolExecutionMode = ToolExecutionMode.PARALLEL;
         private List<AgentMessage> promptMessages = List.of();
         private QueueMode steeringMode = QueueMode.ONE_AT_A_TIME;
@@ -98,6 +102,11 @@ public record AgentLoopOptions(
 
         public Builder modelTimeout(Optional<Duration> modelTimeout) {
             this.modelTimeout = Objects.requireNonNull(modelTimeout, "modelTimeout");
+            return this;
+        }
+
+        public Builder toolChoice(Optional<String> toolChoice) {
+            this.toolChoice = Objects.requireNonNull(toolChoice, "toolChoice");
             return this;
         }
 
@@ -133,6 +142,7 @@ public record AgentLoopOptions(
                     maxToolRounds,
                     maxModelRetries,
                     modelTimeout,
+                    toolChoice,
                     toolExecutionMode,
                     promptMessages,
                     steeringMode,

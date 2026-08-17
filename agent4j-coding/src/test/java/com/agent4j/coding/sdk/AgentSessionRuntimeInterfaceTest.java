@@ -77,6 +77,7 @@ class CodingSdkApiTest {
         assertThat(request.maxToolRounds()).isZero();
         assertThat(request.maxModelRetries()).isZero();
         assertThat(request.modelTimeout()).isEmpty();
+        assertThat(request.toolChoice()).isEmpty();
         assertThat(request.toolExecutionMode()).isEqualTo(ToolExecutionMode.PARALLEL);
         assertThat(request.toolAttributes()).isEmpty();
         assertThat(request.steeringMessages()).isEmpty();
@@ -113,6 +114,26 @@ class CodingSdkApiTest {
         assertThat(request.toolAttributes()).containsEntry("key", "value");
         assertThat(request.steeringMessages()).isEmpty();
         assertThat(request.followUpMessages()).isEmpty();
+    }
+
+    @Test
+    void promptRequestNormalizesToolChoice() {
+        PromptRequest request = new PromptRequest(
+                "hello",
+                Optional.empty(),
+                1,
+                0,
+                Optional.empty(),
+                Optional.of(" required "),
+                null,
+                Map.of(),
+                List.of(),
+                List.of(),
+                null,
+                null,
+                Optional.empty());
+
+        assertThat(request.toolChoice()).contains("required");
     }
 
     @Test

@@ -23,7 +23,8 @@ example, OpenRouter's free-model router is configured as follows:
 export AGENT4J_API_KEY="<your-openrouter-api-key>"
 export AGENT4J_BASE_URL="https://openrouter.ai/api/v1"
 export AGENT4J_MODEL="openai/openrouter/free"
-export AGENT4J_SWITCH_MODEL="openai/meta-llama/llama-3.2-3b-instruct:free"
+# Select a distinct currently available free-model slug before running 07 or 08.
+export AGENT4J_SWITCH_MODEL="openai/<current-free-model>:free"
 ```
 
 The live runtime keeps this credential and base URL only in memory for the
@@ -34,7 +35,9 @@ configured URL must expose the OpenAI Responses endpoint at `/responses`.
 It must use `provider/model` form; for OpenRouter-compatible calls the provider
 is `openai` and the remainder is OpenRouter's exact model ID. Choose models
 currently available to your account, including `:free` variants when using an
-OpenRouter free-tier key.
+OpenRouter free-tier key. Free-model availability changes frequently: query
+[OpenRouter's model catalog](https://openrouter.ai/api/v1/models) and select an
+ID whose prompt and completion pricing are both zero before each walkthrough.
 
 Choose a model enabled for your account. The [official OpenAI model
 guidance](https://developers.openai.com/api/docs/guides/latest-model) recommends

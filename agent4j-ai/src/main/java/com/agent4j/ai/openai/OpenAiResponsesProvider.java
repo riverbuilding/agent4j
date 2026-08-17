@@ -168,7 +168,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
                 case AiSystemMessage ignored -> {
                 }
                 case AiUserMessage user -> input.add(message("user", user.content()));
-                case AiAssistantMessage assistant -> input.add(message("assistant", assistant.content()));
+                case AiAssistantMessage assistant -> assistantInput(input, assistant.content());
                 case AiToolResultMessage toolResult -> {
                     ObjectNode node = JSON.objectNode()
                             .put("type", "function_call_output")
@@ -184,11 +184,40 @@ public final class OpenAiResponsesProvider implements AiProvider {
         return input;
     }
 
+    private static void assistantInput(ArrayNode input, List<AiContentBlock> blocks) {
+        ArrayNode textContent = JSON.arrayNode();
+        for (AiContentBlock block : blocks) {
+            if (block instanceof AiToolCallContent toolCall) {
+                addAssistantMessage(input, textContent);
+                input.add(JSON.objectNode()
+                        .put("type", "function_call")
+                        .put("call_id", toolCall.id())
+                        .put("name", toolCall.name())
+                        .put("arguments", toolCall.arguments().toString()));
+            } else if (block instanceof AiTextContent text) {
+                textContent.add(JSON.objectNode()
+                        .put("type", "output_text")
+                        .put("text", text.text()));
+            }
+        }
+        addAssistantMessage(input, textContent);
+    }
+
+    private static void addAssistantMessage(ArrayNode input, ArrayNode content) {
+        if (!content.isEmpty()) {
+            input.add(JSON.objectNode()
+                    .put("type", "message")
+                    .put("role", "assistant")
+                    .set("content", content));
+        }
+    }
+
     private static ObjectNode message(String role, List<AiContentBlock> content) {
-        return JSON.objectNode()
+        ObjectNode message = JSON.objectNode()
                 .put("type", "message")
-                .put("role", role)
-                .set("content", openAiContent(content));
+                .put("role", role);
+        message.set("content", openAiContent(content));
+        return message;
     }
 
     private static ArrayNode openAiContent(List<AiContentBlock> blocks) {
@@ -205,7 +234,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
                         .put("type", "input_text")
                         .put("text", thinking.thinking()));
                 case AiToolCallContent toolCall -> content.add(JSON.objectNode()
-                        .put("type", "output_text")
+                        .put("type", "input_text")
                         .put("text", toolCall.name() + "(" + toolCall.arguments() + ")"));
             }
         }
@@ -277,8 +306,8 @@ public final class OpenAiResponsesProvider implements AiProvider {
                 case "response.reasoning_text.done", "response.reasoning_summary_text.done" -> thinkingDone(event);
                 case "response.function_call_arguments.delta" -> functionCallDelta(event);
                 case "response.function_call_arguments.done" -> functionCallDone(event);
-                case "response.completed", "response.done" -> completed(event);
-                case "response.failed", "response.incomplete", "response.error", "error" -> error(event);
+                case "response.completed", "response.done", "response.incomplete" -> completed(event);
+                case "response.failed", "response.error", "error" -> error(event);
                 default -> {
                 }
             }

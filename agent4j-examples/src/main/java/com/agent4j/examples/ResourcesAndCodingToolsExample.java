@@ -43,7 +43,7 @@ public final class ResourcesAndCodingToolsExample {
                     System.out.println("Tool result: " + ended.result().content());
                 }
             })) {
-                result = session.prompt(LiveExampleHelper.buildPromptRequest(
+                result = session.prompt(LiveExampleHelper.buildToolRequiredPromptRequest(
                         "Call the read tool exactly once with path README.md. Then report the project name and explain "
                                 + "that the available tools cannot write files or run commands outside this workspace.",
                         configuration.maxToolRounds(),

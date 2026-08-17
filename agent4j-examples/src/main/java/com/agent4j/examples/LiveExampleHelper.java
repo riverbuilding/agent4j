@@ -55,6 +55,7 @@ final class LiveExampleHelper {
                 maxToolRounds,
                 0,
                 Optional.empty(),
+                Optional.empty(),
                 null,
                 java.util.Map.of(),
                 java.util.List.of(),
@@ -63,6 +64,28 @@ final class LiveExampleHelper {
                 null,
                 Optional.empty(),
                 systemPrompt);
+    }
+
+    static PromptRequest buildToolRequiredPromptRequest(
+            String prompt,
+            int maxToolRounds,
+            String systemPrompt
+    ) {
+        return new PromptRequest(
+                prompt,
+                Optional.empty(),
+                maxToolRounds,
+                0,
+                Optional.empty(),
+                Optional.of("required"),
+                null,
+                java.util.Map.of(),
+                java.util.List.of(),
+                java.util.List.of(),
+                null,
+                null,
+                Optional.empty(),
+                Optional.of(systemPrompt));
     }
 
     static EventSubscription streamAssistantText(CodingAgentRuntime runtime, PrintStream output) {

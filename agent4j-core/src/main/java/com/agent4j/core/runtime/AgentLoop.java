@@ -2,6 +2,7 @@ package com.agent4j.core.runtime;
 
 import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiAbortSignal;
+import com.agent4j.ai.AiGenerationOptions;
 import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiProvider;
 import com.agent4j.ai.AiProviderContext;
@@ -563,6 +564,14 @@ public final class AgentLoop {
                 request.modelTimeout(),
                 0,
                 Map.of(),
-                Map.of());
+                Map.of(),
+                new AiGenerationOptions(
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        request.options().toolChoice(),
+                        true,
+                        Map.of()));
     }
 }

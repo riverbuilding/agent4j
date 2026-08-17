@@ -171,6 +171,7 @@ public final class CodingAgentSession implements AgentSession {
                         .maxToolRounds(request.maxToolRounds())
                         .maxModelRetries(request.maxModelRetries())
                         .modelTimeout(request.modelTimeout())
+                        .toolChoice(request.toolChoice())
                         .toolExecutionMode(request.toolExecutionMode())
                         .promptMessages(List.of(promptMessage))
                         .steeringMode(request.steeringMode())

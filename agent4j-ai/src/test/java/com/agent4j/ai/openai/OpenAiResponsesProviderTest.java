@@ -51,6 +51,11 @@ class OpenAiResponsesProviderTest {
                         List.of(
                                 new AiSystemMessage("Follow project instructions."),
                                 AiUserMessage.text("Read README.md"),
+                                new AiAssistantMessage(
+                                        List.of(new AiToolCallContent(
+                                                "call-1", "read", JSON.objectNode().put("path", "README.md"))),
+                                        AiStopReason.TOOL_USE,
+                                        AiUsage.zero()),
                                 new AiToolResultMessage(
                                         "call-1",
                                         "read",
@@ -67,11 +72,15 @@ class OpenAiResponsesProviderTest {
         assertThat(body.get("model").asText()).isEqualTo("gpt-5");
         assertThat(body.get("stream").asBoolean()).isTrue();
         assertThat(body.get("instructions").asText()).isEqualTo("Follow project instructions.");
-        assertThat(body.get("input")).hasSize(2);
+        assertThat(body.get("input")).hasSize(3);
         assertThat(body.at("/input/0/role").asText()).isEqualTo("user");
         assertThat(body.at("/input/0/content/0/type").asText()).isEqualTo("input_text");
-        assertThat(body.at("/input/1/type").asText()).isEqualTo("function_call_output");
+        assertThat(body.at("/input/1/type").asText()).isEqualTo("function_call");
         assertThat(body.at("/input/1/call_id").asText()).isEqualTo("call-1");
+        assertThat(body.at("/input/1/name").asText()).isEqualTo("read");
+        assertThat(body.at("/input/1/arguments").asText()).isEqualTo("{\"path\":\"README.md\"}");
+        assertThat(body.at("/input/2/type").asText()).isEqualTo("function_call_output");
+        assertThat(body.at("/input/2/call_id").asText()).isEqualTo("call-1");
         assertThat(body.at("/tools/0/type").asText()).isEqualTo("function");
         assertThat(body.at("/tools/0/name").asText()).isEqualTo("read");
         assertThat(body.at("/tool_choice").asText()).isEqualTo("auto");
@@ -371,6 +380,29 @@ class OpenAiResponsesProviderTest {
 
         assertThat(events).containsExactly(new AiStreamEvent.MessageStarted("response"),
                 new AiStreamEvent.MessageErrored("response", "upstream unavailable"));
+    }
+
+    @Test
+    void completesAnIncompleteResponseWithTheLengthStopReason() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("openai", "openrouter/free"), "OpenRouter Free");
+        CapturingTransport transport = new CapturingTransport(List.of(
+                "data: {\"type\":\"response.created\",\"response\":{\"id\":\"res_1\"}}",
+                "data: {\"type\":\"response.content_part.delta\",\"item_id\":\"msg_1\",\"output_index\":0,\"delta\":\"Hello\"}",
+                "data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"res_1\",\"status\":\"incomplete\",\"usage\":{}}}"));
+        OpenAiResponsesProvider provider = new OpenAiResponsesProvider(
+                OpenAiResponsesProviderOptions.defaults(List.of(model)), transport);
+        List<AiStreamEvent> events = new ArrayList<>();
+
+        provider.stream(new AiProviderRequest(
+                model,
+                new AiTurnRequest(List.of(AiUserMessage.text("hello")), List.of()),
+                AiProviderContext.empty(),
+                AiStreamOptions.defaults()), events::add);
+
+        assertThat(events.getLast()).isInstanceOfSatisfying(AiStreamEvent.MessageCompleted.class, event -> {
+            assertThat(event.message().content()).containsExactly(new AiTextContent("Hello"));
+            assertThat(event.message().stopReason()).isEqualTo(AiStopReason.LENGTH);
+        });
     }
 
     private static final class CapturingTransport implements OpenAiTransport {
