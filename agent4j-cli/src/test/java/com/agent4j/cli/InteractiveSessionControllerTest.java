@@ -42,6 +42,22 @@ class InteractiveSessionControllerTest {
         }
     }
 
+    @Test
+    void promptModelUsesTheSessionSelectedModel() throws Exception {
+        CliRuntime runtime = runtime();
+        CliSessionLifecycle lifecycle = new CliSessionLifecycle(runtime, environment(), new CliSessionOptions(
+                false, false, false, Optional.empty(), Optional.empty(), Optional.empty(),
+                Optional.of(temporaryDirectory.resolve("sessions")), Optional.empty()));
+        var session = lifecycle.open();
+        InteractiveTerminal terminal = new InteractiveTerminal(new StringReader(""), new PrintWriter(new StringWriter()), new PrintWriter(new StringWriter()));
+
+        try (InteractiveSessionController controller = new InteractiveSessionController(runtime, lifecycle, session, terminal)) {
+            controller.selectModel("gpt-next");
+
+            assertThat(controller.promptModel()).contains(new AiModelReference("openai", "gpt-next"));
+        }
+    }
+
     private CliRuntime runtime() throws Exception {
         CliEnvironment environment = environment();
         Files.createDirectories(environment.cwd());
