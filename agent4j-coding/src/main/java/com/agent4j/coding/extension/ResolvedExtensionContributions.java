@@ -8,6 +8,7 @@ public record ResolvedExtensionContributions(
         List<ExtensionHookContribution> hooks,
         List<ExtensionAgentStartHookContribution> agentStartHooks,
         List<ExtensionContextTransformHookContribution> contextTransformHooks,
+        List<ExtensionProviderHookContribution> providerHooks,
         List<ExtensionCommandContribution> commands,
         List<ExtensionLifecycleListenerContribution> lifecycleListeners
 ) {
@@ -16,6 +17,7 @@ public record ResolvedExtensionContributions(
         hooks = List.copyOf(hooks);
         agentStartHooks = List.copyOf(agentStartHooks);
         contextTransformHooks = List.copyOf(contextTransformHooks);
+        providerHooks = List.copyOf(providerHooks);
         commands = List.copyOf(commands);
         lifecycleListeners = List.copyOf(lifecycleListeners);
     }

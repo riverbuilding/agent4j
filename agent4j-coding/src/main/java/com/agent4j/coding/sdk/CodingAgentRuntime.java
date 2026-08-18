@@ -16,6 +16,7 @@ import com.agent4j.coding.extension.ExtensionContextTransformHookContribution;
 import com.agent4j.coding.extension.ExtensionLoadException;
 import com.agent4j.coding.extension.ExtensionLoader;
 import com.agent4j.coding.extension.ExtensionLifecycleDispatcher;
+import com.agent4j.coding.extension.ExtensionProviderHookContribution;
 import com.agent4j.coding.extension.ExtensionLifecycleListenerContribution;
 import com.agent4j.coding.extension.ExtensionSessionContext;
 import com.agent4j.coding.extension.ExtensionSessionMetadata;
@@ -56,6 +57,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
     private final List<ExtensionAgentStartHookContribution> agentStartHooks;
     private final List<ExtensionContextTransformHookContribution> contextTransformHooks;
     private final List<ExtensionLifecycleListenerContribution> lifecycleListeners;
+    private final List<ExtensionProviderHookContribution> providerHooks;
     private final AgentMessageConverter messageConverter;
     private final Clock clock;
     private final CodingSessionCompactor sessionCompactor;
@@ -79,6 +81,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
         this.agentStartHooks = state.agentStartHooks();
         this.contextTransformHooks = state.contextTransformHooks();
         this.lifecycleListeners = state.lifecycleListeners();
+        this.providerHooks = state.providerHooks();
         this.messageConverter = state.messageConverter();
         this.clock = state.clock();
         this.sessionCompactor = state.sessionCompactor();
@@ -308,7 +311,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
                 toolExecutionHooks,
                 agentStartHooks,
                 contextTransformHooks,
-                context);
+                context,
+                providerHooks);
     }
 
     private static Path sessionCwd(SessionManager manager) {
@@ -489,6 +493,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
                     contributions.agentStartHooks(),
                     contributions.contextTransformHooks(),
                     contributions.lifecycleListeners(),
+                    contributions.providerHooks(),
                     messageConverter == null ? CodingAgentMessageConverter.INSTANCE : messageConverter,
                     resolvedClock,
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
@@ -506,6 +511,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
             List<ExtensionAgentStartHookContribution> agentStartHooks,
             List<ExtensionContextTransformHookContribution> contextTransformHooks,
             List<ExtensionLifecycleListenerContribution> lifecycleListeners,
+            List<ExtensionProviderHookContribution> providerHooks,
             AgentMessageConverter messageConverter,
             Clock clock,
             CodingSessionCompactor sessionCompactor,

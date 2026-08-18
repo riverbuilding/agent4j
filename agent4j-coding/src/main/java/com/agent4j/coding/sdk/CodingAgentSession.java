@@ -11,6 +11,8 @@ import com.agent4j.coding.extension.ExtensionContext;
 import com.agent4j.coding.extension.ExtensionContextTransformHookContribution;
 import com.agent4j.coding.extension.ExtensionPromptHookDispatcher;
 import com.agent4j.coding.extension.ExtensionSessionOperation;
+import com.agent4j.coding.extension.ExtensionProviderHookContribution;
+import com.agent4j.coding.extension.ExtensionProviderHookDispatcher;
 import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionHeader;
 import com.agent4j.coding.session.SessionManager;
@@ -50,6 +52,7 @@ public final class CodingAgentSession implements AgentSession {
     private final List<ExtensionAgentStartHookContribution> agentStartHooks;
     private final List<ExtensionContextTransformHookContribution> contextTransformHooks;
     private final ExtensionContext extensionContext;
+    private final List<ExtensionProviderHookContribution> providerHooks;
     private AgentConversationContext conversationContext;
     private boolean closed;
     private final AtomicReference<ActivePrompt> activePrompt = new AtomicReference<>();
@@ -62,7 +65,8 @@ public final class CodingAgentSession implements AgentSession {
             List<ToolExecutionHook> toolExecutionHooks,
             List<ExtensionAgentStartHookContribution> agentStartHooks,
             List<ExtensionContextTransformHookContribution> contextTransformHooks,
-            ExtensionContext extensionContext
+            ExtensionContext extensionContext,
+            List<ExtensionProviderHookContribution> providerHooks
     ) {
         this.runtime = Objects.requireNonNull(runtime, "runtime");
         this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
@@ -72,6 +76,7 @@ public final class CodingAgentSession implements AgentSession {
         this.agentStartHooks = List.copyOf(agentStartHooks);
         this.contextTransformHooks = List.copyOf(contextTransformHooks);
         this.extensionContext = Objects.requireNonNull(extensionContext, "extensionContext");
+        this.providerHooks = List.copyOf(providerHooks);
     }
 
     @Override
@@ -192,7 +197,8 @@ public final class CodingAgentSession implements AgentSession {
     private AiProviderSelection providerSelection(PromptRequest request) {
         AiProviderRegistry registry = runtime.optionalProviderRegistry()
                 .orElseThrow(() -> new IllegalStateException("provider registry is not configured"));
-        return request.model().map(registry::require).orElseGet(registry::requireDefault);
+        AiProviderSelection selection = request.model().map(registry::require).orElseGet(registry::requireDefault);
+        return new AiProviderSelection(ExtensionProviderHookDispatcher.wrap(selection.provider(), providerHooks), selection.model());
     }
 
     private AgentLoopRequest loopRequest(
