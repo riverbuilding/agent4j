@@ -1148,7 +1148,124 @@ Exit criteria:
 
 - Explicit ADR documents the compatibility level and security model.
 
+## Phase 15: Simple-Project Coding Agent
+
+Goal: operate agent4j as a small, reliable coding agent for simple projects.
+The agent must inspect a workspace, modify code, run verification, repair a
+simple failure, and report the outcome. This phase is intentionally narrower
+than full PI provider, package, and terminal parity; see
+`docs/pi-mini-coding-agent-parity-audit.md`.
+
+### Slice 1: Default coding-agent system prompt
+
+- Add a versioned built-in coding-agent prompt that establishes workspace
+  boundaries, inspect-before-edit behavior, tool use, verification, failure
+  handling, and concise final reporting.
+- Build selected-tool guidance from the active `ToolRegistry`.
+- Define prompt composition and precedence for the built-in prompt, global or
+  project `SYSTEM.md` replacement, `APPEND_SYSTEM.md`, `AGENTS.md` context,
+  eligible skills, and explicit caller/CLI prompt overrides.
+- Wire the resolved prompt into print, JSON, RPC, and interactive
+  `PromptRequest` creation.
+- Add OpenAI and Anthropic provider-request tests that assert the composed
+  system prompt is sent and is not persisted in session JSONL.
+
+Closeout: complete. `DefaultCodingSystemPrompt` provides the versioned
+`agent4j-coding-v1` baseline. `SystemPromptBuilder` composes system-prompt
+replacement, PI-style selected-tool listing and conditional guidelines, append
+prompts, context files, and eligible skills. The CLI passes the resolved prompt through print, JSON, RPC,
+and interactive requests; `--system-prompt` and repeatable
+`--append-system-prompt` provide explicit overrides. Tests cover composition,
+CLI construction, prompt requests, and OpenAI/Anthropic request serialization.
+
+### Slice 2: Runtime resource and prompt integration
+
+- Move resolved resource/prompt ownership behind a coding runtime preparation
+  boundary rather than leaving it as a CLI-only discovery result.
+- Ensure new, resumed, forked, and replaced sessions use the selected
+  workspace's resources and existing project-trust policy.
+- Add `--system-prompt` and `--append-system-prompt` with documented
+  precedence and validation.
+- Test project trust, resource precedence, session replacement, and all CLI
+  execution modes.
+
+### Slice 3: Tool reliability baseline
+
+- Drain bash stdout and stderr concurrently while retaining timeout and abort
+  behavior.
+- Reject ambiguous edits before writing.
+- Add bounded read offset/limit and line-number behavior for large files.
+- Define default coding, read-only, and full tool profiles; default coding is
+  `read`, `write`, `edit`, and `bash`.
+- Make search behavior `.gitignore` aware where practical, and prevent
+  symlink-based escapes from the workspace.
+- Add deterministic tool tests for output pressure, edit safety, path safety,
+  and profile selection.
+
+### Slice 4: Deterministic mini-agent acceptance fixture
+
+- Add a small fixture project containing one incomplete feature or intentional
+  test failure.
+- Drive the public CLI/runtime path with a scripted fake provider that inspects
+  files, edits code, runs a test/build command, repairs the failure, and emits
+  a final summary.
+- Assert changed files, tool sequence, verification result, persisted session,
+  and final assistant report.
+
+### Slice 5: Real-provider smoke validation
+
+- Reuse the acceptance fixture in credential-gated OpenAI and Anthropic smoke
+  tests.
+- Run inside an isolated temporary project, cap tool rounds/tokens, clean up
+  all generated files, and never log credentials.
+- Record provider/model, elapsed time, tool calls, changed files, and
+  verification result as live evidence without asserting exact prose.
+- Keep the tests out of normal CI.
+
+### Slice 6: Practical provider expansion
+
+- Add a configurable OpenAI-compatible provider adapter with base URL,
+  headers, credentials, model capabilities, and model listing.
+- Preserve native OpenAI and Anthropic behavior.
+- Add further native providers according to user demand, beginning with the
+  highest-leverage providers after the compatible adapter.
+- Keep model catalog data separate from provider transports so catalog updates
+  do not require adapter code changes.
+
+### Slice 7: Essential CLI usability
+
+- Add piped stdin and automatic non-TTY print behavior.
+- Support text `@file` prompt inclusion; defer image attachments unless they
+  become necessary for the acceptance fixture.
+- Expose prompt templates and explicit model listing.
+- Add basic interactive history, completion, and multiline input only where
+  needed by normal coding-agent operation.
+
+### Explicit deferrals
+
+The following are not prerequisites for this phase:
+
+- complete PI provider/model catalog parity;
+- TypeScript extensions, PI packages, package installation, or dynamic
+  project-code loading;
+- rich TUI and full editor fidelity;
+- extension widgets and project trust dialogs;
+- a complete permission-policy engine, sandbox, subagents, or advanced
+  orchestration.
+
+Exit criteria:
+
+- The deterministic fixture proves an agent can complete a bounded coding task
+  through the public CLI/runtime path.
+- At least one real OpenAI model and one real Anthropic model complete the
+  opt-in smoke fixture within documented resource limits.
+- The default prompt, project instructions, selected-tool guidance, and trust
+  policy are observable in provider-request tests.
+- Coding tools meet the documented reliability baseline.
+
 ## Current Next Actions
 
-1. Keep Phase 9 production OAuth verification separate; record live-provider
+1. Start Phase 15 Slice 1: default coding-agent system prompt and CLI/runtime
+   prompt wiring.
+2. Keep Phase 9 production OAuth verification separate; record live-provider
    example evidence without treating it as sufficient OAuth closure evidence.

@@ -16,11 +16,21 @@ final class CliPromptRequestFactory {
     }
 
     static PromptRequest create(String prompt, Optional<AiModelReference> model, Optional<AbortSignal> abortSignal) {
+        return create(prompt, model, abortSignal, "");
+    }
+
+    static PromptRequest create(
+            String prompt,
+            Optional<AiModelReference> model,
+            Optional<AbortSignal> abortSignal,
+            String systemPrompt
+    ) {
         return new PromptRequest(
                 Objects.requireNonNull(prompt, "prompt"),
                 model == null ? Optional.empty() : model,
                 DEFAULT_MAX_TOOL_ROUNDS,
                 0,
+                Optional.empty(),
                 Optional.empty(),
                 null,
                 java.util.Map.of(),
@@ -28,6 +38,7 @@ final class CliPromptRequestFactory {
                 List.of(),
                 null,
                 null,
-                abortSignal == null ? Optional.empty() : abortSignal);
+                abortSignal == null ? Optional.empty() : abortSignal,
+                Optional.ofNullable(systemPrompt).map(String::strip).filter(value -> !value.isEmpty()));
     }
 }

@@ -61,7 +61,8 @@ public final class PrintModeRunner {
             } else {
                 session = lifecycle.open();
             }
-            PromptResult result = session.prompt(CliPromptRequestFactory.create(prompt, runtime.promptModel(), abortSignal));
+            PromptResult result = session.prompt(CliPromptRequestFactory.create(
+                    prompt, runtime.promptModel(), abortSignal, runtime.systemPrompt()));
             finalAssistantText(result).ifPresent(out::println);
             return 0;
         } catch (Exception error) {

@@ -1,10 +1,14 @@
 package com.agent4j.coding.resource;
 
+import com.agent4j.core.tool.ToolSpec;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -53,27 +57,59 @@ class SystemPromptBuilderTest {
                 "project system",
                 "global append",
                 "project append",
-                "<context-files>",
-                "global &lt;context&gt;",
+                "<project_context>",
+                "global <context>",
                 "project context",
-                "<skills>",
-                "name=\"review\"",
+                "<available_skills>",
+                "<name>review</name>",
                 "Review files &lt;carefully&gt;.");
         assertThat(prompt).doesNotContain("global system");
-        assertThat(prompt).doesNotContain("name=\"manual\"");
+        assertThat(prompt).doesNotContain("<name>manual</name>");
         assertThat(prompt).doesNotContain("Manual-only skill");
-        assertThat(prompt).contains("allowed-tools=\"read bash\"");
-        assertThat(prompt).contains("<compatibility>Requires repo checkout.</compatibility>");
+        assertThat(prompt).contains("<location>");
     }
 
     @Test
-    void returnsEmptyPromptWhenNoSystemInputsAreDiscovered() throws Exception {
+    void buildsTheVersionedDefaultPromptWhenNoSystemInputsAreDiscovered() throws Exception {
         Path home = tempDir.resolve("home");
         Path cwd = tempDir.resolve("repo");
 
         ResourceDiscovery discovery = loader.discover(ResourceDiscoveryOptions.enabled(home, cwd));
 
-        assertThat(builder.build(discovery)).isEmpty();
+        assertThat(builder.build(discovery))
+                .contains(DefaultCodingSystemPrompt.VERSION)
+                .contains("You are an expert coding assistant")
+                .contains("Available tools:")
+                .contains("Be concise in your responses")
+                .contains("Current working directory:");
+    }
+
+    @Test
+    void appliesExplicitOverrideUsingPiCustomPromptRules() throws Exception {
+        Path home = tempDir.resolve("home");
+        Path cwd = tempDir.resolve("repo");
+        write(cwd.resolve(".pi/SYSTEM.md"), "project replacement");
+        write(cwd.resolve(".pi/APPEND_SYSTEM.md"), "project append");
+        write(cwd.resolve("AGENTS.md"), "project context");
+        ResourceDiscovery discovery = loader.discover(ResourceDiscoveryOptions.enabled(home, cwd));
+
+        String prompt = builder.build(
+                discovery,
+                List.of(
+                        new ToolSpec("read", "Read a workspace file.", JsonNodeFactory.instance.objectNode()),
+                        new ToolSpec("bash", "Run a workspace command.", JsonNodeFactory.instance.objectNode())),
+                Optional.of("CLI replacement"),
+                List.of("CLI append"));
+
+        assertThat(prompt).contains("CLI replacement", "CLI append", "project append", "project context");
+        assertThat(prompt).doesNotContain("project replacement");
+        assertThat(prompt).doesNotContain(DefaultCodingSystemPrompt.VERSION);
+        assertInOrder(prompt,
+                "CLI replacement",
+                "project append",
+                "CLI append",
+                "<project_context>",
+                "Current working directory:");
     }
 
     private static void assertInOrder(String value, String... parts) {

@@ -64,6 +64,9 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     private List<String> excludedTools = new ArrayList<>();
     @Option(names = {"--no-tools", "-nt"}, description = "Disable all tools") private boolean noTools;
     @Option(names = {"--no-builtin-tools", "-nbt"}, description = "Disable built-in tools") private boolean noBuiltinTools;
+    @Option(names = "--system-prompt", description = "Replace the default system prompt") private String systemPrompt;
+    @Option(names = "--append-system-prompt", description = "Append instructions to the system prompt")
+    private List<String> appendSystemPrompts = new ArrayList<>();
 
     @Option(names = {"--continue", "-c"}) private boolean continueSession;
     @Option(names = {"--resume", "-r"}) private boolean resume;
@@ -140,7 +143,9 @@ public final class Agent4jRootCommand implements Callable<Integer> {
                         includedTools.isEmpty() ? Optional.empty() : Optional.of(includedTools),
                         excludedTools,
                         noTools,
-                        noBuiltinTools));
+                        noBuiltinTools),
+                Optional.ofNullable(systemPrompt),
+                appendSystemPrompts);
     }
 
     CliRuntimeFactory runtimeFactory() {

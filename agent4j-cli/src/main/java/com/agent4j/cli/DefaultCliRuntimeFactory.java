@@ -4,6 +4,7 @@ import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
+import com.agent4j.coding.resource.SystemPromptBuilder;
 import com.agent4j.coding.sdk.ApiKeyLoginRequest;
 import com.agent4j.coding.sdk.AuthCredentialStore;
 import com.agent4j.coding.sdk.CodingAgentRuntime;
@@ -75,14 +76,20 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
         if (request.apiKey().isPresent() && requestedProvider.isEmpty()) {
             loginService.loginApiKey(new ApiKeyLoginRequest(model.providerId(), request.apiKey().orElseThrow(), request.baseUrl()));
         }
+        ToolRegistry selectedTools = CliToolSelector.select(toolRegistry, request.toolSelection());
+        String systemPrompt = new SystemPromptBuilder().build(
+                discovery,
+                selectedTools.specs(),
+                request.systemPrompt(),
+                request.appendSystemPrompts());
         CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .providerRegistry(modelRuntime.registry(model))
                 .loginService(loginService)
                 .clock(clock)
-                .toolRegistry(CliToolSelector.select(toolRegistry, request.toolSelection()))
+                .toolRegistry(selectedTools)
                 .build();
 
-        return new CliRuntime(runtime, discovery, model, runtime.optionalProviderRegistry());
+        return new CliRuntime(runtime, discovery, model, runtime.optionalProviderRegistry(), systemPrompt);
     }
 
 }

@@ -201,7 +201,7 @@ public final class RpcModeRunner {
 
     private static void runPrompt(String message, State state) throws Exception {
         state.session.get().prompt(CliPromptRequestFactory.create(
-                message, state.runtime.promptModel(), Optional.empty()));
+                message, state.runtime.promptModel(), Optional.empty(), state.runtime.systemPrompt()));
     }
 
     private void newSession(JsonNode id, State state) throws Exception {

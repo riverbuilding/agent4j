@@ -1,6 +1,7 @@
 package com.agent4j.cli;
 
 import com.agent4j.ai.AiAssistantMessage;
+import com.agent4j.ai.AiSystemMessage;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiTextContent;
@@ -50,6 +51,13 @@ class PrintModeRunnerTest {
         assertThat(stdout.toString()).isEqualTo("print answer\n");
         assertThat(stderr.toString()).isEmpty();
         assertThat(model.requests()).hasSize(1);
+        assertThat(model.requests().getFirst().messages())
+                .filteredOn(AiSystemMessage.class::isInstance)
+                .extracting(AiSystemMessage.class::cast)
+                .extracting(AiSystemMessage::content)
+                .singleElement()
+                .asString()
+                .contains("agent4j-coding-v1");
         assertThat(noTemporarySessions()).isTrue();
     }
 

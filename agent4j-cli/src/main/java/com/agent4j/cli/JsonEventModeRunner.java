@@ -70,7 +70,8 @@ public final class JsonEventModeRunner {
                 out.println(serializer.serialize(serializer.event(event)));
                 out.flush();
             });
-            session.prompt(CliPromptRequestFactory.create(prompt, runtime.promptModel(), abortSignal));
+            session.prompt(CliPromptRequestFactory.create(
+                    prompt, runtime.promptModel(), abortSignal, runtime.systemPrompt()));
             return 0;
         } catch (Exception error) {
             err.println("Error: " + error.getMessage());

@@ -76,7 +76,7 @@ class CodingAgentLoopRequestPreparerTest {
                 .contains("project system")
                 .contains("global append")
                 .contains("project context")
-                .contains("name=\"review\"");
+                .contains("<name>review</name>");
         assertThat(prepared.request().messages()).containsExactly(user);
         assertThat(prepared.request().promptMessages()).containsExactly(user);
         assertThat(prepared.request().liveQueues().size(QueueKind.STEER)).isEqualTo(1);
@@ -88,7 +88,7 @@ class CodingAgentLoopRequestPreparerTest {
     }
 
     @Test
-    void preservesNullSystemPromptWhenNoResourcesAreDiscovered() throws Exception {
+    void appliesTheDefaultSystemPromptWhenNoResourcesAreDiscovered() throws Exception {
         Path home = tempDir.resolve("home");
         Path cwd = tempDir.resolve("repo");
         AgentMessage user = message("user-1", AgentMessageRole.USER, "hello");
@@ -107,7 +107,7 @@ class CodingAgentLoopRequestPreparerTest {
 
         PreparedAgentLoopRequest prepared = new CodingAgentLoopRequestPreparer().prepare(request, home);
 
-        assertThat(prepared.request().systemPrompt()).isNull();
+        assertThat(prepared.request().systemPrompt()).contains("agent4j-coding-v1");
         assertThat(prepared.discovery().contextFiles()).isEmpty();
     }
 

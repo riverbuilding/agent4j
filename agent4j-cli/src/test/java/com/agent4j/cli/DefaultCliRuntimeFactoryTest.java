@@ -9,6 +9,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -106,5 +107,57 @@ class DefaultCliRuntimeFactoryTest {
                 Optional.empty()));
 
         assertThat(runtime.defaultModel().displayName()).isEqualTo("anthropic/claude");
+    }
+
+    @Test
+    void buildsTheDefaultCodingPromptWithProjectInstructionsAndSelectedTools() throws Exception {
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace);
+        Files.writeString(workspace.resolve("AGENTS.md"), "project instruction");
+        DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
+                new ResourceLoader(),
+                new InMemoryAuthCredentialStore(),
+                CodingTools.localDefaults().registry(),
+                Clock.systemUTC());
+
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                workspace,
+                temporaryDirectory.resolve("home"),
+                Optional.of("openai"),
+                Optional.of("gpt-5"),
+                Optional.empty(),
+                Optional.empty(),
+                CliToolSelection.defaults(),
+                Optional.empty(),
+                List.of()));
+
+        assertThat(runtime.systemPrompt())
+                .contains("agent4j-coding-v1", "project instruction", "read: Read a UTF-8 text file from the workspace.");
+    }
+
+    @Test
+    void letsExplicitCliPromptsReplaceAndAppendToTheDiscoveredSystemPrompt() throws Exception {
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace.resolve(".pi"));
+        Files.writeString(workspace.resolve(".pi/SYSTEM.md"), "project replacement");
+        DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
+                new ResourceLoader(),
+                new InMemoryAuthCredentialStore(),
+                CodingTools.localDefaults().registry(),
+                Clock.systemUTC());
+
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                workspace,
+                temporaryDirectory.resolve("home"),
+                Optional.of("openai"),
+                Optional.of("gpt-5"),
+                Optional.empty(),
+                Optional.empty(),
+                CliToolSelection.defaults(),
+                Optional.of("CLI replacement"),
+                List.of("CLI append")));
+
+        assertThat(runtime.systemPrompt()).contains("CLI replacement", "CLI append");
+        assertThat(runtime.systemPrompt()).doesNotContain("project replacement", "agent4j-coding-v1");
     }
 }

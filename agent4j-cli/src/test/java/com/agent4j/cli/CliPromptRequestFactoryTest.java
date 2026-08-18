@@ -28,4 +28,11 @@ class CliPromptRequestFactoryTest {
         assertThat(request.followUpMode()).isEqualTo(QueueMode.ONE_AT_A_TIME);
         assertThat(request.abortSignal()).containsSame(signal);
     }
+
+    @Test
+    void carriesTheResolvedSystemPromptIntoEveryCliPromptRequest() {
+        assertThat(CliPromptRequestFactory.create(
+                "inspect the project", Optional.empty(), Optional.empty(), "resolved coding prompt").systemPrompt())
+                .contains("resolved coding prompt");
+    }
 }
