@@ -1,5 +1,6 @@
 package com.agent4j.cli;
 
+import com.agent4j.coding.extension.CodingExtensionContext;
 import com.agent4j.coding.session.SessionManager;
 
 import java.io.BufferedReader;
@@ -19,7 +20,7 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
         BufferedReader reader = terminal.input() instanceof BufferedReader buffered
                 ? buffered
                 : new BufferedReader(terminal.input());
-        InteractiveCommandRegistry registry = createCommandRegistry(controller, terminal, reader);
+        InteractiveCommandDispatcher registry = createCommandRegistry(controller, terminal, reader);
         try (ExecutorService prompts = Executors.newSingleThreadExecutor()) {
             Future<?> active = null;
             for (String message : initialMessages) {
@@ -42,7 +43,7 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
                 if (input.isEmpty()) {
                     continue;
                 }
-                if (active != null && input.startsWith("/") && !"/abort".equals(input) && !input.startsWith("/follow-up ")) {
+                if (isUnavailableDuringActivePrompt(active, input)) {
                     terminal.err().println("Error: command is unavailable while a prompt is active");
                     terminal.err().flush();
                     continue;
@@ -92,11 +93,11 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
         }
     }
 
-    private static InteractiveCommandRegistry createCommandRegistry(
+    private static InteractiveCommandDispatcher createCommandRegistry(
             InteractiveSessionController controller,
             InteractiveTerminal terminal,
             BufferedReader reader) {
-        InteractiveCommandRegistry registry = new InteractiveCommandRegistry();
+        InteractiveCommandDispatcher registry = new InteractiveCommandDispatcher();
         registry.register("help", ignored -> {
             terminal.out().println("Commands: /help, /exit, /abort, /clear, /status, /model [provider/]model, /name <name>, /compact, /new, /continue, /resume [path|id]");
             terminal.out().flush();
@@ -176,7 +177,25 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
             terminal.out().flush();
             return InteractiveCommandResult.handledResult();
         });
+        controller.runtime().interactiveCommandRegistry().commands().forEach(contribution -> {
+            try {
+                registry.register(contribution.command().name(), arguments -> {
+                    contribution.command().handler().execute(arguments, extensionContext(controller));
+                    return InteractiveCommandResult.handledResult();
+                });
+            } catch (IllegalArgumentException error) {
+                throw new IllegalArgumentException(
+                        "extension command conflicts with built-in command: /" + contribution.command().name(), error);
+            }
+        });
         return registry;
+    }
+
+    private static CodingExtensionContext extensionContext(InteractiveSessionController controller) {
+        return new CodingExtensionContext(
+                controller.session().cwd(),
+                controller.session().sessionFile(),
+                controller.runtime().extensionProjectTrusted());
     }
 
     private Future<?> submit(ExecutorService prompts, InteractiveSessionController controller, String input, InteractiveTerminal terminal) {
@@ -222,6 +241,11 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
         } catch (Exception ignored) {
             // Prompt task converts failures to terminal diagnostics.
         }
+    }
+
+    static boolean isUnavailableDuringActivePrompt(Future<?> active, String input) {
+        return active != null && input.startsWith("/")
+                && !"/abort".equals(input) && !input.startsWith("/follow-up ");
     }
 
 }

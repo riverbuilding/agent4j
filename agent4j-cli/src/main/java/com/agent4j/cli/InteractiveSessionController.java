@@ -1,6 +1,7 @@
 package com.agent4j.cli;
 
 import com.agent4j.coding.sdk.AgentSession;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.session.SessionManager;
 import com.agent4j.core.event.EventSubscription;
@@ -25,6 +26,8 @@ final class InteractiveSessionController implements AutoCloseable {
     }
 
     AgentSession session() { return session; }
+
+    CodingAgentRuntime runtime() { return runtime.runtime(); }
 
     CliSessionLifecycle lifecycle() { return lifecycle; }
 

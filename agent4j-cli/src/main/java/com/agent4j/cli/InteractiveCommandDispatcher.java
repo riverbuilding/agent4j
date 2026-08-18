@@ -4,8 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Ordered interactive command registry; Phase 12 can add extension registrations here. */
-final class InteractiveCommandRegistry {
+/** Dispatches built-in and runtime-provided interactive commands. */
+final class InteractiveCommandDispatcher {
     private final Map<String, InteractiveCommand> commands = new LinkedHashMap<>();
 
     void register(String name, InteractiveCommand command) {

@@ -18,6 +18,7 @@ import com.agent4j.coding.extension.ExtensionLoader;
 import com.agent4j.coding.extension.ExtensionLifecycleDispatcher;
 import com.agent4j.coding.extension.ExtensionProviderHookContribution;
 import com.agent4j.coding.extension.ExtensionLifecycleListenerContribution;
+import com.agent4j.coding.extension.InteractiveCommandRegistry;
 import com.agent4j.coding.extension.ExtensionSessionContext;
 import com.agent4j.coding.extension.ExtensionSessionMetadata;
 import com.agent4j.coding.extension.ExtensionSessionOperation;
@@ -58,6 +59,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
     private final List<ExtensionContextTransformHookContribution> contextTransformHooks;
     private final List<ExtensionLifecycleListenerContribution> lifecycleListeners;
     private final List<ExtensionProviderHookContribution> providerHooks;
+    private final InteractiveCommandRegistry interactiveCommandRegistry;
+    private final boolean extensionProjectTrusted;
     private final AgentMessageConverter messageConverter;
     private final Clock clock;
     private final CodingSessionCompactor sessionCompactor;
@@ -82,6 +85,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
         this.contextTransformHooks = state.contextTransformHooks();
         this.lifecycleListeners = state.lifecycleListeners();
         this.providerHooks = state.providerHooks();
+        this.interactiveCommandRegistry = state.interactiveCommandRegistry();
+        this.extensionProjectTrusted = state.extensionProjectTrusted();
         this.messageConverter = state.messageConverter();
         this.clock = state.clock();
         this.sessionCompactor = state.sessionCompactor();
@@ -156,6 +161,16 @@ public final class CodingAgentRuntime implements AutoCloseable {
 
     public Optional<AiProviderRegistry> optionalProviderRegistry() {
         return Optional.ofNullable(providerRegistry);
+    }
+
+    /** Returns trusted extension commands available to an interactive host. */
+    public InteractiveCommandRegistry interactiveCommandRegistry() {
+        return interactiveCommandRegistry;
+    }
+
+    /** Returns the project-trust state supplied while extensions were configured. */
+    public boolean extensionProjectTrusted() {
+        return extensionProjectTrusted;
     }
 
     public CodingAgentSession createSession(Path sessionFile, Path workspace) throws Exception {
@@ -494,6 +509,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
                     contributions.contextTransformHooks(),
                     contributions.lifecycleListeners(),
                     contributions.providerHooks(),
+                    new InteractiveCommandRegistry(contributions.commands()),
+                    resolvedExtensionContext.projectTrusted(),
                     messageConverter == null ? CodingAgentMessageConverter.INSTANCE : messageConverter,
                     resolvedClock,
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
@@ -512,6 +529,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
             List<ExtensionContextTransformHookContribution> contextTransformHooks,
             List<ExtensionLifecycleListenerContribution> lifecycleListeners,
             List<ExtensionProviderHookContribution> providerHooks,
+            InteractiveCommandRegistry interactiveCommandRegistry,
+            boolean extensionProjectTrusted,
             AgentMessageConverter messageConverter,
             Clock clock,
             CodingSessionCompactor sessionCompactor,
