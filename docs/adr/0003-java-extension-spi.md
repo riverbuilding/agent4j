@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for Phase 13 slices 1 and 2.
+Accepted for Phase 13 slices 1 through 4.
 
 ## Context
 
@@ -65,6 +65,18 @@ An explicitly disabled loader returns no extensions. No service descriptor is
 valid and leaves programmatic extensions available. A duplicate extension name
 or an invalid service provider fails startup deterministically rather than
 silently selecting a provider.
+
+### Tool contribution and hook wiring
+
+Slice 4 resolves extensions once when `CodingAgentRuntime` is created, merging
+their tools with the runtime registry while rejecting replacement of an existing
+tool. All sessions reuse the resulting immutable registry and contributed hook
+list. Contributed `ToolExecutionHook` instances are passed directly to
+`AgentLoop`, so the core timing remains start event, before hooks, execution or
+blocked result, after hooks, end event, then transcript persistence. Hooks can
+add per-call attributes through `ToolContext.putAttribute(...)`; the executing
+tool and later hooks can read those values. No extension code is loaded from the
+project workspace.
 
 ### Ordering and duplicate names
 

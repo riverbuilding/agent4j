@@ -74,13 +74,25 @@ public final class AgentLoop {
             AgentEventBus eventBus,
             AgentMessageConverter messageConverter
     ) {
+        this(selection, auth, toolRegistry, eventBus, messageConverter, List.of());
+    }
+
+    public AgentLoop(
+            AiProviderSelection selection,
+            AiResolvedAuth auth,
+            ToolRegistry toolRegistry,
+            AgentEventBus eventBus,
+            AgentMessageConverter messageConverter,
+            List<ToolExecutionHook> toolExecutionHooks
+    ) {
         this(
                 selection.provider(),
                 selection.model(),
                 auth,
                 toolRegistry,
                 eventBus,
-                messageConverter);
+                messageConverter,
+                toolExecutionHooks);
     }
 
     public AgentLoop(

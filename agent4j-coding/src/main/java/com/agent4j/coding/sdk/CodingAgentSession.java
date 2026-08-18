@@ -24,6 +24,7 @@ import com.agent4j.core.runtime.AgentMessageConverter;
 import com.agent4j.core.runtime.LiveAgentQueues;
 import com.agent4j.core.runtime.QueueKind;
 import com.agent4j.core.tool.ToolRegistry;
+import com.agent4j.core.tool.ToolExecutionHook;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 
 import java.nio.file.Path;
@@ -38,17 +39,23 @@ public final class CodingAgentSession implements AgentSession {
 
     private final CodingAgentRuntime runtime;
     private final SessionManager sessionManager;
+    private final ToolRegistry toolRegistry;
+    private final List<ToolExecutionHook> toolExecutionHooks;
     private AgentConversationContext conversationContext;
     private final AtomicReference<ActivePrompt> activePrompt = new AtomicReference<>();
 
     CodingAgentSession(
             CodingAgentRuntime runtime,
             SessionManager sessionManager,
-            AgentConversationContext conversationContext
+            AgentConversationContext conversationContext,
+            ToolRegistry toolRegistry,
+            List<ToolExecutionHook> toolExecutionHooks
     ) {
         this.runtime = Objects.requireNonNull(runtime, "runtime");
         this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
         this.conversationContext = Objects.requireNonNull(conversationContext, "conversationContext");
+        this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
+        this.toolExecutionHooks = List.copyOf(toolExecutionHooks);
     }
 
     @Override
@@ -138,11 +145,10 @@ public final class CodingAgentSession implements AgentSession {
     }
 
     private AgentLoop agentLoop(PromptRequest request) {
-        ToolRegistry toolRegistry = runtime.toolRegistry();
         AgentMessageConverter messageConverter = runtime.messageConverter();
         AiProviderSelection selection = providerSelection(request);
         AiResolvedAuth auth = runtime.loginService().resolveAuth(selection.provider().id());
-        return new AgentLoop(selection, auth, toolRegistry, runtime.eventBus(), messageConverter);
+        return new AgentLoop(selection, auth, toolRegistry, runtime.eventBus(), messageConverter, toolExecutionHooks);
     }
 
     private AiProviderSelection providerSelection(PromptRequest request) {

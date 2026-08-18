@@ -9,6 +9,12 @@ import com.agent4j.ai.AiStreamOptions;
 import com.agent4j.ai.openai.OpenAiResponsesProvider;
 import com.agent4j.ai.openai.OpenAiResponsesProviderOptions;
 import com.agent4j.coding.message.CodingAgentMessageConverter;
+import com.agent4j.coding.extension.ExtensionContext;
+import com.agent4j.coding.extension.ExtensionContributionRegistry;
+import com.agent4j.coding.extension.ExtensionLoadException;
+import com.agent4j.coding.extension.ExtensionLoader;
+import com.agent4j.coding.extension.ExtensionToolRegistry;
+import com.agent4j.coding.extension.ResolvedExtensionContributions;
 import com.agent4j.coding.runtime.CodingBranchSummarizer;
 import com.agent4j.coding.runtime.CodingSessionCompactor;
 import com.agent4j.coding.session.SessionManager;
@@ -18,6 +24,7 @@ import com.agent4j.core.event.EventSubscription;
 import com.agent4j.core.runtime.AgentConversationContext;
 import com.agent4j.core.runtime.AgentMessageConverter;
 import com.agent4j.core.tool.InMemoryToolRegistry;
+import com.agent4j.core.tool.ToolExecutionHook;
 import com.agent4j.core.tool.ToolRegistry;
 
 import java.io.IOException;
@@ -38,6 +45,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
     private final AgentEventBus eventBus;
     private final AiProviderRegistry providerRegistry;
     private final ToolRegistry toolRegistry;
+    private final List<ToolExecutionHook> toolExecutionHooks;
     private final AgentMessageConverter messageConverter;
     private final Clock clock;
     private final CodingSessionCompactor sessionCompactor;
@@ -57,6 +65,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
         this.eventBus = state.eventBus();
         this.providerRegistry = state.providerRegistry();
         this.toolRegistry = state.toolRegistry();
+        this.toolExecutionHooks = state.toolExecutionHooks();
         this.messageConverter = state.messageConverter();
         this.clock = state.clock();
         this.sessionCompactor = state.sessionCompactor();
@@ -89,6 +98,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
                 .providerRegistry(modelRuntime.registry(model))
                 .loginService(loginService)
                 .clock(config.clock())
+                .extensionContext(new ExtensionContext(config.workspace(), null, true))
                 .runtimeFiles(new RuntimeFiles(
                         config.workspace(), config.sessionDirectory(), config.ownsWorkspace(), config.ownsSessionDirectory()));
         config.toolRegistry().ifPresent(runtime::toolRegistry);
@@ -256,7 +266,12 @@ public final class CodingAgentRuntime implements AutoCloseable {
     }
 
     private CodingAgentSession newSession(SessionManager manager) {
-        return new CodingAgentSession(this, manager, new AgentConversationContext(manager.activeAgentMessages(), List.of()));
+        return new CodingAgentSession(
+                this,
+                manager,
+                new AgentConversationContext(manager.activeAgentMessages(), List.of()),
+                toolRegistry,
+                toolExecutionHooks);
     }
 
     private static SessionManager openSource(AgentSession source) throws java.io.IOException {
@@ -288,6 +303,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
         private AgentEventBus eventBus;
         private AiProviderRegistry providerRegistry;
         private ToolRegistry toolRegistry;
+        private ExtensionLoader extensionLoader;
+        private ExtensionContext extensionContext;
         private AgentMessageConverter messageConverter;
         private Clock clock;
         private CodingSessionCompactor sessionCompactor;
@@ -307,6 +324,18 @@ public final class CodingAgentRuntime implements AutoCloseable {
 
         public Builder toolRegistry(ToolRegistry toolRegistry) {
             this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
+            return this;
+        }
+
+        /** Configures trusted Java extensions for sessions created by this runtime. */
+        public Builder extensionLoader(ExtensionLoader extensionLoader) {
+            this.extensionLoader = Objects.requireNonNull(extensionLoader, "extensionLoader");
+            return this;
+        }
+
+        /** Supplies stable runtime context while trusted Java extensions are registered. */
+        public Builder extensionContext(ExtensionContext extensionContext) {
+            this.extensionContext = Objects.requireNonNull(extensionContext, "extensionContext");
             return this;
         }
 
@@ -369,8 +398,25 @@ public final class CodingAgentRuntime implements AutoCloseable {
             LoginService resolvedLoginService = loginService == null
                     ? new DefaultLoginService(PersistentAuthCredentialStore.userDefault(), resolvedClock)
                     : loginService;
+            ToolRegistry baseToolRegistry = toolRegistry == null ? InMemoryToolRegistry.builder().build() : toolRegistry;
+            ExtensionLoader resolvedExtensionLoader = extensionLoader == null
+                    ? ExtensionLoader.builder().build()
+                    : extensionLoader;
+            ExtensionContext resolvedExtensionContext = extensionContext == null
+                    ? new ExtensionContext(Path.of("").toAbsolutePath().normalize(), null, true)
+                    : extensionContext;
+            ResolvedExtensionContributions contributions;
+            try {
+                contributions = ExtensionContributionRegistry.resolve(
+                        resolvedExtensionLoader.load(), resolvedExtensionContext);
+            } catch (ExtensionLoadException error) {
+                throw error;
+            } catch (Exception error) {
+                throw new ExtensionLoadException("failed to register Java extensions", error);
+            }
             return new RuntimeState(resolvedEventBus, providerRegistry,
-                    toolRegistry == null ? InMemoryToolRegistry.builder().build() : toolRegistry,
+                    ExtensionToolRegistry.merge(baseToolRegistry, contributions),
+                    contributions.hooks().stream().map(contribution -> contribution.hook()).toList(),
                     messageConverter == null ? CodingAgentMessageConverter.INSTANCE : messageConverter,
                     resolvedClock,
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
@@ -384,6 +430,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
             AgentEventBus eventBus,
             AiProviderRegistry providerRegistry,
             ToolRegistry toolRegistry,
+            List<ToolExecutionHook> toolExecutionHooks,
             AgentMessageConverter messageConverter,
             Clock clock,
             CodingSessionCompactor sessionCompactor,
