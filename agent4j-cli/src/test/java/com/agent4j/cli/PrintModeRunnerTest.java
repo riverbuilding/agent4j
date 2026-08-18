@@ -12,6 +12,8 @@ import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
 import com.agent4j.coding.sdk.CodingAgentRuntime;
+import com.agent4j.coding.sdk.RuntimePromptResolver;
+import com.agent4j.coding.resource.SystemPromptBuilder;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
 import com.agent4j.core.runtime.AbortController;
@@ -146,6 +148,12 @@ class PrintModeRunnerTest {
                                 new com.agent4j.ai.AiModel(new AiModelReference("openai", "gpt-test"), "Test model"), model))
                         .toolRegistry(tools)
                         .clock(Clock.systemUTC())
+                        .promptResolver(new RuntimePromptResolver(
+                                new ResourceLoader(),
+                                new SystemPromptBuilder(),
+                                ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()),
+                                Optional.empty(),
+                                List.of()))
                         .build(),
                 discovery,
                 new AiModelReference("openai", "gpt-test"));

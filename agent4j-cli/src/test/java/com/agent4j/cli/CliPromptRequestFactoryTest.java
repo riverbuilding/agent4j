@@ -30,9 +30,8 @@ class CliPromptRequestFactoryTest {
     }
 
     @Test
-    void carriesTheResolvedSystemPromptIntoEveryCliPromptRequest() {
+    void leavesSystemPromptResolutionToTheRuntime() {
         assertThat(CliPromptRequestFactory.create(
-                "inspect the project", Optional.empty(), Optional.empty(), "resolved coding prompt").systemPrompt())
-                .contains("resolved coding prompt");
+                "inspect the project", Optional.empty(), Optional.empty()).systemPrompt()).isEmpty();
     }
 }

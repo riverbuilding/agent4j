@@ -13,6 +13,7 @@ import com.agent4j.coding.sdk.DefaultLoginService;
 import com.agent4j.coding.sdk.LoginService;
 import com.agent4j.coding.sdk.ModelRuntime;
 import com.agent4j.coding.sdk.PersistentAuthCredentialStore;
+import com.agent4j.coding.sdk.RuntimePromptResolver;
 import com.agent4j.coding.tool.CodingTools;
 import com.agent4j.core.tool.ToolRegistry;
 
@@ -87,6 +88,12 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                 .loginService(loginService)
                 .clock(clock)
                 .toolRegistry(selectedTools)
+                .promptResolver(new RuntimePromptResolver(
+                        resourceLoader,
+                        new SystemPromptBuilder(),
+                        ResourceDiscoveryOptions.enabled(request.homeDirectory(), request.cwd()),
+                        request.systemPrompt(),
+                        request.appendSystemPrompts()))
                 .build();
 
         return new CliRuntime(runtime, discovery, model, runtime.optionalProviderRegistry(), systemPrompt);

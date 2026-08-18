@@ -53,6 +53,7 @@ public final class CodingAgentSession implements AgentSession {
     private final List<ExtensionContextTransformHookContribution> contextTransformHooks;
     private final ExtensionContext extensionContext;
     private final List<ExtensionProviderHookContribution> providerHooks;
+    private final ResolvedPromptContext promptContext;
     private AgentConversationContext conversationContext;
     private boolean closed;
     private final AtomicReference<ActivePrompt> activePrompt = new AtomicReference<>();
@@ -66,7 +67,8 @@ public final class CodingAgentSession implements AgentSession {
             List<ExtensionAgentStartHookContribution> agentStartHooks,
             List<ExtensionContextTransformHookContribution> contextTransformHooks,
             ExtensionContext extensionContext,
-            List<ExtensionProviderHookContribution> providerHooks
+            List<ExtensionProviderHookContribution> providerHooks,
+            ResolvedPromptContext promptContext
     ) {
         this.runtime = Objects.requireNonNull(runtime, "runtime");
         this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
@@ -77,6 +79,7 @@ public final class CodingAgentSession implements AgentSession {
         this.contextTransformHooks = List.copyOf(contextTransformHooks);
         this.extensionContext = Objects.requireNonNull(extensionContext, "extensionContext");
         this.providerHooks = List.copyOf(providerHooks);
+        this.promptContext = promptContext;
     }
 
     @Override
@@ -101,7 +104,7 @@ public final class CodingAgentSession implements AgentSession {
         try {
             CodingExtensionAgentStart start = ExtensionPromptHookDispatcher.beforeAgentStart(
                     agentStartHooks,
-                    new CodingExtensionAgentStart(request.prompt(), request.systemPrompt().orElse("")),
+                    new CodingExtensionAgentStart(request.prompt(), systemPrompt(request)),
                     extensionContext);
             AgentMessage promptMessage = promptMessage(request.prompt());
             AgentMessage modelPromptMessage = promptMessage(start.prompt());
@@ -151,7 +154,7 @@ public final class CodingAgentSession implements AgentSession {
                 .requireDefault();
         AiResolvedAuth auth = runtime.loginService().resolveAuth(selection.provider().id());
         CompactionResult result = runtime.sessionCompactor().compact(new ManualCompactionRequest(
-                sessionManager, selection, auth, cwd(), null, config == null ? CompactionConfig.defaults() : config,
+                sessionManager, selection, auth, cwd(), resolvedSystemPrompt(), config == null ? CompactionConfig.defaults() : config,
                 focusInstructions == null ? "" : focusInstructions, AiStreamOptions.defaults()));
         refreshConversationContext(new AgentConversationContext(sessionManager.activeAgentMessages(), List.of()));
         if (result.compacted()) {
@@ -285,6 +288,14 @@ public final class CodingAgentSession implements AgentSession {
                 return local.signal().reason().or(() -> request.abortSignal().flatMap(AbortSignal::reason));
             }
         };
+    }
+
+    private String systemPrompt(PromptRequest request) {
+        return request.systemPrompt().orElseGet(this::resolvedSystemPrompt);
+    }
+
+    private String resolvedSystemPrompt() {
+        return promptContext == null ? "" : promptContext.systemPrompt();
     }
 
     private static String messageId() {

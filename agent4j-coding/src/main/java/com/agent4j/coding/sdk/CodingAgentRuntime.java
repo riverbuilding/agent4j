@@ -67,6 +67,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
     private final CodingBranchSummarizer branchSummarizer;
     private final LoginService loginService;
     private final RuntimeFiles runtimeFiles;
+    private final RuntimePromptResolver promptResolver;
 
     public CodingAgentRuntime() {
         this(builder().buildState());
@@ -93,6 +94,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
         this.branchSummarizer = state.branchSummarizer();
         this.loginService = state.loginService();
         this.runtimeFiles = state.runtimeFiles();
+        this.promptResolver = state.promptResolver();
     }
 
     public static Builder builder() {
@@ -316,8 +318,11 @@ public final class CodingAgentRuntime implements AutoCloseable {
         ExtensionLifecycleDispatcher.after(lifecycleListeners, operation, new ExtensionSessionContext(metadata, true));
     }
 
-    private CodingAgentSession newSession(SessionManager manager) {
+    private CodingAgentSession newSession(SessionManager manager) throws IOException {
         ExtensionContext context = new ExtensionContext(sessionCwd(manager), manager.sessionFile(), true);
+        ResolvedPromptContext promptContext = promptResolver == null
+                ? null
+                : promptResolver.resolve(context.workspace(), toolRegistry);
         return new CodingAgentSession(
                 this,
                 manager,
@@ -327,7 +332,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
                 agentStartHooks,
                 contextTransformHooks,
                 context,
-                providerHooks);
+                providerHooks,
+                promptContext);
     }
 
     private static Path sessionCwd(SessionManager manager) {
@@ -399,6 +405,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
         private CodingBranchSummarizer branchSummarizer;
         private LoginService loginService;
         private RuntimeFiles runtimeFiles;
+        private RuntimePromptResolver promptResolver;
 
         public Builder eventBus(AgentEventBus eventBus) {
             this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
@@ -454,6 +461,12 @@ public final class CodingAgentRuntime implements AutoCloseable {
 
         Builder runtimeFiles(RuntimeFiles runtimeFiles) {
             this.runtimeFiles = Objects.requireNonNull(runtimeFiles, "runtimeFiles");
+            return this;
+        }
+
+        /** Configures resource-derived prompts for every created or resumed session. */
+        public Builder promptResolver(RuntimePromptResolver promptResolver) {
+            this.promptResolver = Objects.requireNonNull(promptResolver, "promptResolver");
             return this;
         }
 
@@ -516,7 +529,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
                     branchSummarizer == null ? new CodingBranchSummarizer() : branchSummarizer,
                     resolvedLoginService,
-                    runtimeFiles);
+                    runtimeFiles,
+                    promptResolver);
         }
     }
 
@@ -536,7 +550,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
             CodingSessionCompactor sessionCompactor,
             CodingBranchSummarizer branchSummarizer,
             LoginService loginService,
-            RuntimeFiles runtimeFiles
+            RuntimeFiles runtimeFiles,
+            RuntimePromptResolver promptResolver
     ) {
     }
 

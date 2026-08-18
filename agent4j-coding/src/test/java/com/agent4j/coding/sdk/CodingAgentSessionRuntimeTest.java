@@ -17,6 +17,10 @@ import com.agent4j.ai.AiUserMessage;
 import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionEntryType;
 import com.agent4j.coding.session.SessionManager;
+import com.agent4j.coding.resource.ProjectTrustPolicy;
+import com.agent4j.coding.resource.ResourceDiscoveryOptions;
+import com.agent4j.coding.resource.ResourceLoader;
+import com.agent4j.coding.resource.SystemPromptBuilder;
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.event.EventSubscription;
@@ -159,6 +163,52 @@ class CodingAgentRuntimeLifecycleTest {
                 .isEqualTo(new AiSystemMessage("workspace policy"));
         assertThat(session.conversationContext().transcriptMessages()).extracting(AgentMessage::role)
                 .doesNotContain(AgentMessageRole.SYSTEM);
+    }
+
+    @Test
+    void resolvesPromptResourcesForTheResumedSessionWorkspaceWithoutPersistingThem() throws Exception {
+        Path home = tempDir.resolve("home");
+        Path firstWorkspace = tempDir.resolve("first-workspace");
+        Path resumedWorkspace = tempDir.resolve("resumed-workspace");
+        Files.createDirectories(firstWorkspace.resolve(".pi"));
+        Files.createDirectories(resumedWorkspace.resolve(".pi"));
+        Files.writeString(firstWorkspace.resolve(".pi/SYSTEM.md"), "first workspace policy");
+        Files.writeString(resumedWorkspace.resolve(".pi/SYSTEM.md"), "resumed workspace policy");
+        Path sessionFile = tempDir.resolve("workspace.jsonl");
+        FakeModelClient firstModel = new FakeModelClient().enqueue(assistantText("assistant-1", "first", AiUsage.zero()));
+        runtime(firstModel, promptResolver(home, firstWorkspace, ProjectTrustPolicy.TRUSTED))
+                .createSession(new CreateSessionRequest(sessionFile, firstWorkspace))
+                .prompt(new PromptRequest("first prompt"));
+
+        FakeModelClient resumedModel = new FakeModelClient().enqueue(assistantText("assistant-2", "second", AiUsage.zero()));
+        AgentSession resumed = runtime(resumedModel, promptResolver(home, resumedWorkspace, ProjectTrustPolicy.TRUSTED))
+                .forkSession(new ForkSessionRequest(
+                        runtime(new FakeModelClient()).resumeSession(sessionFile),
+                        tempDir.resolve("resumed.jsonl"), Optional.empty(), Optional.of(resumedWorkspace)));
+        resumed.prompt(new PromptRequest("second prompt"));
+
+        assertThat(((AiSystemMessage) firstModel.requests().getFirst().messages().getFirst()).content())
+                .contains("first workspace policy");
+        assertThat(((AiSystemMessage) resumedModel.requests().getFirst().messages().getFirst()).content())
+                .contains("resumed workspace policy");
+        assertThat(Files.readString(resumed.sessionFile())).doesNotContain("resumed workspace policy");
+    }
+
+    @Test
+    void doesNotUseProjectPromptResourcesWhenTheRuntimeMarksTheProjectUntrusted() throws Exception {
+        Path home = tempDir.resolve("home");
+        Path workspace = tempDir.resolve("untrusted-workspace");
+        Files.createDirectories(workspace.resolve(".pi"));
+        Files.writeString(workspace.resolve(".pi/SYSTEM.md"), "untrusted policy");
+        FakeModelClient model = new FakeModelClient().enqueue(assistantText("assistant-1", "answer", AiUsage.zero()));
+
+        runtime(model, promptResolver(home, workspace, ProjectTrustPolicy.UNTRUSTED))
+                .createSession(new CreateSessionRequest(tempDir.resolve("untrusted.jsonl"), workspace))
+                .prompt(new PromptRequest("prompt"));
+
+        assertThat(((AiSystemMessage) model.requests().getFirst().messages().getFirst()).content())
+                .contains("agent4j-coding-v1")
+                .doesNotContain("untrusted policy");
     }
 
     @Test
@@ -565,6 +615,23 @@ class CodingAgentRuntimeLifecycleTest {
         return CodingAgentRuntime.builder()
                 .providerRegistry(AiProviderRegistry.fixedClient(fixedModel, model))
                 .build();
+    }
+
+    private static CodingAgentRuntime runtime(FakeModelClient model, RuntimePromptResolver promptResolver) {
+        AiModel fixedModel = new AiModel(new AiModelReference("test", "fixed"), "Fixed model");
+        return CodingAgentRuntime.builder()
+                .providerRegistry(AiProviderRegistry.fixedClient(fixedModel, model))
+                .promptResolver(promptResolver)
+                .build();
+    }
+
+    private static RuntimePromptResolver promptResolver(Path home, Path workspace, ProjectTrustPolicy trustPolicy) {
+        return new RuntimePromptResolver(
+                new ResourceLoader(),
+                new SystemPromptBuilder(),
+                ResourceDiscoveryOptions.enabled(home, workspace).withProjectTrustPolicy(trustPolicy),
+                Optional.empty(),
+                List.of());
     }
 
     private static List<AiStreamEvent> assistantText(String messageId, String text, AiUsage usage) {

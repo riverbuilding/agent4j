@@ -71,7 +71,7 @@ public final class JsonEventModeRunner {
                 out.flush();
             });
             session.prompt(CliPromptRequestFactory.create(
-                    prompt, runtime.promptModel(), abortSignal, runtime.systemPrompt()));
+                    prompt, runtime.promptModel(), abortSignal));
             return 0;
         } catch (Exception error) {
             err.println("Error: " + error.getMessage());
