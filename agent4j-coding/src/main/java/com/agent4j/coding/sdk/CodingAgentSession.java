@@ -10,6 +10,7 @@ import com.agent4j.coding.extension.ExtensionAgentStartHookContribution;
 import com.agent4j.coding.extension.ExtensionContext;
 import com.agent4j.coding.extension.ExtensionContextTransformHookContribution;
 import com.agent4j.coding.extension.ExtensionPromptHookDispatcher;
+import com.agent4j.coding.extension.ExtensionSessionOperation;
 import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionHeader;
 import com.agent4j.coding.session.SessionManager;
@@ -50,6 +51,7 @@ public final class CodingAgentSession implements AgentSession {
     private final List<ExtensionContextTransformHookContribution> contextTransformHooks;
     private final ExtensionContext extensionContext;
     private AgentConversationContext conversationContext;
+    private boolean closed;
     private final AtomicReference<ActivePrompt> activePrompt = new AtomicReference<>();
 
     CodingAgentSession(
@@ -138,6 +140,7 @@ public final class CodingAgentSession implements AgentSession {
         if (isStreaming()) {
             throw new IllegalStateException("cannot compact while a prompt is active");
         }
+        runtime.beforeLifecycleOperation(ExtensionSessionOperation.COMPACT, CodingAgentRuntime.metadata(this));
         AiProviderSelection selection = runtime.optionalProviderRegistry()
                 .orElseThrow(() -> new IllegalStateException("manual compaction requires a provider registry"))
                 .requireDefault();
@@ -146,7 +149,20 @@ public final class CodingAgentSession implements AgentSession {
                 sessionManager, selection, auth, cwd(), null, config == null ? CompactionConfig.defaults() : config,
                 focusInstructions == null ? "" : focusInstructions, AiStreamOptions.defaults()));
         refreshConversationContext(new AgentConversationContext(sessionManager.activeAgentMessages(), List.of()));
+        if (result.compacted()) {
+            runtime.afterLifecycleOperation(ExtensionSessionOperation.COMPACT, CodingAgentRuntime.metadata(this));
+        }
         return result;
+    }
+
+    @Override
+    public void close() throws Exception {
+        if (closed) {
+            return;
+        }
+        runtime.beforeLifecycleOperation(ExtensionSessionOperation.CLOSE, CodingAgentRuntime.metadata(this));
+        closed = true;
+        runtime.afterLifecycleOperation(ExtensionSessionOperation.CLOSE, CodingAgentRuntime.metadata(this));
     }
 
     private void queue(String text, boolean steering) {

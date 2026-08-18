@@ -15,6 +15,11 @@ import com.agent4j.coding.extension.ExtensionContributionRegistry;
 import com.agent4j.coding.extension.ExtensionContextTransformHookContribution;
 import com.agent4j.coding.extension.ExtensionLoadException;
 import com.agent4j.coding.extension.ExtensionLoader;
+import com.agent4j.coding.extension.ExtensionLifecycleDispatcher;
+import com.agent4j.coding.extension.ExtensionLifecycleListenerContribution;
+import com.agent4j.coding.extension.ExtensionSessionContext;
+import com.agent4j.coding.extension.ExtensionSessionMetadata;
+import com.agent4j.coding.extension.ExtensionSessionOperation;
 import com.agent4j.coding.extension.ExtensionToolRegistry;
 import com.agent4j.coding.extension.ResolvedExtensionContributions;
 import com.agent4j.coding.runtime.CodingBranchSummarizer;
@@ -50,6 +55,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
     private final List<ToolExecutionHook> toolExecutionHooks;
     private final List<ExtensionAgentStartHookContribution> agentStartHooks;
     private final List<ExtensionContextTransformHookContribution> contextTransformHooks;
+    private final List<ExtensionLifecycleListenerContribution> lifecycleListeners;
     private final AgentMessageConverter messageConverter;
     private final Clock clock;
     private final CodingSessionCompactor sessionCompactor;
@@ -72,6 +78,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
         this.toolExecutionHooks = state.toolExecutionHooks();
         this.agentStartHooks = state.agentStartHooks();
         this.contextTransformHooks = state.contextTransformHooks();
+        this.lifecycleListeners = state.lifecycleListeners();
         this.messageConverter = state.messageConverter();
         this.clock = state.clock();
         this.sessionCompactor = state.sessionCompactor();
@@ -193,16 +200,17 @@ public final class CodingAgentRuntime implements AutoCloseable {
 
     public CodingAgentSession createSession(CreateSessionRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
-        SessionManager manager = SessionManager.create(
-                request.sessionFile(), request.cwd(), request.sessionId().orElse(null));
-        if (request.name().isPresent()) {
-            manager.appendSessionInfo(request.name().orElseThrow());
-        }
-        if (request.model().isPresent()) {
-            AiModelReference model = request.model().orElseThrow();
-            manager.appendModelChange(model.providerId(), model.modelId());
-        }
-        return newSession(manager);
+        return performLifecycle(ExtensionSessionOperation.CREATE,
+                new ExtensionSessionMetadata(request.sessionId(), request.sessionFile(), request.cwd(), Optional.empty()), () -> {
+                    SessionManager manager = SessionManager.create(
+                            request.sessionFile(), request.cwd(), request.sessionId().orElse(null));
+                    if (request.name().isPresent()) manager.appendSessionInfo(request.name().orElseThrow());
+                    if (request.model().isPresent()) {
+                        AiModelReference model = request.model().orElseThrow();
+                        manager.appendModelChange(model.providerId(), model.modelId());
+                    }
+                    return newSession(manager);
+                });
     }
 
     public CodingAgentSession resumeSession(Path file) throws Exception {
@@ -212,18 +220,26 @@ public final class CodingAgentRuntime implements AutoCloseable {
     public CodingAgentSession resumeSession(ResumeSessionRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
         SessionManager manager = SessionManager.open(request.sessionFile());
-        request.activeEntryId().ifPresent(manager::navigateTo);
-        return newSession(manager);
+        return performLifecycle(ExtensionSessionOperation.RESUME, metadata(manager), () -> {
+            request.activeEntryId().ifPresent(manager::navigateTo);
+            return newSession(manager);
+        });
     }
 
     public CodingAgentSession importSession(ImportSessionRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
-        return newSession(SessionManager.importFrom(request.sourceFile(), request.targetFile()));
+        SessionManager source = SessionManager.open(request.sourceFile());
+        return performLifecycle(ExtensionSessionOperation.IMPORT,
+                new ExtensionSessionMetadata(Optional.empty(), request.targetFile(), sessionCwd(source), Optional.empty()),
+                () -> newSession(SessionManager.importFrom(request.sourceFile(), request.targetFile())));
     }
 
     public CodingAgentSession cloneSession(CloneSessionRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
-        return newSession(openSource(request.source()).cloneTo(request.targetFile()));
+        SessionManager source = openSource(request.source());
+        return performLifecycle(ExtensionSessionOperation.CLONE,
+                new ExtensionSessionMetadata(Optional.empty(), request.targetFile(), sessionCwd(source), Optional.empty()),
+                () -> newSession(source.cloneTo(request.targetFile())));
     }
 
     public CodingAgentSession forkSession(ForkSessionRequest request) throws Exception {
@@ -233,7 +249,10 @@ public final class CodingAgentRuntime implements AutoCloseable {
         if (active != null) {
             source.navigateTo(active);
         }
-        return newSession(source.forkToActivePath(request.targetFile(), request.cwd().orElse(null)));
+        return performLifecycle(ExtensionSessionOperation.FORK,
+                new ExtensionSessionMetadata(Optional.empty(), request.targetFile(),
+                        request.cwd().orElse(sessionCwd(source)), Optional.empty()),
+                () -> newSession(source.forkToActivePath(request.targetFile(), request.cwd().orElse(null))));
     }
     public EventSubscription subscribe(Consumer<AgentEvent> subscriber) {
         return eventBus.subscribe(subscriber);
@@ -271,6 +290,14 @@ public final class CodingAgentRuntime implements AutoCloseable {
         return branchSummarizer;
     }
 
+    void beforeLifecycleOperation(ExtensionSessionOperation operation, ExtensionSessionMetadata metadata) throws Exception {
+        ExtensionLifecycleDispatcher.before(lifecycleListeners, operation, new ExtensionSessionContext(metadata, true));
+    }
+
+    void afterLifecycleOperation(ExtensionSessionOperation operation, ExtensionSessionMetadata metadata) {
+        ExtensionLifecycleDispatcher.after(lifecycleListeners, operation, new ExtensionSessionContext(metadata, true));
+    }
+
     private CodingAgentSession newSession(SessionManager manager) {
         ExtensionContext context = new ExtensionContext(sessionCwd(manager), manager.sessionFile(), true);
         return new CodingAgentSession(
@@ -292,6 +319,28 @@ public final class CodingAgentRuntime implements AutoCloseable {
             throw new IllegalStateException("session header cwd is missing");
         }
         return Path.of(cwd);
+    }
+
+    private CodingAgentSession performLifecycle(
+            ExtensionSessionOperation operation,
+            ExtensionSessionMetadata metadata,
+            SessionOperation action
+    ) throws Exception {
+        beforeLifecycleOperation(operation, metadata);
+        CodingAgentSession session = action.perform();
+        afterLifecycleOperation(operation, metadata(session));
+        return session;
+    }
+
+    private static ExtensionSessionMetadata metadata(SessionManager manager) {
+        return new ExtensionSessionMetadata(Optional.empty(), manager.sessionFile(), sessionCwd(manager),
+                Optional.ofNullable(manager.activeEntryId()));
+    }
+
+    static ExtensionSessionMetadata metadata(AgentSession session) {
+        AgentSessionInfo info = session.info();
+        return new ExtensionSessionMetadata(Optional.of(info.id()), info.sessionFile(), info.cwd(),
+                Optional.ofNullable(info.activeEntryId()));
     }
 
     private static SessionManager openSource(AgentSession source) throws java.io.IOException {
@@ -439,6 +488,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
                     contributions.hooks().stream().map(contribution -> contribution.hook()).toList(),
                     contributions.agentStartHooks(),
                     contributions.contextTransformHooks(),
+                    contributions.lifecycleListeners(),
                     messageConverter == null ? CodingAgentMessageConverter.INSTANCE : messageConverter,
                     resolvedClock,
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
@@ -455,6 +505,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
             List<ToolExecutionHook> toolExecutionHooks,
             List<ExtensionAgentStartHookContribution> agentStartHooks,
             List<ExtensionContextTransformHookContribution> contextTransformHooks,
+            List<ExtensionLifecycleListenerContribution> lifecycleListeners,
             AgentMessageConverter messageConverter,
             Clock clock,
             CodingSessionCompactor sessionCompactor,
@@ -465,6 +516,11 @@ public final class CodingAgentRuntime implements AutoCloseable {
     }
 
     private record RuntimeFiles(Path workspace, Path sessionDirectory, boolean ownsWorkspace, boolean ownsSessionDirectory) {
+    }
+
+    @FunctionalInterface
+    private interface SessionOperation {
+        CodingAgentSession perform() throws Exception;
     }
 
     private static AiProviderRequest withMaxOutputTokens(

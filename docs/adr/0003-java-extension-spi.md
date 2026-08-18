@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for Phase 13 slices 1 through 4.
+Accepted for Phase 13 slices 1 through 6.
 
 ## Context
 
@@ -90,6 +90,18 @@ stored session history through this hook surface.
 For both hook types, each returned value is passed to the next hook in
 registration order. An ordinary hook failure is logged, its transformation is
 discarded, and later hooks continue using the last successful value.
+
+### Session lifecycle hooks
+
+Slice 6 adds lifecycle notifications around session create, resume, fork,
+clone, import, compact, and close. Listeners receive an immutable
+`ExtensionSessionMetadata` and narrow `ExtensionSessionContext`; neither
+exposes a `SessionManager`, live transcript, or mutable runtime state.
+
+Before-operation listeners are fail-fast, so a failure prevents the target
+operation and any resulting persistence. After-operation listeners run only
+after successful persistence (for compact, only when a compaction is written),
+and failures are logged without undoing the completed operation.
 
 ### Ordering and duplicate names
 

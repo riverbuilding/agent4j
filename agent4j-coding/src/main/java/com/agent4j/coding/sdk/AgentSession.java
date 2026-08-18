@@ -7,7 +7,7 @@ import com.agent4j.core.compaction.CompactionResult;
 /**
  * User-facing handle for one persisted coding-agent conversation.
  */
-public interface AgentSession {
+public interface AgentSession extends AutoCloseable {
     AgentSessionInfo info();
 
     AgentConversationContext conversationContext();
@@ -56,5 +56,9 @@ public interface AgentSession {
 
     default String activeEntryId() {
         return info().activeEntryId();
+    }
+
+    @Override
+    default void close() throws Exception {
     }
 }
