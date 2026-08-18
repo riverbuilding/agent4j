@@ -8,7 +8,7 @@ baseline.
 All built-in tool schemas are JSON objects with `additionalProperties: false`.
 Each schema exposes only the arguments accepted by that tool:
 
-- `read`: required `path`
+- `read`: required `path`; optional zero-based line `offset` and line `limit`
 - `write`: required `path`, `content`
 - `edit`: required `path`, `oldText`, `newText`
 - `bash`: required `command`, optional `timeoutSeconds`
@@ -27,7 +27,8 @@ values, not host-absolute paths.
 
 Current result keys:
 
-- `read`: `path`, `content`, `truncated`, `originalLength`
+- `read`: `path`, line-numbered `content`, `truncated`, `originalLength`, `offset`,
+  `limit`
 - `write`: `path`, `bytesWritten`
 - `edit`: `path`, `replacements`, `matchCount`, `ambiguous`, `oldText`,
   `newText`, `diff`, `contextBefore`, `contextAfter`
@@ -43,3 +44,12 @@ This slice closes schema leakage and result-path normalization. Remaining
 PI-source-specific audit work is exact tool naming/description text, image read
 payload shape, edit multi-replacement behavior, and streaming render/update
 event details.
+
+## Tool Profiles
+
+- Default coding: `read`, `write`, `edit`, `bash`
+- Read-only: `read`, `grep`, `find`, `ls`
+- Full: `read`, `write`, `edit`, `bash`, `ls`, `grep`, `find`
+
+Search tools honor root `.gitignore` patterns where practical. All path-based
+tools reject paths that traverse a symbolic link.
