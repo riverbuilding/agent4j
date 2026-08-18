@@ -66,6 +66,22 @@ valid and leaves programmatic extensions available. A duplicate extension name
 or an invalid service provider fails startup deterministically rather than
 silently selecting a provider.
 
+### Extension scope and project trust
+
+Every `AgentExtension` declares an `ExtensionScope`: `APPLICATION` by default,
+or `PROJECT` when its activation belongs to the selected project. The loader
+receives the runtime `ExtensionContext`; for an untrusted project it omits all
+project-scoped extensions before their contributions are registered. This is an
+activation boundary, rather than a JVM sandbox: active Java extensions retain
+the permissions of their embedding application.
+
+`AgentExtension.requiresProjectTrust()` is retained as a forward-compatible
+declaration for resource and package policy. For this release the enforced
+rule is deliberately narrow and deterministic: project-scoped extensions do
+not activate for untrusted projects. Application-scoped extensions remain
+under embedding-application control, and no project-controlled code is
+discovered or loaded.
+
 ### Tool contribution and hook wiring
 
 Slice 4 resolves extensions once when `CodingAgentRuntime` is created, merging
@@ -137,12 +153,13 @@ implemented, no extension lifecycle method can block a tool.
 
 ## First-release boundary
 
-This slice deliberately provides contracts only. It has no `ServiceLoader`, no
-classpath scanning, no project-local discovery, no TypeScript execution, no
-Node process, no package installation, and no dynamic loading of project code.
-Applications will eventually opt in by constructing Java extension instances in
-their own trusted code. Project trust remains represented by
-`CodingExtensionContext.projectTrusted()` for the later trusted-resource policy.
+This slice deliberately supports only explicitly supplied Java extensions and
+`ServiceLoader` providers visible to the application class loader. It has no
+project-local discovery, TypeScript execution, Node process, package
+installation, or dynamic loading of project code. Applications opt in with
+their own trusted code. `ExtensionScope.PROJECT` is not activated when
+`ExtensionContext.projectTrusted()` is false; `requiresProjectTrust()` remains
+a placeholder for the later trusted-resource policy.
 
 ## Consequences
 

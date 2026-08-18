@@ -32,6 +32,18 @@ public final class ExtensionLoader {
      * invalid provider or duplicate extension name is a startup configuration error.</p>
      */
     public List<AgentExtension> load() {
+        return load(new ExtensionContext(java.nio.file.Path.of("").toAbsolutePath().normalize(), null, true));
+    }
+
+    /**
+     * Loads extensions allowed by the supplied project-trust context.
+     *
+     * <p>Project-scoped extensions are omitted for untrusted projects before their contributions
+     * are registered. This release only loads application-classpath providers; it never loads
+     * code from the project directory.</p>
+     */
+    public List<AgentExtension> load(ExtensionContext context) {
+        Objects.requireNonNull(context, "context");
         if (!enabled) {
             return List.of();
         }
@@ -45,8 +57,11 @@ public final class ExtensionLoader {
         } catch (ServiceConfigurationError error) {
             throw new ExtensionLoadException("failed to load application-classpath extension provider", error);
         }
-        validateDistinctNames(extensions);
-        return List.copyOf(extensions);
+        List<AgentExtension> activeExtensions = extensions.stream()
+                .filter(extension -> context.projectTrusted() || extension.scope() != ExtensionScope.PROJECT)
+                .toList();
+        validateDistinctNames(activeExtensions);
+        return activeExtensions;
     }
 
     private static void validateDistinctNames(List<AgentExtension> extensions) {
@@ -54,6 +69,7 @@ public final class ExtensionLoader {
         for (AgentExtension extension : extensions) {
             Objects.requireNonNull(extension, "extensions must not contain null");
             String name = Objects.requireNonNull(extension.name(), "extension name");
+            Objects.requireNonNull(extension.scope(), "extension scope");
             if (name.isBlank()) {
                 throw new IllegalArgumentException("extension name must not be blank");
             }

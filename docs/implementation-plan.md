@@ -1110,11 +1110,16 @@ Tasks:
   - provider request/response hooks
   - session lifecycle hooks
 - Add service-loader discovery.
-- Add project trust placeholder for extensions that require local resources.
+- Add extension scope and project-trust gating. Done: `ExtensionScope` marks
+  application versus project-scoped Java extensions; untrusted projects do not
+  activate project-scoped extensions. `requiresProjectTrust()` remains a
+  placeholder for later resource/package policy.
 
 Exit criteria:
 
 - A test extension can register a custom tool and mutate context.
+- The Java SPI documents application/project scope, its trust boundary, and
+  Phase 14 package-bridge non-goals.
 
 ## Phase 14: PI Package Bridge
 

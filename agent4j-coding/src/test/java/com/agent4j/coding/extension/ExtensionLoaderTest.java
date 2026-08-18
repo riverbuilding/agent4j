@@ -84,6 +84,27 @@ class ExtensionLoaderTest {
         }
     }
 
+    @Test
+    void doesNotActivateProjectScopedExtensionsForAnUntrustedProject() {
+        List<AgentExtension> extensions = ExtensionLoader.builder()
+                .addExtension(extension("application"))
+                .addExtension(projectExtension("project"))
+                .build()
+                .load(new ExtensionContext(tempDir, null, false));
+
+        assertThat(extensions).extracting(AgentExtension::name).containsExactly("application");
+    }
+
+    @Test
+    void activatesProjectScopedExtensionsForATrustedProject() {
+        List<AgentExtension> extensions = ExtensionLoader.builder()
+                .addExtension(projectExtension("project"))
+                .build()
+                .load(new ExtensionContext(tempDir, null, true));
+
+        assertThat(extensions).extracting(AgentExtension::name).containsExactly("project");
+    }
+
     private URLClassLoader serviceClassLoader(Class<? extends AgentExtension> provider) throws Exception {
         Path serviceFile = tempDir.resolve("META-INF/services/" + AgentExtension.class.getName());
         Files.createDirectories(serviceFile.getParent());
@@ -93,6 +114,25 @@ class ExtensionLoaderTest {
 
     private static AgentExtension extension(String name) {
         return () -> name;
+    }
+
+    private static AgentExtension projectExtension(String name) {
+        return new AgentExtension() {
+            @Override
+            public String name() {
+                return name;
+            }
+
+            @Override
+            public ExtensionScope scope() {
+                return ExtensionScope.PROJECT;
+            }
+
+            @Override
+            public boolean requiresProjectTrust() {
+                return true;
+            }
+        };
     }
 
     public static final class DiscoveredExtension implements AgentExtension {

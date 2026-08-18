@@ -496,7 +496,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
             ResolvedExtensionContributions contributions;
             try {
                 contributions = ExtensionContributionRegistry.resolve(
-                        resolvedExtensionLoader.load(), resolvedExtensionContext);
+                        resolvedExtensionLoader.load(resolvedExtensionContext), resolvedExtensionContext);
             } catch (ExtensionLoadException error) {
                 throw error;
             } catch (Exception error) {

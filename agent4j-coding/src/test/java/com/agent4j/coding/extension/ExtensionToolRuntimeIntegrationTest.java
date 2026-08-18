@@ -67,6 +67,34 @@ class ExtensionToolRuntimeIntegrationTest {
     }
 
     @Test
+    void doesNotRegisterProjectScopedExtensionsForAnUntrustedRuntime() {
+        AtomicInteger registrations = new AtomicInteger();
+        AgentExtension extension = new AgentExtension() {
+            @Override
+            public String name() {
+                return "project-extension";
+            }
+
+            @Override
+            public ExtensionScope scope() {
+                return ExtensionScope.PROJECT;
+            }
+
+            @Override
+            public void register(ExtensionContext context, ExtensionContributionRegistrar registrar) {
+                registrations.incrementAndGet();
+            }
+        };
+
+        CodingAgentRuntime.builder()
+                .extensionLoader(ExtensionLoader.builder().addExtension(extension).build())
+                .extensionContext(new ExtensionContext(tempDir, null, false))
+                .build();
+
+        assertThat(registrations).hasValue(0);
+    }
+
+    @Test
     void extensionToolReceivesContextChangedByItsHookWithinCoreToolTiming() throws Exception {
         ToolCall toolCall = new ToolCall("tool-1", "extension_tool", JSON.objectNode());
         FakeModelClient model = new FakeModelClient()
