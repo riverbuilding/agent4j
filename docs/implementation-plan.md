@@ -1121,6 +1121,15 @@ Exit criteria:
 - The Java SPI documents application/project scope, its trust boundary, and
   Phase 14 package-bridge non-goals.
 
+Closeout: complete for the Java-only release. A ServiceLoader integration test
+loads one application-classpath extension that contributes a safe tool, context
+transform, lifecycle listener, and interactive command. Intentional gaps are
+PI TypeScript/package compatibility, Node or other subprocess execution,
+package installation/update/reconciliation, dynamic project-code loading,
+project-local discovery, trust prompting/persistence, extension UI/renderers,
+provider registration, session mutation, cancellation, and dynamic tool
+activation. Phase 14 owns any package bridge plus its sandbox and trust model.
+
 ## Phase 14: PI Package Bridge
 
 Goal: decide whether PI package compatibility is worth the complexity.
