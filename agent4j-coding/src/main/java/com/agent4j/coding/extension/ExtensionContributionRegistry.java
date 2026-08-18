@@ -24,11 +24,15 @@ public final class ExtensionContributionRegistry {
 
         List<ExtensionToolContribution> tools = new ArrayList<>();
         List<ExtensionHookContribution> hooks = new ArrayList<>();
+        List<ExtensionAgentStartHookContribution> agentStartHooks = new ArrayList<>();
+        List<ExtensionContextTransformHookContribution> contextTransformHooks = new ArrayList<>();
         List<ExtensionCommandContribution> commands = new ArrayList<>();
         List<ExtensionLifecycleListenerContribution> lifecycleListeners = new ArrayList<>();
         Set<String> extensionNames = new HashSet<>();
         Set<String> toolNames = new HashSet<>();
         Set<String> hookNames = new HashSet<>();
+        Set<String> agentStartHookNames = new HashSet<>();
+        Set<String> contextTransformHookNames = new HashSet<>();
         Set<String> commandNames = new HashSet<>();
         Set<String> lifecycleListenerNames = new HashSet<>();
 
@@ -40,14 +44,19 @@ public final class ExtensionContributionRegistry {
                     extensionName,
                     tools,
                     hooks,
+                    agentStartHooks,
+                    contextTransformHooks,
                     commands,
                     lifecycleListeners,
                     toolNames,
                     hookNames,
+                    agentStartHookNames,
+                    contextTransformHookNames,
                     commandNames,
                     lifecycleListenerNames));
         }
-        return new ResolvedExtensionContributions(tools, hooks, commands, lifecycleListeners);
+        return new ResolvedExtensionContributions(
+                tools, hooks, agentStartHooks, contextTransformHooks, commands, lifecycleListeners);
     }
 
     private static String requireName(String name, String type) {
@@ -68,10 +77,14 @@ public final class ExtensionContributionRegistry {
             String extensionName,
             List<ExtensionToolContribution> tools,
             List<ExtensionHookContribution> hooks,
+            List<ExtensionAgentStartHookContribution> agentStartHooks,
+            List<ExtensionContextTransformHookContribution> contextTransformHooks,
             List<ExtensionCommandContribution> commands,
             List<ExtensionLifecycleListenerContribution> lifecycleListeners,
             Set<String> toolNames,
             Set<String> hookNames,
+            Set<String> agentStartHookNames,
+            Set<String> contextTransformHookNames,
             Set<String> commandNames,
             Set<String> lifecycleListenerNames
     ) implements ExtensionContributionRegistrar {
@@ -87,6 +100,20 @@ public final class ExtensionContributionRegistry {
         public void registerHook(String name, ToolExecutionHook hook) {
             registerName(hookNames, requireName(name, "hook name"), "hook");
             hooks.add(new ExtensionHookContribution(extensionName, name, Objects.requireNonNull(hook, "hook")));
+        }
+
+        @Override
+        public void registerAgentStartHook(String name, ExtensionAgentStartHook hook) {
+            registerName(agentStartHookNames, requireName(name, "agent-start hook name"), "agent-start hook");
+            agentStartHooks.add(new ExtensionAgentStartHookContribution(
+                    extensionName, name, Objects.requireNonNull(hook, "hook")));
+        }
+
+        @Override
+        public void registerContextTransformHook(String name, ExtensionContextTransformHook hook) {
+            registerName(contextTransformHookNames, requireName(name, "context-transform hook name"), "context-transform hook");
+            contextTransformHooks.add(new ExtensionContextTransformHookContribution(
+                    extensionName, name, Objects.requireNonNull(hook, "hook")));
         }
 
         @Override

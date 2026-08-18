@@ -78,6 +78,19 @@ add per-call attributes through `ToolContext.putAttribute(...)`; the executing
 tool and later hooks can read those values. No extension code is loaded from the
 project workspace.
 
+### Agent-start and context-transform hooks
+
+Slice 5 adds ordered agent-start and context-transform contributions. Agent-start
+hooks can replace the prompt and system prompt before the turn starts.
+Context-transform hooks receive and replace only the in-memory model input;
+`CodingAgentSession` keeps the original prompt in `promptMessages`, which is
+the value persisted to JSONL. Consequently, extensions cannot silently rewrite
+stored session history through this hook surface.
+
+For both hook types, each returned value is passed to the next hook in
+registration order. An ordinary hook failure is logged, its transformation is
+discarded, and later hooks continue using the last successful value.
+
 ### Ordering and duplicate names
 
 The eventual runtime accepts an explicit ordered extension list. It validates

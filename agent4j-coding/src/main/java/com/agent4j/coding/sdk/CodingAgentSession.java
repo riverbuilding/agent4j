@@ -5,6 +5,11 @@ import com.agent4j.ai.AiProviderSelection;
 import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.ai.AiStreamOptions;
 import com.agent4j.coding.runtime.ManualCompactionRequest;
+import com.agent4j.coding.extension.CodingExtensionAgentStart;
+import com.agent4j.coding.extension.ExtensionAgentStartHookContribution;
+import com.agent4j.coding.extension.ExtensionContext;
+import com.agent4j.coding.extension.ExtensionContextTransformHookContribution;
+import com.agent4j.coding.extension.ExtensionPromptHookDispatcher;
 import com.agent4j.coding.session.SessionEntry;
 import com.agent4j.coding.session.SessionHeader;
 import com.agent4j.coding.session.SessionManager;
@@ -41,6 +46,9 @@ public final class CodingAgentSession implements AgentSession {
     private final SessionManager sessionManager;
     private final ToolRegistry toolRegistry;
     private final List<ToolExecutionHook> toolExecutionHooks;
+    private final List<ExtensionAgentStartHookContribution> agentStartHooks;
+    private final List<ExtensionContextTransformHookContribution> contextTransformHooks;
+    private final ExtensionContext extensionContext;
     private AgentConversationContext conversationContext;
     private final AtomicReference<ActivePrompt> activePrompt = new AtomicReference<>();
 
@@ -49,13 +57,19 @@ public final class CodingAgentSession implements AgentSession {
             SessionManager sessionManager,
             AgentConversationContext conversationContext,
             ToolRegistry toolRegistry,
-            List<ToolExecutionHook> toolExecutionHooks
+            List<ToolExecutionHook> toolExecutionHooks,
+            List<ExtensionAgentStartHookContribution> agentStartHooks,
+            List<ExtensionContextTransformHookContribution> contextTransformHooks,
+            ExtensionContext extensionContext
     ) {
         this.runtime = Objects.requireNonNull(runtime, "runtime");
         this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager");
         this.conversationContext = Objects.requireNonNull(conversationContext, "conversationContext");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
         this.toolExecutionHooks = List.copyOf(toolExecutionHooks);
+        this.agentStartHooks = List.copyOf(agentStartHooks);
+        this.contextTransformHooks = List.copyOf(contextTransformHooks);
+        this.extensionContext = Objects.requireNonNull(extensionContext, "extensionContext");
     }
 
     @Override
@@ -78,12 +92,20 @@ public final class CodingAgentSession implements AgentSession {
         ActivePrompt active = beginPrompt(abortController, queues);
         PromptResult result;
         try {
-            AgentMessage promptMessage = promptMessage(request);
+            CodingExtensionAgentStart start = ExtensionPromptHookDispatcher.beforeAgentStart(
+                    agentStartHooks,
+                    new CodingExtensionAgentStart(request.prompt(), request.systemPrompt().orElse("")),
+                    extensionContext);
+            AgentMessage promptMessage = promptMessage(request.prompt());
+            AgentMessage modelPromptMessage = promptMessage(start.prompt());
             List<AgentMessage> messages = java.util.stream.Stream
-                    .concat(sessionManager.activeAgentMessages().stream(), java.util.stream.Stream.of(promptMessage))
+                    .concat(sessionManager.activeAgentMessages().stream(), java.util.stream.Stream.of(modelPromptMessage))
                     .toList();
+            List<AgentMessage> transformedMessages = ExtensionPromptHookDispatcher.transformContext(
+                    contextTransformHooks, messages, extensionContext);
             AgentLoopResult loopResult = agentLoop(request).runTurn(loopRequest(
-                    request, promptMessage, messages, abortSignal(request, abortController), queues));
+                    request, promptMessage, transformedMessages,
+                    start.systemPrompt().isBlank() ? null : start.systemPrompt(), abortSignal(request, abortController), queues));
             List<SessionEntry> persistedEntries = sessionManager.appendAgentLoopResult(loopResult);
             result = new PromptResult(this, loopResult, persistedEntries);
         } finally {
@@ -161,6 +183,7 @@ public final class CodingAgentSession implements AgentSession {
             PromptRequest request,
             AgentMessage promptMessage,
             List<AgentMessage> messages,
+            String systemPrompt,
             AbortSignal abortSignal,
             LiveAgentQueues queues
     ) {
@@ -182,15 +205,15 @@ public final class CodingAgentSession implements AgentSession {
                         .promptMessages(List.of(promptMessage))
                         .steeringMode(request.steeringMode())
                         .followUpMode(request.followUpMode())
-                        .systemPrompt(request.systemPrompt().orElse(null))
+                        .systemPrompt(systemPrompt)
                         .build(),
                 queues);
     }
 
-    private AgentMessage promptMessage(PromptRequest request) {
+    private AgentMessage promptMessage(String prompt) {
         return new AgentMessage(
                 messageId(), sessionManager.activeEntryId(), Instant.now(runtime.clock()), AgentMessageRole.USER,
-                JSON.textNode(request.prompt()), JSON.objectNode());
+                JSON.textNode(prompt), JSON.objectNode());
     }
 
     @Override

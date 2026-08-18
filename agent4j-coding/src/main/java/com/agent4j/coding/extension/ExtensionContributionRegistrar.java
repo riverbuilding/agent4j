@@ -10,6 +10,10 @@ public interface ExtensionContributionRegistrar {
 
     void registerHook(String name, ToolExecutionHook hook);
 
+    void registerAgentStartHook(String name, ExtensionAgentStartHook hook);
+
+    void registerContextTransformHook(String name, ExtensionContextTransformHook hook);
+
     void registerCommand(CodingExtensionCommand command);
 
     void registerLifecycleListener(String name, ExtensionLifecycleListener listener);

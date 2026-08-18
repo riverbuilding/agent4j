@@ -6,12 +6,16 @@ import java.util.List;
 public record ResolvedExtensionContributions(
         List<ExtensionToolContribution> tools,
         List<ExtensionHookContribution> hooks,
+        List<ExtensionAgentStartHookContribution> agentStartHooks,
+        List<ExtensionContextTransformHookContribution> contextTransformHooks,
         List<ExtensionCommandContribution> commands,
         List<ExtensionLifecycleListenerContribution> lifecycleListeners
 ) {
     public ResolvedExtensionContributions {
         tools = List.copyOf(tools);
         hooks = List.copyOf(hooks);
+        agentStartHooks = List.copyOf(agentStartHooks);
+        contextTransformHooks = List.copyOf(contextTransformHooks);
         commands = List.copyOf(commands);
         lifecycleListeners = List.copyOf(lifecycleListeners);
     }

@@ -10,7 +10,9 @@ import com.agent4j.ai.openai.OpenAiResponsesProvider;
 import com.agent4j.ai.openai.OpenAiResponsesProviderOptions;
 import com.agent4j.coding.message.CodingAgentMessageConverter;
 import com.agent4j.coding.extension.ExtensionContext;
+import com.agent4j.coding.extension.ExtensionAgentStartHookContribution;
 import com.agent4j.coding.extension.ExtensionContributionRegistry;
+import com.agent4j.coding.extension.ExtensionContextTransformHookContribution;
 import com.agent4j.coding.extension.ExtensionLoadException;
 import com.agent4j.coding.extension.ExtensionLoader;
 import com.agent4j.coding.extension.ExtensionToolRegistry;
@@ -46,6 +48,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
     private final AiProviderRegistry providerRegistry;
     private final ToolRegistry toolRegistry;
     private final List<ToolExecutionHook> toolExecutionHooks;
+    private final List<ExtensionAgentStartHookContribution> agentStartHooks;
+    private final List<ExtensionContextTransformHookContribution> contextTransformHooks;
     private final AgentMessageConverter messageConverter;
     private final Clock clock;
     private final CodingSessionCompactor sessionCompactor;
@@ -66,6 +70,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
         this.providerRegistry = state.providerRegistry();
         this.toolRegistry = state.toolRegistry();
         this.toolExecutionHooks = state.toolExecutionHooks();
+        this.agentStartHooks = state.agentStartHooks();
+        this.contextTransformHooks = state.contextTransformHooks();
         this.messageConverter = state.messageConverter();
         this.clock = state.clock();
         this.sessionCompactor = state.sessionCompactor();
@@ -266,12 +272,26 @@ public final class CodingAgentRuntime implements AutoCloseable {
     }
 
     private CodingAgentSession newSession(SessionManager manager) {
+        ExtensionContext context = new ExtensionContext(sessionCwd(manager), manager.sessionFile(), true);
         return new CodingAgentSession(
                 this,
                 manager,
                 new AgentConversationContext(manager.activeAgentMessages(), List.of()),
                 toolRegistry,
-                toolExecutionHooks);
+                toolExecutionHooks,
+                agentStartHooks,
+                contextTransformHooks,
+                context);
+    }
+
+    private static Path sessionCwd(SessionManager manager) {
+        String cwd = manager.document().header().header()
+                .orElseThrow(() -> new IllegalStateException("session header is missing"))
+                .cwd();
+        if (cwd == null || cwd.isBlank()) {
+            throw new IllegalStateException("session header cwd is missing");
+        }
+        return Path.of(cwd);
     }
 
     private static SessionManager openSource(AgentSession source) throws java.io.IOException {
@@ -417,6 +437,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
             return new RuntimeState(resolvedEventBus, providerRegistry,
                     ExtensionToolRegistry.merge(baseToolRegistry, contributions),
                     contributions.hooks().stream().map(contribution -> contribution.hook()).toList(),
+                    contributions.agentStartHooks(),
+                    contributions.contextTransformHooks(),
                     messageConverter == null ? CodingAgentMessageConverter.INSTANCE : messageConverter,
                     resolvedClock,
                     sessionCompactor == null ? new CodingSessionCompactor(resolvedEventBus) : sessionCompactor,
@@ -431,6 +453,8 @@ public final class CodingAgentRuntime implements AutoCloseable {
             AiProviderRegistry providerRegistry,
             ToolRegistry toolRegistry,
             List<ToolExecutionHook> toolExecutionHooks,
+            List<ExtensionAgentStartHookContribution> agentStartHooks,
+            List<ExtensionContextTransformHookContribution> contextTransformHooks,
             AgentMessageConverter messageConverter,
             Clock clock,
             CodingSessionCompactor sessionCompactor,
