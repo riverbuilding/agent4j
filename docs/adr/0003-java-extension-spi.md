@@ -53,6 +53,19 @@ extension registers each contribution. Extension, tool, hook, command, and
 lifecycle-listener names each have their own namespace. A duplicate name is
 rejected at its second registration with a deterministic configuration error.
 
+### Bootstrap and discovery
+
+Slice 3 adds `ExtensionLoader`. It combines trusted extensions supplied through
+its builder with `ServiceLoader` providers visible to the application class
+loader, preserving programmatic registrations before discovered providers. It
+does not inspect the project directory, install packages, execute TypeScript,
+or load code from any project-controlled location.
+
+An explicitly disabled loader returns no extensions. No service descriptor is
+valid and leaves programmatic extensions available. A duplicate extension name
+or an invalid service provider fails startup deterministically rather than
+silently selecting a provider.
+
 ### Ordering and duplicate names
 
 The eventual runtime accepts an explicit ordered extension list. It validates
