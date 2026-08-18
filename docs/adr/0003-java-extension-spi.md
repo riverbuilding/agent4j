@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for Phase 13 slice 1.
+Accepted for Phase 13 slices 1 and 2.
 
 ## Context
 
@@ -38,6 +38,20 @@ Expose the initial Java contracts in `com.agent4j.coding.extension`:
 `agent4j-core` remains provider- and extension-agnostic. The SPI belongs in
 `agent4j-coding`, which may depend on core transcript/tool types and AI request
 types at the outer coding-agent boundary.
+
+### Extension model and contribution registry
+
+Slice 2 adds `AgentExtension`, `ExtensionContext`, and
+`ExtensionContributionRegistry`. Host code supplies an ordered list of Java
+`AgentExtension` objects and calls `resolve(...)`; there is still no discovery
+or loading step. The resolved `ResolvedExtensionContributions` contains typed,
+immutable contributions for tools, tool-execution hooks, commands, and session
+lifecycle listeners. Each contribution records its owning extension.
+
+The resolver preserves the supplied extension order and the order in which an
+extension registers each contribution. Extension, tool, hook, command, and
+lifecycle-listener names each have their own namespace. A duplicate name is
+rejected at its second registration with a deterministic configuration error.
 
 ### Ordering and duplicate names
 
