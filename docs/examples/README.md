@@ -320,6 +320,59 @@ onboarding baseline for production applications: replace the sample workspace
 and request text, retain the explicit tool allowlist, and add mutating tools
 only after defining and testing their workspace and user-confirmation policy.
 
+### 13-build-triage
+
+Runs a deliberately constrained build-failure triager against one explicit Maven
+workspace. The agent can call `run_maven_test`, which always executes exactly
+`mvn test`, and can then inspect files with `read`, `ls`, `grep`, and `find`.
+It has no `write`, `edit`, or general `bash` capability. Maven itself may create
+normal build artifacts under `target`; its plugins run according to the
+workspace's existing build configuration, so use this only with a workspace you
+trust.
+
+Set the workspace explicitly to avoid accidentally running a build in a
+temporary empty directory. The walkthrough allocates up to six tool rounds so
+the agent can inspect the relevant failure after the test command. An optional
+Maven failure snippet can be supplied as example arguments.
+
+```bash
+export AGENT4J_EXAMPLES_WORKSPACE="$PWD"
+
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.BuildTriageExample \
+  -Dagent4j.liveExample.args="Tests fail after the latest dependency update."
+```
+
+The result is a structured diagnosis with **Root cause**, **Evidence**,
+**Smallest viable fix**, and **Verification** sections. This is intentionally a
+read-only diagnosis prototype; it does not apply the suggested fix.
+
+### 14-java-pr-review
+
+Reviews the current tracked-file worktree diff against `HEAD`. The agent starts
+with a fixed `read_git_diff` command (`git diff --no-ext-diff --unified=80 HEAD
+--`) and may inspect related files using `read`, `ls`, `grep`, and `find`. It
+cannot write, edit, run general shell commands, stage files, or change the
+worktree. Untracked files are intentionally outside this first review scope.
+
+Set the Git workspace explicitly. You may add review context, such as an API
+contract or a risky code path, as example arguments.
+
+```bash
+export AGENT4J_EXAMPLES_WORKSPACE="$PWD"
+
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.JavaPrReviewerExample \
+  -Dagent4j.liveExample.args="Focus on API compatibility and concurrency risks."
+```
+
+The reviewer reports actionable correctness, regression, security, concurrency,
+API-contract, and missing-test findings in `[severity] file:line` form. It
+omits style-only nits and ends with either **No findings** or a remaining-risk
+note.
+
 ## Bounds and cost
 
 The walkthroughs pass these defaults from `LiveExampleConfiguration` to

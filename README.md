@@ -31,6 +31,7 @@ interactive shell; it is not yet a full visual replacement for PI's TUI.
 | `agent4j-ai` | Provider-neutral model API, authentication, and OpenAI/Anthropic streaming adapters. |
 | `agent4j-core` | Agent loop, messages, events, tool execution, retries, and queues. |
 | `agent4j-coding` | Coding runtime, JSONL sessions, compaction, resources, extensions, and coding tools. |
+| `agent4j-agents` | Reusable policy-constrained agents, including Maven build triage and Java PR review. |
 | `agent4j-cli` | Picocli entry point and print, JSON, RPC, and interactive hosts. |
 | `agent4j-testkit` | Fake providers, recorded fixtures, and shared contract-test support. |
 | `agent4j-examples` | Opt-in, provider-backed examples. |
