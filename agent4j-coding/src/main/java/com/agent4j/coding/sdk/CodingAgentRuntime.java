@@ -120,6 +120,7 @@ public final class CodingAgentRuntime implements AutoCloseable {
         Builder runtime = builder()
                 .providerRegistry(modelRuntime.registry(model))
                 .loginService(loginService)
+                .eventBus(config.eventBus().orElseGet(AgentEventBus::new))
                 .clock(config.clock())
                 .extensionContext(new ExtensionContext(config.workspace(), null, true))
                 .runtimeFiles(new RuntimeFiles(

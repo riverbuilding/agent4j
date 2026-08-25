@@ -1,5 +1,6 @@
 package com.agent4j.coding.sdk;
 
+import com.agent4j.core.event.AgentEventBus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -30,5 +31,18 @@ class CodingAgentConfigRuntimeTest {
 
         assertThat(workspace).doesNotExist();
         assertThat(sessions).exists();
+    }
+
+    @Test
+    void usesConfiguredEventBus() throws Exception {
+        AgentEventBus eventBus = new AgentEventBus();
+        CodingAgentConfig config = CodingAgentConfig.builder(
+                        "test-key", "gpt-5", temporaryDirectory.resolve("workspace"), temporaryDirectory.resolve("sessions"))
+                .eventBus(eventBus)
+                .build();
+
+        CodingAgentRuntime runtime = CodingAgentRuntime.create(config);
+
+        assertThat(runtime.eventBus()).isSameAs(eventBus);
     }
 }

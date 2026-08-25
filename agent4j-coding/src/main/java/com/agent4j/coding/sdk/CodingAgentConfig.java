@@ -2,6 +2,7 @@ package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProvider;
+import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.tool.ToolRegistry;
 
 import java.nio.file.Path;
@@ -22,6 +23,7 @@ public final class CodingAgentConfig {
     private final List<AiModelReference> additionalModels;
     private final List<AiProvider> extensionProviders;
     private final Optional<ToolRegistry> toolRegistry;
+    private final Optional<AgentEventBus> eventBus;
     private final Optional<Integer> maxOutputTokens;
     private final Path workspace;
     private final Path sessionDirectory;
@@ -39,6 +41,7 @@ public final class CodingAgentConfig {
         this.additionalModels = List.copyOf(builder.additionalModels);
         this.extensionProviders = List.copyOf(builder.extensionProviders);
         this.toolRegistry = builder.toolRegistry;
+        this.eventBus = builder.eventBus;
         this.maxOutputTokens = builder.maxOutputTokens;
         this.workspace = builder.workspace;
         this.sessionDirectory = builder.sessionDirectory;
@@ -60,6 +63,7 @@ public final class CodingAgentConfig {
     public List<AiModelReference> additionalModels() { return additionalModels; }
     public List<AiProvider> extensionProviders() { return extensionProviders; }
     public Optional<ToolRegistry> toolRegistry() { return toolRegistry; }
+    public Optional<AgentEventBus> eventBus() { return eventBus; }
     public Optional<Integer> maxOutputTokens() { return maxOutputTokens; }
     public Path workspace() { return workspace; }
     public Path sessionDirectory() { return sessionDirectory; }
@@ -79,6 +83,7 @@ public final class CodingAgentConfig {
         private final List<AiModelReference> additionalModels = new ArrayList<>();
         private final List<AiProvider> extensionProviders = new ArrayList<>();
         private Optional<ToolRegistry> toolRegistry = Optional.empty();
+        private Optional<AgentEventBus> eventBus = Optional.empty();
         private Optional<Integer> maxOutputTokens = Optional.empty();
         private boolean ownsWorkspace;
         private boolean ownsSessionDirectory;
@@ -105,6 +110,9 @@ public final class CodingAgentConfig {
         }
         public Builder toolRegistry(ToolRegistry toolRegistry) {
             this.toolRegistry = Optional.of(Objects.requireNonNull(toolRegistry, "toolRegistry")); return this;
+        }
+        public Builder eventBus(AgentEventBus eventBus) {
+            this.eventBus = Optional.of(Objects.requireNonNull(eventBus, "eventBus")); return this;
         }
         public Builder maxOutputTokens(int maxOutputTokens) {
             if (maxOutputTokens <= 0) throw new IllegalArgumentException("maxOutputTokens must be positive");

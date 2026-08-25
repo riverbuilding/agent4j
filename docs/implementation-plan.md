@@ -1222,6 +1222,18 @@ CLI construction, prompt requests, and OpenAI/Anthropic request serialization.
   verification result as live evidence without asserting exact prose.
 - Keep the tests out of normal CI.
 
+Closeout: `RealProviderSmokeTest` reuses the mini-agent fixture with an
+isolated temporary workspace and session directory. It is disabled unless
+`-Dagent4j.liveSmoke=true` is supplied and each provider's API-key environment
+variable is present. Run it with
+`mvn -pl agent4j-cli -am test -Dagent4j.liveSmoke=true -Dtest=RealProviderSmokeTest`
+`-Dsurefire.failIfNoSpecifiedTests=false`.
+The default models are `gpt-5-mini` and `claude-haiku-4-5`; set
+`AGENT4J_OPENAI_SMOKE_MODEL` or `AGENT4J_ANTHROPIC_SMOKE_MODEL` to select an
+enabled alternative. Each run limits output to 512 tokens, model calls to 90
+seconds, and tool rounds to 8, then writes redacted live evidence to test
+output.
+
 ### Slice 6: Practical provider expansion
 
 - Add a configurable OpenAI-compatible provider adapter with base URL,
