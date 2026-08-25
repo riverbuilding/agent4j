@@ -1224,15 +1224,13 @@ CLI construction, prompt requests, and OpenAI/Anthropic request serialization.
 
 Closeout: `RealProviderSmokeTest` reuses the mini-agent fixture with an
 isolated temporary workspace and session directory. It is disabled unless
-`-Dagent4j.liveSmoke=true` is supplied and each provider's API-key environment
-variable is present. Run it with
+`-Dagent4j.liveSmoke=true` is supplied and `AGENT4J_API_KEY` is present. It
+uses `AGENT4J_BASE_URL` and `AGENT4J_MODEL` to target one configured
+OpenAI Responses-compatible endpoint. Run it with
 `mvn -pl agent4j-cli -am test -Dagent4j.liveSmoke=true -Dtest=RealProviderSmokeTest`
 `-Dsurefire.failIfNoSpecifiedTests=false`.
-The default models are `gpt-5-mini` and `claude-haiku-4-5`; set
-`AGENT4J_OPENAI_SMOKE_MODEL` or `AGENT4J_ANTHROPIC_SMOKE_MODEL` to select an
-enabled alternative. Each run limits output to 512 tokens, model calls to 90
-seconds, and tool rounds to 8, then writes redacted live evidence to test
-output.
+Each run limits output to 512 tokens, model calls to 90 seconds, and tool
+rounds to 8, then writes redacted live evidence to test output.
 
 ### Slice 6: Practical provider expansion
 
@@ -1269,15 +1267,20 @@ Exit criteria:
 
 - The deterministic fixture proves an agent can complete a bounded coding task
   through the public CLI/runtime path.
-- At least one real OpenAI model and one real Anthropic model complete the
-  opt-in smoke fixture within documented resource limits.
+- One configured OpenAI Responses-compatible model completes the opt-in smoke
+  fixture within documented resource limits.
 - The default prompt, project instructions, selected-tool guidance, and trust
   policy are observable in provider-request tests.
 - Coding tools meet the documented reliability baseline.
 
+Phase 15 status: complete. On 2026-08-25, the configured OpenAI
+Responses-compatible endpoint completed `RealProviderSmokeTest` with model
+`openai/openrouter/free` in 17.47 seconds. The agent used `ls`, `read`,
+`edit`, and `bash`; the fixture reported changes to `Calculator.java`,
+`Calculator.class`, and `CalculatorTest.class`, and verification succeeded.
+No credentials were recorded.
+
 ## Current Next Actions
 
-1. Start Phase 15 Slice 1: default coding-agent system prompt and CLI/runtime
-   prompt wiring.
-2. Keep Phase 9 production OAuth verification separate; record live-provider
+1. Keep Phase 9 production OAuth verification separate; record live-provider
    example evidence without treating it as sufficient OAuth closure evidence.

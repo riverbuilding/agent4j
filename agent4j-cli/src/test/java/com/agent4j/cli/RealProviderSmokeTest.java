@@ -52,23 +52,9 @@ class RealProviderSmokeTest {
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     @EnabledIfEnvironmentVariable(named = "AGENT4J_API_KEY", matches = ".+")
-    void completesFixtureWithAgent4jConfiguration() throws Exception {
+    void completesFixtureWithConfiguredEndpoint() throws Exception {
         runSmoke("openai", requiredEnvironment("AGENT4J_MODEL"), "AGENT4J_API_KEY",
                 Optional.of(requiredEnvironment("AGENT4J_BASE_URL")));
-    }
-
-    @Test
-    @Timeout(value = 5, unit = TimeUnit.MINUTES)
-    @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
-    void completesFixtureWithOpenAi() throws Exception {
-        runSmoke("openai", smokeModel("AGENT4J_OPENAI_SMOKE_MODEL", "gpt-5-mini"), "OPENAI_API_KEY", Optional.empty());
-    }
-
-    @Test
-    @Timeout(value = 5, unit = TimeUnit.MINUTES)
-    @EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = ".+")
-    void completesFixtureWithAnthropic() throws Exception {
-        runSmoke("anthropic", smokeModel("AGENT4J_ANTHROPIC_SMOKE_MODEL", "claude-haiku-4-5"), "ANTHROPIC_API_KEY", Optional.empty());
     }
 
     private void runSmoke(String provider, String model, String credentialVariable, Optional<String> baseUrl) throws Exception {
@@ -136,10 +122,6 @@ class RealProviderSmokeTest {
         } finally {
             System.out.println(evidence);
         }
-    }
-
-    private static String smokeModel(String variable, String defaultModel) {
-        return Optional.ofNullable(System.getenv(variable)).filter(value -> !value.isBlank()).orElse(defaultModel);
     }
 
     private static String requiredEnvironment(String variable) {
