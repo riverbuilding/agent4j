@@ -30,6 +30,7 @@ public final class ModelRuntime {
 
     private final LoginService loginService;
     private final Map<String, BuiltInProviderCatalog.ProviderDefinition> builtIns;
+    private final Map<String, OpenAiCompatibleProviderConfig> compatibleProviders;
     private final Map<String, List<AiModel>> configuredModels;
     private final Map<String, AiProvider> extensionProviders;
     private final Optional<AiModelReference> configuredDefault;
@@ -39,6 +40,13 @@ public final class ModelRuntime {
         this.loginService = builder.loginService;
         this.builtIns = new LinkedHashMap<>();
         builder.catalog.providers().forEach(provider -> builtIns.put(provider.id(), provider));
+        this.compatibleProviders = new LinkedHashMap<>();
+        builder.compatibleProviders.forEach(provider -> {
+            if (builtIns.containsKey(provider.id())) {
+                throw new IllegalArgumentException("openai-compatible provider cannot replace built-in provider: " + provider.id());
+            }
+            compatibleProviders.put(provider.id(), provider);
+        });
         this.configuredModels = copyModels(builder.configuredModels);
         this.extensionProviders = new LinkedHashMap<>();
         builder.extensionProviders.forEach(provider -> extensionProviders.put(provider.id(), provider));
@@ -125,6 +133,11 @@ public final class ModelRuntime {
                 registry.add(transform(definition.factory().apply(modelsFor(definition, defaultModel))));
             }
         });
+        compatibleProviders.values().forEach(definition -> {
+            if (!extensionProviders.containsKey(definition.id())) {
+                registry.add(transform(OpenAiCompatibleProviderAdapter.create(definition, defaultModel)));
+            }
+        });
         extensionProviders.values().stream().map(this::transform).forEach(registry::add);
         return registry.defaultModel(defaultModel).build();
     }
@@ -132,6 +145,10 @@ public final class ModelRuntime {
     private AiModelReference firstDefault() {
         return builtIns.values().stream().findFirst().map(BuiltInProviderCatalog.ProviderDefinition::defaultModel)
                 .or(() -> extensionProviders.values().stream()
+                        .filter(provider -> !provider.models().isEmpty())
+                        .map(provider -> provider.models().getFirst().reference())
+                        .findFirst())
+                .or(() -> compatibleProviders.values().stream()
                         .filter(provider -> !provider.models().isEmpty())
                         .map(provider -> provider.models().getFirst().reference())
                         .findFirst())
@@ -143,16 +160,14 @@ public final class ModelRuntime {
         if (models.isEmpty()) {
             throw new IllegalArgumentException("unknown provider: " + providerId);
         }
-        return builtIns.getOrDefault(providerId, null) == null
-                ? models.getFirst().reference()
-                : builtIns.get(providerId).defaultModel();
+        return builtIns.containsKey(providerId) ? builtIns.get(providerId).defaultModel() : models.getFirst().reference();
     }
 
     private AiModelReference resolveExplicit(AiModelReference reference) {
         if (allModels.resolve(reference).isPresent()) {
             return reference;
         }
-        if (builtIns.containsKey(reference.providerId())) {
+        if (builtIns.containsKey(reference.providerId()) || compatibleProviders.containsKey(reference.providerId())) {
             return reference;
         }
         throw new IllegalArgumentException("unknown provider/model: " + reference.displayName());
@@ -219,6 +234,7 @@ public final class ModelRuntime {
     public static final class Builder {
         private final LoginService loginService;
         private BuiltInProviderCatalog catalog = BuiltInProviderCatalog.defaults();
+        private final List<OpenAiCompatibleProviderConfig> compatibleProviders = new ArrayList<>();
         private final Map<String, List<AiModel>> configuredModels = new LinkedHashMap<>();
         private final List<AiProvider> extensionProviders = new ArrayList<>();
         private Optional<AiModelReference> configuredDefault = Optional.empty();
@@ -245,7 +261,11 @@ public final class ModelRuntime {
             readModels(root.path("models"));
             JsonNode providers = root.path("providers");
             if (providers.isObject()) {
-                providers.fields().forEachRemaining(entry -> readProviderModels(entry.getKey(), entry.getValue().path("models")));
+                providers.fields().forEachRemaining(entry -> {
+                    if (!"openai-compatible".equals(text(entry.getValue().path("type")).orElse(null))) {
+                        readProviderModels(entry.getKey(), entry.getValue().path("models"));
+                    }
+                });
             }
             text(root.path("defaultModel")).map(ModelRuntime::parseReference).ifPresent(reference -> configuredDefault = Optional.of(reference));
             return this;
@@ -259,6 +279,11 @@ public final class ModelRuntime {
 
         public Builder extensionProvider(AiProvider provider) {
             extensionProviders.add(Objects.requireNonNull(provider, "provider"));
+            return this;
+        }
+
+        public Builder openAiCompatibleProviders(List<OpenAiCompatibleProviderConfig> providers) {
+            compatibleProviders.addAll(Objects.requireNonNull(providers, "providers"));
             return this;
         }
 

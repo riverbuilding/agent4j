@@ -65,10 +65,45 @@ sent to each provider. This removes the first mini-agent usability blocker.
 - OpenAI: `gpt-5`, `gpt-5-mini`, `gpt-4.1`
 - Anthropic: `claude-sonnet-4-5`, `claude-opus-4-5`, `claude-haiku-4-5`
 
-`models.json` can add model identifiers to the existing providers but does not
-create a transport for a new provider. A supplied Java provider is needed for
-any additional provider ID. This is not comparable to PI's broad provider and
-model coverage.
+`models.json` can add model identifiers to existing providers and declare an
+OpenAI-compatible provider. Other provider protocols still need a supplied Java
+adapter, so this is not yet comparable to PI's broad provider and model
+coverage.
+
+### OpenAI-compatible provider configuration
+
+An agent-level `models.json` may declare an OpenAI Responses-compatible
+endpoint without Java code. Project configuration overrides a provider with
+the same ID from the global configuration.
+
+```json
+{
+  "providers": {
+    "openrouter": {
+      "type": "openai-compatible",
+      "name": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "headers": {"HTTP-Referer": "https://example.com"},
+      "models": [{
+        "id": "openrouter/free",
+        "contextWindow": 200000,
+        "maxTokens": 4096,
+        "input": ["text", "image"],
+        "features": {"parallelToolCalls": false}
+      }]
+    }
+  },
+  "defaultModel": "openrouter/openrouter/free"
+}
+```
+
+The provider accepts authentication through its configured environment variable
+or `--api-key`; `--base-url` overrides the configured endpoint for a single
+CLI invocation. Model entries are listed by the CLI runtime and can declare
+their context window, output-token limit, reasoning support, image input, and
+request capabilities. Native OpenAI and Anthropic configuration remains
+unchanged.
 
 ### Tool behavior needs hardening
 

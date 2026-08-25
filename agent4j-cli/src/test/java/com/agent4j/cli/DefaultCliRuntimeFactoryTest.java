@@ -92,6 +92,38 @@ class DefaultCliRuntimeFactoryTest {
     }
 
     @Test
+    void loadsAnOpenAiCompatibleProviderFromProjectConfiguration() throws Exception {
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace.resolve(".pi"));
+        Files.writeString(workspace.resolve(".pi/models.json"), """
+                {
+                  "providers": {
+                    "gateway": {
+                      "type": "openai-compatible",
+                      "baseUrl": "https://gateway.example/v1",
+                      "headers": {"X-Client": "agent4j"},
+                      "models": [{"id": "coding-model", "features": {"toolCalling": true}}]
+                    }
+                  },
+                  "defaultModel": "gateway/coding-model"
+                }
+                """);
+        DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
+                new ResourceLoader(),
+                new InMemoryAuthCredentialStore(),
+                CodingTools.localDefaults().registry(),
+                Clock.systemUTC());
+
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                workspace, temporaryDirectory.resolve("home"), Optional.empty(), Optional.empty(), Optional.empty()));
+
+        assertThat(runtime.defaultModel().displayName()).isEqualTo("gateway/coding-model");
+        assertThat(runtime.providerRegistry().orElseThrow().requireDefault().provider().id()).isEqualTo("gateway");
+        assertThat(runtime.providerRegistry().orElseThrow().requireDefault().model().baseUrl())
+                .contains("https://gateway.example/v1");
+    }
+
+    @Test
     void buildsAnAnthropicRuntimeFromTheBuiltInCatalog() throws Exception {
         DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
                 new ResourceLoader(),

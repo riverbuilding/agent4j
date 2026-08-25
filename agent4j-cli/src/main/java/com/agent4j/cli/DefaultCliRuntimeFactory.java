@@ -1,6 +1,7 @@
 package com.agent4j.cli;
 
 import com.agent4j.ai.AiModelReference;
+import com.agent4j.ai.EnvironmentAiAuthStore;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
@@ -12,12 +13,19 @@ import com.agent4j.coding.sdk.InMemoryAuthCredentialStore;
 import com.agent4j.coding.sdk.DefaultLoginService;
 import com.agent4j.coding.sdk.LoginService;
 import com.agent4j.coding.sdk.ModelRuntime;
+import com.agent4j.coding.sdk.BuiltInProviderCatalog;
+import com.agent4j.coding.sdk.OpenAiCompatibleProviderConfig;
+import com.agent4j.coding.sdk.OpenAiCompatibleProviderConfigLoader;
 import com.agent4j.coding.sdk.PersistentAuthCredentialStore;
 import com.agent4j.coding.sdk.RuntimePromptResolver;
 import com.agent4j.coding.tool.CodingTools;
 import com.agent4j.core.tool.ToolRegistry;
 
 import java.time.Clock;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
 
@@ -59,7 +67,15 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                 ResourceDiscoveryOptions.enabled(request.homeDirectory(), request.cwd()));
         boolean runtimeApiKey = request.apiKey().isPresent();
         AuthCredentialStore runtimeCredentialStore = runtimeApiKey ? new InMemoryAuthCredentialStore() : credentialStore;
-        LoginService loginService = new DefaultLoginService(runtimeCredentialStore, clock);
+        List<Path> modelFiles = List.of(
+                discovery.directories().globalAgentDir().resolve("models.json"),
+                discovery.directories().projectAgentDir().resolve("models.json"));
+        List<OpenAiCompatibleProviderConfig> compatibleProviders = OpenAiCompatibleProviderConfigLoader.load(modelFiles);
+        Map<String, EnvironmentAiAuthStore.ProviderEnvironmentAuth> credentials = new LinkedHashMap<>(
+                BuiltInProviderCatalog.defaults().credentialDescriptors());
+        compatibleProviders.forEach(provider -> credentials.put(provider.id(), provider.credentials()));
+        LoginService loginService = new DefaultLoginService(runtimeCredentialStore, clock,
+                new EnvironmentAiAuthStore(System.getenv(), credentials));
         Optional<String> requestedProvider = request.provider().or(() -> discovery.settings().textField("defaultProvider"));
         Optional<String> requestedModel = request.model().or(() -> discovery.settings().textField("defaultModel"));
         if (request.apiKey().isPresent() && requestedProvider.isEmpty() && requestedModel.isEmpty()) {
@@ -70,8 +86,9 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                     requestedProvider.orElseThrow(), request.apiKey().orElseThrow(), request.baseUrl()));
         }
         ModelRuntime modelRuntime = ModelRuntime.builder(loginService)
-                .modelsJson(discovery.directories().globalAgentDir().resolve("models.json"))
-                .modelsJson(discovery.directories().projectAgentDir().resolve("models.json"))
+                .openAiCompatibleProviders(compatibleProviders)
+                .modelsJson(modelFiles.get(0))
+                .modelsJson(modelFiles.get(1))
                 .build();
         AiModelReference model = modelRuntime.resolve(requestedProvider, requestedModel);
         if (request.apiKey().isPresent() && requestedProvider.isEmpty()) {

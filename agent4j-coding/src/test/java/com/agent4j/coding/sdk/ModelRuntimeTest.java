@@ -82,6 +82,49 @@ class ModelRuntimeTest {
                 .contains("gpt-5", "company-model");
     }
 
+    @Test
+    void loadsAnOpenAiCompatibleProviderWithItsModelsAndCapabilities() throws Exception {
+        Path modelsFile = temporaryDirectory.resolve("models.json");
+        Files.writeString(modelsFile, """
+                {
+                  "providers": {
+                    "openrouter": {
+                      "type": "openai-compatible",
+                      "name": "OpenRouter",
+                      "baseUrl": "https://openrouter.example/api/v1",
+                      "apiKeyEnv": "OPENROUTER_API_KEY",
+                      "headers": {"HTTP-Referer": "https://agent4j.example"},
+                      "models": [{
+                        "id": "openrouter/free",
+                        "name": "OpenRouter Free",
+                        "contextWindow": 200000,
+                        "maxTokens": 4096,
+                        "reasoning": true,
+                        "input": ["text", "image"],
+                        "features": {"parallelToolCalls": false}
+                      }]
+                    }
+                  },
+                  "defaultModel": "openrouter/openrouter/free"
+                }
+                """);
+
+        List<OpenAiCompatibleProviderConfig> providers = OpenAiCompatibleProviderConfigLoader.load(List.of(modelsFile));
+        ModelRuntime runtime = ModelRuntime.builder(loginService(Map.of()))
+                .openAiCompatibleProviders(providers)
+                .modelsJson(modelsFile)
+                .build();
+
+        AiModel model = runtime.allModels().require(new AiModelReference("openrouter", "openrouter/free")).model();
+        assertThat(providers.getFirst().credentials().apiKeyEnv()).contains("OPENROUTER_API_KEY");
+        assertThat(providers.getFirst().headers()).containsEntry("HTTP-Referer", "https://agent4j.example");
+        assertThat(model.name()).isEqualTo("OpenRouter Free");
+        assertThat(model.contextWindow()).isEqualTo(200000);
+        assertThat(model.features().imageInput()).isTrue();
+        assertThat(model.features().parallelToolCalls()).isFalse();
+        assertThat(runtime.resolve(Optional.empty(), Optional.empty()).displayName()).isEqualTo("openrouter/openrouter/free");
+    }
+
     private static LoginService loginService(Map<String, String> environment) {
         return new DefaultLoginService(
                 new InMemoryAuthCredentialStore(),
