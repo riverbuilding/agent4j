@@ -107,7 +107,7 @@ public final class ModelRuntime {
             }
             if (matches.isEmpty()) {
                 throw new IllegalArgumentException("cannot identify a provider for model '" + model
-                        + "'; use provider/model or add it to models.json");
+                        + "'; use provider/model or add it to models.json. Available models: " + availableModelNames());
             }
             throw new IllegalArgumentException("model '" + model + "' is provided by multiple providers; use provider/model");
         }
@@ -170,7 +170,8 @@ public final class ModelRuntime {
         if (builtIns.containsKey(reference.providerId()) || compatibleProviders.containsKey(reference.providerId())) {
             return reference;
         }
-        throw new IllegalArgumentException("unknown provider/model: " + reference.displayName());
+        throw new IllegalArgumentException("unknown provider/model: " + reference.displayName()
+                + ". Available models: " + availableModelNames());
     }
 
     private List<AiModel> modelsFor(
@@ -190,6 +191,14 @@ public final class ModelRuntime {
         AiProvider provider = allModels.provider(providerId).orElseThrow(() -> new IllegalArgumentException(
                 "unknown provider: " + providerId));
         return provider.models();
+    }
+
+    private List<String> availableModelNames() {
+        return allModels.providers().stream()
+                .flatMap(provider -> provider.models().stream())
+                .map(model -> model.reference().displayName())
+                .sorted()
+                .toList();
     }
 
     private static Map<String, List<AiModel>> copyModels(Map<String, List<AiModel>> source) {

@@ -54,13 +54,19 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
                 }
                 if (active == null || !input.startsWith("/follow-up ")) {
                     try {
-                        InteractiveCommandResult command = registry.execute(input);
-                        if (command.handled()) {
-                            if (command.exit()) {
-                                await(active);
-                                return 0;
+                        boolean templateInvocation = input.equals("/template") || input.startsWith("/template ");
+                        if (templateInvocation) {
+                            input = renderTemplate(controller, input);
+                        }
+                        if (!templateInvocation) {
+                            InteractiveCommandResult command = registry.execute(input);
+                            if (command.handled()) {
+                                if (command.exit()) {
+                                    await(active);
+                                    return 0;
+                                }
+                                continue;
                             }
-                            continue;
                         }
                     } catch (Exception error) {
                         terminal.err().println("Error: " + error.getMessage());
@@ -99,7 +105,7 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
             BufferedReader reader) {
         InteractiveCommandDispatcher registry = new InteractiveCommandDispatcher();
         registry.register("help", ignored -> {
-            terminal.out().println("Commands: /help, /exit, /abort, /clear, /status, /model [provider/]model, /name <name>, /compact, /new, /continue, /resume [path|id]");
+            terminal.out().println("Commands: /help, /exit, /abort, /clear, /status, /model [provider/]model, /templates, /template <name> [arguments], /name <name>, /compact, /new, /continue, /resume [path|id]");
             terminal.out().flush();
             return InteractiveCommandResult.handledResult();
         });
@@ -133,6 +139,17 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
             } else {
                 controller.selectModel(value);
                 terminal.out().println("model: " + controller.model().displayName());
+            }
+            terminal.out().flush();
+            return InteractiveCommandResult.handledResult();
+        });
+        registry.register("templates", ignored -> {
+            List<com.agent4j.coding.resource.PromptTemplate> templates = controller.cliRuntime().resourceDiscovery().promptTemplates();
+            if (templates.isEmpty()) {
+                terminal.out().println("No prompt templates found.");
+            } else {
+                templates.forEach(template -> terminal.out().println(template.name()
+                        + template.description().map(description -> "\t" + description).orElse("")));
             }
             terminal.out().flush();
             return InteractiveCommandResult.handledResult();
@@ -196,6 +213,17 @@ final class LineInteractiveSessionRunner implements InteractiveSessionRunner {
                 controller.session().cwd(),
                 controller.session().sessionFile(),
                 controller.runtime().extensionProjectTrusted());
+    }
+
+    private static String renderTemplate(InteractiveSessionController controller, String input) {
+        String invocation = input.substring("/template".length()).strip();
+        if (invocation.isEmpty()) {
+            throw new IllegalArgumentException("/template requires a template name");
+        }
+        int separator = invocation.indexOf(' ');
+        String name = separator < 0 ? invocation : invocation.substring(0, separator);
+        String arguments = separator < 0 ? "" : invocation.substring(separator + 1).strip();
+        return PromptTemplateRenderer.render(controller.cliRuntime().resourceDiscovery(), name, List.of(arguments));
     }
 
     private Future<?> submit(ExecutorService prompts, InteractiveSessionController controller, String input, InteractiveTerminal terminal) {

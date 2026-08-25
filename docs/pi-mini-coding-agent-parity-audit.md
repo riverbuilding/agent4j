@@ -105,6 +105,22 @@ their context window, output-token limit, reasoning support, image input, and
 request capabilities. Native OpenAI and Anthropic configuration remains
 unchanged.
 
+### Non-interactive CLI prompts
+
+When standard input is not a terminal, agent4j runs one prompt in text/print
+mode and exits. With no positional prompt, piped text becomes the prompt, and
+a positional `@path` includes a UTF-8 text file relative to the workspace.
+`--template <name>` renders a discovered prompt template; `$ARGUMENTS` in a
+template is replaced with the remaining prompt text. Interactive mode exposes
+`/templates` and `/template <name> [arguments]`. Use `--list-models` to inspect
+the configured provider/model catalog.
+
+```sh
+printf 'Fix the failing test.' | agent4j
+agent4j --template review @changes.txt
+agent4j --list-models
+```
+
 ### Tool behavior needs hardening
 
 The existing tools are useful, but do not yet consistently match PI's coding

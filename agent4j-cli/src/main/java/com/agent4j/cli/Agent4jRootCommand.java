@@ -52,6 +52,12 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     @Option(names = "--model", description = "Model ID or provider/model")
     private String model;
 
+    @Option(names = "--list-models", description = "List configured models and exit")
+    private boolean listModels;
+
+    @Option(names = "--template", description = "Render a discovered prompt template")
+    private String template;
+
     @Option(names = "--api-key", description = "Non-persistent provider API key")
     private String apiKey;
 
@@ -113,19 +119,29 @@ public final class Agent4jRootCommand implements Callable<Integer> {
         CliSessionOptions sessionOptions = sessionOptions();
         CliSessionOptions.validate(sessionOptions);
         CliRuntime runtime = runtimeFactory.create(runtimeRequest());
+        if (listModels) {
+            listModels(runtime);
+            return 0;
+        }
+        boolean automaticPrint = System.console() == null && mode() == null && !print;
+        boolean readPipedInput = System.console() == null && mode() != CliMode.RPC && messages.isEmpty();
+        List<String> promptMessages = PromptInputResolver.resolve(messages, input, readPipedInput, environment.cwd());
+        if (template != null) {
+            promptMessages = List.of(PromptTemplateRenderer.render(runtime.resourceDiscovery(), template, promptMessages));
+        }
         CliSessionLifecycle sessions = new CliSessionLifecycle(runtime, environment, sessionOptions);
         try {
             if (mode() == CliMode.RPC) {
                 return rpcModeRunner.run(runtime, environment, input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
             if (mode() == CliMode.JSON) {
-                return jsonEventModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
+                return jsonEventModeRunner.run(runtime, environment, promptMessages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
-            if (print) {
-                return printModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
+            if (print || mode() == CliMode.TEXT || automaticPrint) {
+                return printModeRunner.run(runtime, environment, promptMessages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
             return interactiveModeRunner.run(runtime, sessions,
-                    InteractiveTerminal.system(input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr()), messages);
+                    InteractiveTerminal.system(input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr()), promptMessages);
         } finally {
             sessions.close();
         }
@@ -182,5 +198,13 @@ public final class Agent4jRootCommand implements Callable<Integer> {
 
     List<String> messages() {
         return List.copyOf(messages);
+    }
+
+    private void listModels(CliRuntime runtime) {
+        var out = commandSpec.commandLine().getOut();
+        runtime.providerRegistry().orElseThrow(() -> new IllegalStateException("model registry is not configured"))
+                .providers().forEach(provider -> provider.models().forEach(candidate ->
+                        out.println(candidate.reference().displayName() + "\t" + candidate.name())));
+        out.flush();
     }
 }

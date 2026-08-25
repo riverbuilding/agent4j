@@ -29,6 +29,8 @@ final class InteractiveSessionController implements AutoCloseable {
 
     CodingAgentRuntime runtime() { return runtime.runtime(); }
 
+    CliRuntime cliRuntime() { return runtime; }
+
     CliSessionLifecycle lifecycle() { return lifecycle; }
 
     void createNew() throws Exception { replace(lifecycle.createNew()); }

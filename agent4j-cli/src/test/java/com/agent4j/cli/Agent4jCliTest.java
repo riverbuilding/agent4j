@@ -109,29 +109,43 @@ class Agent4jCliTest {
     }
 
     @Test
-    void defaultTextModeBootstrapsResolvedSessionThroughInteractiveRunner() throws Exception {
+    void listsConfiguredModelsWithoutOpeningASession() throws Exception {
+        StringWriter stdout = new StringWriter();
+
+        int exitCode = Agent4jCli.execute(
+                request -> runtime(new FakeModelClient()),
+                environment(),
+                new PrintWriter(stdout),
+                new PrintWriter(new StringWriter()),
+                "--list-models");
+
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString()).contains("openai/gpt-test\tTest model");
+    }
+
+    @Test
+    void nonInteractiveInputRunsInPrintMode() throws Exception {
         AtomicReference<CliRuntimeRequest> request = new AtomicReference<>();
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(new AiStreamEvent.MessageCompleted(
+                "assistant-1",
+                new AiAssistantMessage(List.of(new AiTextContent("piped answer")), AiStopReason.STOP, AiUsage.zero()))));
         StringWriter stdout = new StringWriter();
         StringWriter stderr = new StringWriter();
 
         int exitCode = Agent4jCli.execute(
                 input -> {
                     request.set(input);
-                    return runtime();
+                    return runtime(model);
                 },
                 environment(),
-                new java.io.StringReader(""),
+                new java.io.StringReader("piped task\n"),
                 new PrintWriter(stdout),
                 new PrintWriter(stderr));
 
         assertThat(exitCode).isZero();
         assertThat(request.get()).isNotNull();
-        assertThat(stdout.toString()).isEqualTo("agent4j> ");
+        assertThat(stdout.toString()).isEqualTo("piped answer\n");
         assertThat(stderr.toString()).isEmpty();
-        try (var sessionFiles = Files.walk(environment().homeDirectory().resolve(".pi/agent/sessions"))) {
-            assertThat(sessionFiles.anyMatch(path ->
-                    Files.isRegularFile(path) && path.getFileName().toString().endsWith(".jsonl"))).isTrue();
-        }
     }
 
     @Test
@@ -266,7 +280,8 @@ class Agent4jCliTest {
             runtime.providerRegistry(com.agent4j.ai.AiProviderRegistry.fixedClient(
                     new com.agent4j.ai.AiModel(new AiModelReference("openai", "gpt-test"), "Test model"), model));
         }
-        return new CliRuntime(runtime.build(), discovery, new AiModelReference("openai", "gpt-test"));
+        CodingAgentRuntime builtRuntime = runtime.build();
+        return new CliRuntime(builtRuntime, discovery, new AiModelReference("openai", "gpt-test"), builtRuntime.optionalProviderRegistry());
     }
 
     private static final class FakeLoginService implements LoginService {
