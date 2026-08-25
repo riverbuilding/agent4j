@@ -63,6 +63,7 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
     @Override
     public CliRuntime create(CliRuntimeRequest request) throws Exception {
         Objects.requireNonNull(request, "request");
+        Map<String, String> environment = System.getenv();
         ResourceDiscovery discovery = resourceLoader.discover(
                 ResourceDiscoveryOptions.enabled(request.homeDirectory(), request.cwd()));
         boolean runtimeApiKey = request.apiKey().isPresent();
@@ -75,9 +76,10 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                 BuiltInProviderCatalog.defaults().credentialDescriptors());
         compatibleProviders.forEach(provider -> credentials.put(provider.id(), provider.credentials()));
         LoginService loginService = new DefaultLoginService(runtimeCredentialStore, clock,
-                new EnvironmentAiAuthStore(System.getenv(), credentials));
+                new EnvironmentAiAuthStore(environment, credentials));
         Optional<String> requestedProvider = request.provider().or(() -> discovery.settings().textField("defaultProvider"));
-        Optional<String> requestedModel = request.model().or(() -> discovery.settings().textField("defaultModel"));
+        Optional<String> requestedModel = requestedModel(
+                request.model(), discovery.settings().textField("defaultModel"), environment);
         if (request.apiKey().isPresent() && requestedProvider.isEmpty() && requestedModel.isEmpty()) {
             throw new IllegalArgumentException("--api-key requires --model or --provider");
         }
@@ -114,6 +116,18 @@ public final class DefaultCliRuntimeFactory implements CliRuntimeFactory {
                 .build();
 
         return new CliRuntime(runtime, discovery, model, runtime.optionalProviderRegistry(), systemPrompt);
+    }
+
+    private static Optional<String> environmentValue(Map<String, String> environment, String name) {
+        return Optional.ofNullable(environment.get(name)).map(String::strip).filter(value -> !value.isEmpty());
+    }
+
+    static Optional<String> requestedModel(
+            Optional<String> commandLineModel,
+            Optional<String> configuredModel,
+            Map<String, String> environment
+    ) {
+        return commandLineModel.or(() -> configuredModel).or(() -> environmentValue(environment, "AGENT4J_MODEL"));
     }
 
 }

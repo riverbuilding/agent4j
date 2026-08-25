@@ -1006,7 +1006,7 @@ Principles:
 - Examples use the production `OpenAiResponsesProvider`, `CodingAgentRuntime`,
   and `CodingAgentSession` boundaries. They must not substitute
   fake models or fake providers for the feature being demonstrated.
-- Require `OPENAI_API_KEY` and `AGENT4J_OPENAI_MODEL` from the environment;
+- Require `AGENT4J_API_KEY` and `AGENT4J_MODEL` from the environment;
   never accept keys as command-line arguments, print them, persist them in
   example sessions, or add them to source control.
 - Make all live runs opt-in and exclude them from normal `mvn test` execution.

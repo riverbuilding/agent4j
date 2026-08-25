@@ -255,6 +255,8 @@ class AiProviderAbstractionTest {
                 .put("openai", configured)
                 .build();
         AiAuthStore environment = new EnvironmentAiAuthStore(Map.of(
+                "AGENT4J_API_KEY", "sk-openai-test",
+                "AGENT4J_BASE_URL", "https://openai.test",
                 "ANTHROPIC_API_KEY", "sk-ant-test",
                 "ANTHROPIC_BASE_URL", "https://anthropic.test"));
 
@@ -265,7 +267,11 @@ class AiProviderAbstractionTest {
             assertThat(auth.baseUrl()).contains("https://anthropic.test");
             assertThat(auth.source()).contains("environment");
         });
-        assertThat(environment.resolve("openai")).isEmpty();
+        assertThat(environment.resolve("openai")).hasValueSatisfying(auth -> {
+            assertThat(auth.apiKey()).contains("sk-openai-test");
+            assertThat(auth.baseUrl()).contains("https://openai.test");
+            assertThat(auth.source()).contains("environment");
+        });
     }
 
     @Test

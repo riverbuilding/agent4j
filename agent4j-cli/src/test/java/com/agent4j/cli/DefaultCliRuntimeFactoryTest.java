@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,6 +18,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DefaultCliRuntimeFactoryTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void resolvesAgent4jModelFromTheEnvironmentWhenNoModelIsConfigured() {
+        assertThat(DefaultCliRuntimeFactory.requestedModel(
+                Optional.empty(), Optional.empty(), Map.of("AGENT4J_MODEL", "openai/gpt-4.1")))
+                .contains("openai/gpt-4.1");
+    }
+
+    @Test
+    void givesConfiguredAndCommandLineModelsPrecedenceOverAgent4jModel() {
+        assertThat(DefaultCliRuntimeFactory.requestedModel(
+                Optional.empty(), Optional.of("gpt-from-settings"), Map.of("AGENT4J_MODEL", "openai/gpt-4.1")))
+                .contains("gpt-from-settings");
+        assertThat(DefaultCliRuntimeFactory.requestedModel(
+                Optional.of("gpt-from-command-line"), Optional.of("gpt-from-settings"),
+                Map.of("AGENT4J_MODEL", "openai/gpt-4.1")))
+                .contains("gpt-from-command-line");
+    }
 
     @Test
     void resolvesProjectSettingsAndBuildsSdkOwnedOpenAiRuntime() throws Exception {

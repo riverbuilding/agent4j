@@ -28,7 +28,7 @@ public final class BuiltInProviderCatalog {
                         new AiModelReference("openai", "gpt-5"),
                         List.of("gpt-5", "gpt-5-mini", "gpt-4.1"),
                         new EnvironmentAiAuthStore.ProviderEnvironmentAuth(
-                                java.util.Optional.of("OPENAI_API_KEY"), java.util.Optional.of("OPENAI_BASE_URL")),
+                                java.util.Optional.of("AGENT4J_API_KEY"), java.util.Optional.of("AGENT4J_BASE_URL")),
                         OpenAiResponsesProvider::new),
                 new ProviderDefinition(
                         "anthropic",

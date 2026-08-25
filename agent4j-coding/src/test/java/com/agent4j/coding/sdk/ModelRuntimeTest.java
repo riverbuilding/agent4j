@@ -27,7 +27,7 @@ class ModelRuntimeTest {
 
     @Test
     void resolvesAKnownModelWithoutAnExplicitProvider() {
-        ModelRuntime runtime = new ModelRuntime(loginService(Map.of("OPENAI_API_KEY", "test-key")));
+        ModelRuntime runtime = new ModelRuntime(loginService(Map.of("AGENT4J_API_KEY", "test-key")));
 
         assertThat(runtime.resolve(Optional.empty(), Optional.of("gpt-5")).displayName()).isEqualTo("openai/gpt-5");
     }
@@ -43,7 +43,7 @@ class ModelRuntimeTest {
     @Test
     void requiresASelectionWhenMultipleProvidersAreAuthenticated() {
         ModelRuntime runtime = new ModelRuntime(loginService(Map.of(
-                "OPENAI_API_KEY", "openai-key",
+                "AGENT4J_API_KEY", "openai-key",
                 "ANTHROPIC_API_KEY", "anthropic-key")));
 
         assertThatThrownBy(() -> runtime.resolve(Optional.empty(), Optional.empty()))
@@ -69,7 +69,7 @@ class ModelRuntimeTest {
                 }
                 """);
         AiModel extensionModel = new AiModel(new AiModelReference("test", "extension-model"), "Extension Model");
-        ModelRuntime runtime = ModelRuntime.builder(loginService(Map.of("OPENAI_API_KEY", "test-key")))
+        ModelRuntime runtime = ModelRuntime.builder(loginService(Map.of("AGENT4J_API_KEY", "test-key")))
                 .modelsJson(modelsFile)
                 .extensionProvider(provider("test", extensionModel))
                 .build();

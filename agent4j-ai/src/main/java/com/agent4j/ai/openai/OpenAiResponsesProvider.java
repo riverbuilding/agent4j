@@ -152,7 +152,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
         headers.putAll(request.options().headers());
         request.context().auth().headers().forEach(headers::put);
         Optional<String> bearerToken = request.context().auth().authorizationBearerToken()
-                .or(() -> Optional.ofNullable(System.getenv("OPENAI_API_KEY")));
+                .or(() -> Optional.ofNullable(System.getenv("AGENT4J_API_KEY")));
         bearerToken.ifPresent(value -> headers.putIfAbsent("Authorization", "Bearer " + value));
         return new OpenAiHttpRequest(
                 AiEndpointResolver.endpoint(request.model(), options.endpoint(), "/responses"),

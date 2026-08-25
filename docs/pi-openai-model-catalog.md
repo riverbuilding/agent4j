@@ -10,8 +10,13 @@ PI provides two distinct OpenAI-backed built-in providers:
 
 | Provider ID | Authentication | Endpoint |
 | --- | --- | --- |
-| `openai` | `OPENAI_API_KEY` | `https://api.openai.com/v1` |
+| `openai` | `AGENT4J_API_KEY` | `https://api.openai.com/v1` |
 | `openai-codex` | ChatGPT Plus/Pro OAuth | `https://chatgpt.com/backend-api` |
+
+For the agent4j CLI, `AGENT4J_MODEL` selects the default model when neither a
+command-line `--model` nor a discovered `defaultModel` setting is present.
+Command-line selection takes precedence over project/global settings, which in
+turn take precedence over this environment default.
 
 ## `openai`
 
