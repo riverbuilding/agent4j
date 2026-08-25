@@ -10,6 +10,8 @@ The project is a multi-module Maven build and is currently suitable for
 developing and exercising a small coding agent. It has a tested line-oriented
 interactive shell; it is not yet a full visual replacement for PI's TUI.
 
+Visit the [agent4j website](https://agent4j-7mv9.vercel.app/).
+
 ## What works today
 
 - OpenAI Responses and Anthropic Messages providers, plus configured
