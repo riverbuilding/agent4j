@@ -174,19 +174,16 @@ LoginService loginService = new DefaultLoginService(
         new OpenAiSubscriptionLoginClient(options));
 ```
 
-For SDK users, `CodingAgentRuntimeServices.withOpenAi(...)` wires the standard
+For SDK users, `CodingAgentRuntime.builder().openAi(...)` wires the standard
 OpenAI Responses provider, provider registry, persistent auth store, and the
 standard Codex subscription login client:
 
 ```java
 AiModelReference model = new AiModelReference("openai", "gpt-5");
 
-CodingAgentRuntimeServices services =
-        CodingAgentRuntimeServices.withOpenAi(
-                OpenAiCodingRuntimeOptions.builder(model)
-                        .build());
-
-AgentSessionRuntime runtime = new CodingAgentSessionRuntime(services);
+CodingAgentRuntime runtime = CodingAgentRuntime.builder()
+        .openAi(OpenAiCodingRuntimeOptions.builder(model).build())
+        .build();
 ```
 
 `OpenAiCodingRuntimeOptions` uses `OpenAiSubscriptionLoginClientOptions.codexDefaults()`
@@ -335,7 +332,7 @@ stored refresh token. `AuthStatus.metadata()` exposes provider metadata such as
 
 Later, `AgentSession.prompt(...)` uses stored auth through:
 
-1. `CodingAgentSessionRuntime` resolves the provider/model.
+1. `CodingAgentSession` resolves the provider/model.
 2. It calls `LoginService.resolveAuth("openai")`.
 3. It creates a provider-backed `AgentLoop` with that `AiResolvedAuth`.
 4. `OpenAiResponsesProvider` sends the access token as:

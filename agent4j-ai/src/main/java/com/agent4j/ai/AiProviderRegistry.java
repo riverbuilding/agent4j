@@ -21,6 +21,14 @@ public final class AiProviderRegistry {
         return new Builder();
     }
 
+    public static AiProviderRegistry fixedClient(AiModel model, AiModelClient client) {
+        Objects.requireNonNull(model, "model");
+        return builder()
+                .add(new AiModelClientProvider(model, client))
+                .defaultModel(model.reference())
+                .build();
+    }
+
     public List<AiProvider> providers() {
         return List.copyOf(providers.values());
     }

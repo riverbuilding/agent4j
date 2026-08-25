@@ -4,8 +4,7 @@ import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.sdk.AgentSession;
 import com.agent4j.coding.sdk.AuthSession;
 import com.agent4j.coding.sdk.AuthStatus;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.coding.sdk.CreateSessionRequest;
 import com.agent4j.coding.sdk.DeviceCodeSubscriptionLoginRequest;
 import com.agent4j.coding.sdk.LoginService;
@@ -39,11 +38,11 @@ public final class OpenAiSubscriptionSdkExample {
         }
 
         AiModelReference model = new AiModelReference(OPENAI_PROVIDER_ID, requiredModel());
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder().openAi(
                 OpenAiCodingRuntimeOptions.builder(model)
                         .credentialStore(PersistentAuthCredentialStore.userDefault())
-                        .build());
-        LoginService loginService = services.loginService();
+                        .build()).build();
+        LoginService loginService = runtime.loginService();
 
         switch (args[0]) {
             case "browser" -> printStatus(loginService.loginOpenAiSubscription());
@@ -53,7 +52,7 @@ public final class OpenAiSubscriptionSdkExample {
             case "logout" -> System.out.println(loginService.logout(OPENAI_PROVIDER_ID)
                     ? "OpenAI credentials removed."
                     : "No OpenAI credentials were stored.");
-            case "prompt" -> prompt(services, args);
+            case "prompt" -> prompt(runtime, args);
             default -> usage();
         }
     }
@@ -80,13 +79,12 @@ public final class OpenAiSubscriptionSdkExample {
         }
     }
 
-    private static void prompt(CodingAgentRuntimeServices services, String[] args) throws Exception {
+    private static void prompt(CodingAgentRuntime runtime, String[] args) throws Exception {
         if (args.length < 3) {
             throw new IllegalArgumentException("prompt requires <session-file> <prompt text>");
         }
         Path sessionFile = Path.of(args[1]).toAbsolutePath().normalize();
         String prompt = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length));
-        CodingAgentSessionRuntime runtime = new CodingAgentSessionRuntime(services);
         AgentSession session = Files.exists(sessionFile)
                 ? runtime.resumeSession(new ResumeSessionRequest(sessionFile))
                 : runtime.createSession(new CreateSessionRequest(sessionFile, Path.of(".")));

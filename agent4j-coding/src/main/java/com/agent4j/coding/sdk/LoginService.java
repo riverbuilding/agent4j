@@ -35,5 +35,9 @@ public interface LoginService {
 
     AiResolvedAuth resolveAuth(String providerId);
 
+    default boolean isAuthenticated(String providerId) {
+        return resolveAuth(providerId).hasAuthentication();
+    }
+
     boolean logout(String providerId);
 }

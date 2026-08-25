@@ -33,20 +33,30 @@ class CodingToolsTest {
             processes,
             new WorkspacePathPolicy(),
             new CodingToolLimits(8, 2, Duration.ofSeconds(5)));
-    private final ToolExecutor executor = new ToolExecutor(tools.registry());
+    private final ToolExecutor executor = new ToolExecutor(tools.registry(CodingToolProfile.FULL));
 
     @Test
     void exposesFirstParityToolSpecsInStableOrder() {
-        assertThat(tools.registry().specs()).extracting(com.agent4j.core.tool.ToolSpec::name)
+        assertThat(tools.registry(CodingToolProfile.FULL).specs()).extracting(com.agent4j.core.tool.ToolSpec::name)
+                .containsExactly("read", "write", "edit", "bash", "ls", "grep", "find");
+    }
+
+    @Test
+    void exposesDocumentedToolProfiles() {
+        assertThat(tools.registry().specs()).extracting(ToolSpec::name)
+                .containsExactly("read", "write", "edit", "bash");
+        assertThat(tools.registry(CodingToolProfile.READ_ONLY).specs()).extracting(ToolSpec::name)
+                .containsExactly("read", "grep", "find", "ls");
+        assertThat(tools.registry(CodingToolProfile.FULL).specs()).extracting(ToolSpec::name)
                 .containsExactly("read", "write", "edit", "bash", "ls", "grep", "find");
     }
 
     @Test
     void exposesAuditedInputSchemasWithoutLeakingUnrelatedProperties() {
-        Map<String, ToolSpec> specs = tools.registry().specs().stream()
+        Map<String, ToolSpec> specs = tools.registry(CodingToolProfile.FULL).specs().stream()
                 .collect(java.util.stream.Collectors.toMap(ToolSpec::name, spec -> spec));
 
-        assertSchema(specs.get("read"), List.of("path"), List.of("path"));
+        assertSchema(specs.get("read"), List.of("path"), List.of("path", "offset", "limit"));
         assertSchema(specs.get("write"), List.of("path", "content"), List.of("path", "content"));
         assertSchema(specs.get("edit"), List.of("path", "oldText", "newText"), List.of("path", "oldText", "newText"));
         assertSchema(specs.get("bash"), List.of("command"), List.of("command", "timeoutSeconds"));
@@ -65,9 +75,22 @@ class CodingToolsTest {
 
         assertThat(result.error()).isFalse();
         assertThat(result.content().get("path").asText()).isEqualTo("README.md");
-        assertThat(result.content().get("content").asText()).isEqualTo("hello wo");
+        assertThat(result.content().get("content").asText()).isEqualTo("1: hello");
         assertThat(result.content().get("truncated").asBoolean()).isTrue();
         assertThat(result.content().get("originalLength").asInt()).isEqualTo(11);
+    }
+
+    @Test
+    void readsBoundedLineRangeWithLineNumbers() {
+        files.writeStringUnchecked(CWD.resolve("README.md"), "one\ntwo\nthree");
+
+        ToolResult result = execute("read", args().put("path", "README.md").put("offset", 1).put("limit", 1));
+
+        assertThat(result.error()).isFalse();
+        assertThat(result.content().get("content").asText()).isEqualTo("2: two");
+        assertThat(result.content().get("truncated").asBoolean()).isTrue();
+        assertThat(result.content().get("offset").asInt()).isEqualTo(1);
+        assertThat(result.content().get("limit").asInt()).isEqualTo(1);
     }
 
     @Test
@@ -77,7 +100,7 @@ class CodingToolsTest {
         ToolResult result = execute("read", args().put("path", "image.bin"));
 
         assertThat(result.error()).isFalse();
-        assertThat(result.content().get("content").asText()).isEqualTo("\u0001\u0002\u0000\u0003");
+        assertThat(result.content().get("content").asText()).isEqualTo("1: \u0001\u0002\u0000\u0003");
     }
 
     @Test
@@ -93,7 +116,7 @@ class CodingToolsTest {
     }
 
     @Test
-    void editReplacesFirstExactOccurrence() {
+    void editRejectsAmbiguousExactOccurrenceWithoutWriting() {
         files.writeStringUnchecked(CWD.resolve("file.txt"), "one two two");
 
         ToolResult result = execute("edit", args()
@@ -101,15 +124,9 @@ class CodingToolsTest {
                 .put("oldText", "two")
                 .put("newText", "three"));
 
-        assertThat(result.error()).isFalse();
-        assertThat(result.content().get("path").asText()).isEqualTo("file.txt");
-        assertThat(files.readStringUnchecked(CWD.resolve("file.txt"))).isEqualTo("one three two");
-        assertThat(result.content().get("replacements").asInt()).isEqualTo(1);
-        assertThat(result.content().get("matchCount").asInt()).isEqualTo(2);
-        assertThat(result.content().get("ambiguous").asBoolean()).isTrue();
-        assertThat(result.content().get("diff").asText()).isEqualTo("- two\n+ three");
-        assertThat(result.content().get("contextBefore").asText()).isEqualTo("one ");
-        assertThat(result.content().get("contextAfter").asText()).isEqualTo(" two");
+        assertThat(result.error()).isTrue();
+        assertThat(result.content().asText()).contains("ambiguous");
+        assertThat(files.readStringUnchecked(CWD.resolve("file.txt"))).isEqualTo("one two two");
     }
 
     @Test
@@ -266,6 +283,21 @@ class CodingToolsTest {
         assertThat(result.content().get("matches")).hasSize(2);
         assertThat(result.content().get("truncated").asBoolean()).isTrue();
         assertThat(result.content().get("totalMatches").asInt()).isEqualTo(3);
+    }
+
+    @Test
+    void searchToolsExcludeGitignoredPaths() {
+        files.writeStringUnchecked(CWD.resolve(".gitignore"), "build/\n*.log\n");
+        files.writeStringUnchecked(CWD.resolve("build/generated.txt"), "target");
+        files.writeStringUnchecked(CWD.resolve("application.log"), "target");
+        files.writeStringUnchecked(CWD.resolve("src/Main.java"), "target");
+
+        ToolResult grep = execute("grep", args().put("pattern", "target"));
+        ToolResult find = execute("find", args().put("name", ".txt"));
+
+        assertThat(grep.content().get("matches")).hasSize(1);
+        assertThat(grep.content().get("matches").get(0).get("path").asText()).isEqualTo("src/Main.java");
+        assertThat(find.content().get("entries")).isEmpty();
     }
 
     @Test

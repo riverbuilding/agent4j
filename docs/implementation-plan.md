@@ -334,7 +334,7 @@ Tasks:
   Started system prompt transport with `AiSystemMessage` and optional
   `AgentLoopRequest.systemPrompt`, so assembled prompts can be sent to the
   model without being persisted as transcript messages. Started coding-agent
-  request preparation with `CodingAgentLoopRequestFactory`, which discovers
+  request preparation with `CodingAgentLoopRequestPreparer`, which discovers
   resources, assembles the system prompt, preserves the original loop request
   fields, and returns discovery metadata for diagnostics. Full `AgentSession`
   wiring and fixture-based exact text parity are still pending.
@@ -590,7 +590,7 @@ Goal: expose a stable Java embedding API equivalent to PI's SDK concepts.
 
 Tasks:
 
-- Mirror PI `AgentSession`, `AgentSessionRuntime`, and harness service
+- Mirror PI `AgentSession`, `CodingAgentRuntime`, and harness service
   responsibilities before adding Java-only conveniences. Initial shape audit is
   done in `docs/sdk-runtime-shape-audit.md`: `agent4j-core` remains the generic
   loop/context layer, `agent4j-coding` owns the coding SDK/runtime API, and
@@ -600,10 +600,10 @@ Tasks:
   `AgentConversationContext`. Interface baseline is done in
   `com.agent4j.coding.sdk.AgentSession`; concrete session implementation is in
   the next creation/resume/prompt slices.
-- Add `AgentSessionRuntime` in `agent4j-coding` as the services/lifecycle owner
+- Add `CodingAgentRuntime` in `agent4j-coding` as the services/lifecycle owner
   for providers, tools, events, resources, settings, sessions, compaction,
   branch summaries, and auth. Interface baseline is done in
-  `com.agent4j.coding.sdk.AgentSessionRuntime`, with lifecycle methods for
+  `com.agent4j.coding.sdk.CodingAgentRuntime`, with lifecycle methods for
   create/resume/import/clone/fork and SDK event subscription.
 - Add request/response records for the runtime API instead of exposing long
   `AgentLoopRequest` constructors to SDK callers. Done for the first API
@@ -613,11 +613,11 @@ Tasks:
   should initialize or refresh `AgentConversationContext` from
   `SessionManager.activeAgentMessages()` and persist generated loop messages
   through `SessionManager.appendAgentLoopResult(...)`. Session creation is done:
-  `CodingAgentSessionRuntime.createSession(...)` creates a PI-shaped JSONL
+  `CodingAgentRuntime.createSession(...)` creates a PI-shaped JSONL
   session, appends optional session-info/model-change entries, initializes an
   empty session-owned `AgentConversationContext`, and returns a
   `CodingAgentSession` handle. Resume is done:
-  `CodingAgentSessionRuntime.resumeSession(...)` opens the JSONL session,
+  `CodingAgentRuntime.resumeSession(...)` opens the JSONL session,
   optionally navigates to a requested active entry, initializes the
   session-owned context from `SessionManager.activeAgentMessages()`, and can
   continue prompting without caller-rebuilt history. Import/clone/fork are done:
@@ -632,26 +632,26 @@ Tasks:
   runs `AgentLoop` with session-owned active history, persists the full
   `AgentLoopResult.messages()` batch through `SessionManager`, and refreshes the
   session context from persisted active messages. Resource/settings preparation
-  is deferred to the runtime services container slice so the SDK does not guess
+  is deferred to the runtime builder slice so the SDK does not guess
   user home or trust state.
 - Add SDK-facing event subscription backed by `AgentEventBus`, keeping
   `AgentEvent` as the Phase 9 listener payload and leaving CLI JSON/RPC event
-  mapping to Phase 10. Done for the SDK baseline: `AgentSessionRuntime`
+  mapping to Phase 10. Done for the SDK baseline: `CodingAgentRuntime`
   exposes runtime-wide `subscribe(...)` plus session-filtered
   `subscribeSession(...)`, and tests pin prompt event delivery, event ordering,
   subscription close behavior, and session-id filtering through real
   `AgentSession.prompt(...)` calls.
-- Add runtime services container. Done with `CodingAgentRuntimeServices`, which
-  centralizes `AgentEventBus`, optional direct `AiModelClient`, `ToolRegistry`,
-  `AgentMessageConverter`, `Clock`, request preparation, session compaction,
-  and branch summarization services. Existing `CodingAgentSessionRuntime`
-  constructors now delegate into this container, and tests pin default services
-  plus custom clock/event-bus usage through real prompt calls.
+- Add runtime service configuration. Done with `CodingAgentRuntime.Builder`,
+  which configures `CodingAgentRuntime`'s event bus, optional direct
+  `AiModelClient`, provider registry, tools, message converter, clock,
+  compaction, branch summaries, and login service. Sessions depend only on
+  their `CodingAgentRuntime`, and tests pin default configuration plus custom
+  clock/event-bus usage through real prompt calls.
 - Add login/auth runtime API before CLI ownership:
   - provider-neutral `LoginService`/`AuthSession` API. Baseline is done with
     `LoginService`, `AuthSession`, `AuthStatus`, `AuthCredentialStore`,
     `InMemoryAuthCredentialStore`, and `DefaultLoginService`, exposed through
-    `AgentSessionRuntime.loginService()` and `CodingAgentRuntimeServices`.
+    `CodingAgentRuntime.loginService()` and `CodingAgentRuntime.Builder`.
   - ChatGPT/Codex subscription login flow, including browser OAuth and device
     code modes, so ChatGPT Plus/Pro/Team/Enterprise-style subscription access is
     a first-class runtime capability rather than a CLI-only concern. API shape
@@ -693,7 +693,7 @@ Tasks:
     in `docs/openai-sdk-guide.md`, with a runnable
     `OpenAiSubscriptionSdkExample` that avoids printing credential secrets.
   - SDK convenience wiring for standard OpenAI runtime setup. Done with
-    `OpenAiCodingRuntimeOptions` and `CodingAgentRuntimeServices.withOpenAi(...)`,
+    `OpenAiCodingRuntimeOptions` and `CodingAgentRuntime.builder().openAi(...)`,
     which assemble `OpenAiResponsesProvider`, `AiProviderRegistry`,
     `PersistentAuthCredentialStore`, and an optional
     `OpenAiSubscriptionLoginClient` from one SDK-facing options object.
@@ -726,9 +726,9 @@ Tasks:
     validation. The opt-in `OpenAiSubscriptionLiveIT` is implemented; its
     successful production execution remains the Phase 9 closure gate.
 - Integrate resolved auth into provider-backed runtime creation. Done:
-  `CodingAgentRuntimeServices` can carry an `AiProviderRegistry`,
-  `CodingAgentSessionRuntime.prompt(...)` selects either the configured direct
-  `AiModelClient` or a provider/model from that registry, resolves provider auth
+  `CodingAgentRuntime.Builder` can configure an `AiProviderRegistry`,
+  `CodingAgentSession` selects either the configured direct `AiModelClient` or a
+  provider/model from that registry, resolves provider auth
   through `LoginService.resolveAuth(...)`, and creates a provider-backed
   `AgentLoop` with request-scoped `AiResolvedAuth`. Tests pin API-key auth,
   ChatGPT subscription-token auth, prompt model override, and the missing
@@ -807,7 +807,7 @@ Implementation slices:
      `Agent4jRootCommand` parse PI-shaped baseline options, while
      `DefaultCliRuntimeFactory` discovers global/project resources, resolves
      the configured OpenAI model, installs `CodingTools` in
-     `CodingAgentRuntimeServices`, and returns a `CodingAgentSessionRuntime`.
+     `CodingAgentRuntime.Builder`, and returns a `CodingAgentRuntime`.
      A command-line API key is held only by an in-memory runtime credential
      store; the default path uses Phase 9's persistent credential store. Print,
      JSON, and RPC execution remain the following slices.
@@ -817,7 +817,7 @@ Implementation slices:
    - Cover success, tool use, provider failures, and cancellation with a fake
      provider.
    - Done with `PrintModeRunner`: `agent4j -p <prompt>` creates an isolated
-     temporary SDK session, runs through `AgentSessionRuntime`, writes the final
+     temporary SDK session, runs through `CodingAgentRuntime`, writes the final
      assistant text to stdout, and writes failures/aborts to stderr with a
      nonzero exit code. Fake-model tests cover text, a tool-call round, provider
      failure, cancellation, temporary-session cleanup, and root-command wiring.
@@ -850,11 +850,11 @@ Implementation slices:
      injection remains a Phase 10 parity gap.
 6. **Session Lifecycle Flags**
    - Add new, continue, resume, no-session, explicit session path/ID, fork, and
-     name behavior as thin mappings to `AgentSessionRuntime`.
+     name behavior as thin mappings to `CodingAgentRuntime`.
    - Test persistence, active-path selection, and mutually exclusive flags.
    - Done with `CliSessionLifecycle`: `--session`, `--session-id`, `--continue`,
      noninteractive `--resume`, `--fork`, `--session-dir`, `--no-session`, and
-     `--name` resolve to `AgentSessionRuntime` create/resume/fork calls. Normal
+     `--name` resolve to `CodingAgentRuntime` create/resume/fork calls. Normal
      CLI modes now persist sessions below PI's cwd-encoded `~/.pi/agent/sessions`
      location; only `--no-session` creates a cleaned-up temporary session.
      Tests pin persistent creation, explicit resume, most-recent continuation,
@@ -867,7 +867,7 @@ Implementation slices:
      conflicts or bootstrap-unsupported providers. `--tools`,
      `--exclude-tools`, `--no-tools`, and `--no-builtin-tools` are parsed into a
      typed selection and filtered against the runtime-owned registry before
-     `CodingAgentRuntimeServices` is built. Unknown tools and conflicting
+     `CodingAgentRuntime` is built. Unknown tools and conflicting
      include/disable flags fail clearly; filtering preserves registered tool
      order. All currently supplied CLI tools are built-ins, so
      `--no-builtin-tools` yields an empty registry until extension tools exist.
@@ -877,7 +877,7 @@ Implementation slices:
    - Keep production endpoint verification and live-login evidence owned by
      the Phase 9 gaps above.
    - Done with Picocli subcommands: `login`, `logout`, `auth-status`, and
-     `refresh` delegate to `AgentSessionRuntime.loginService()`. `login`
+     `refresh` delegate to `CodingAgentRuntime.loginService()`. `login`
      invokes the one-call OpenAI browser subscription flow. Status output is
      restricted to provider, authentication mode/state, and expiry: it never
      prints `AuthStatus.metadata()`, access tokens, API keys, or refresh
@@ -935,9 +935,9 @@ Tasks:
   `InteractiveTerminal` in `agent4j-cli`. Default text mode now uses the same
   runtime factory and `CliSessionLifecycle` as the Phase 10 process modes,
   opens the resolved SDK `AgentSession`, and hands it to an injectable session
-  host. The temporary bootstrap host reports session readiness only; Slice 3
+  runner. The temporary bootstrap runner reports session readiness only; Slice 3
   replaces it with the persistent line-oriented REPL.
-- Phase 11 Slice 3 is done: `LineInteractiveSessionHost` is the
+- Phase 11 Slice 3 is done: `LineInteractiveSessionRunner` is the
   injected, persistent line-loop implementation. It submits each nonblank
   initial or entered line through the opened `AgentSession`, prints only final
   assistant text, reports a failed prompt to stderr without losing the session,
@@ -945,7 +945,7 @@ Tasks:
   injected I/O; JLine editor integration follows after the loop contract is
   covered by tests. Fake-provider tests pin repeated prompts on one session,
   blank input, failure recovery, final text, and EOF shutdown.
-- Phase 11 Slice 4 is done with `InteractiveEventRenderer`. The interactive
+- Phase 11 Slice 4 is done with `TerminalEventRenderer`. The interactive
   runner subscribes to the opened session before entering the host loop and
   closes that subscription during shutdown. Assistant `text_delta` content is
   written as it arrives; `message_end` is only a fallback for non-streaming
@@ -963,14 +963,24 @@ Tasks:
   follow-up control until JLine key handling is introduced. SDK tests pin live
   steer/follow-up consumption in the same loop invocation and active-run abort.
 - Phase 11 Slice 6 is done with `InteractiveCommandRegistry` and a command
-  handler boundary intended for Phase 12 registrations. The line shell now
+  handler boundary intended for Phase 13 registrations. The line shell now
   supports `/help`, `/exit`, `/abort`, `/clear`, `/status`, `/name <name>`,
   `/compact`, `/new`, `/continue`, and `/resume <path|id>`. An
   `InteractiveSessionController` owns active-session replacement and event
   subscription rebinding, so lifecycle commands remain SDK/lifecycle calls.
   Manual compaction is exposed through `AgentSession.compact(...)` and the
   runtime compactor, rather than duplicating provider/compaction internals in
-  the CLI. PI's no-argument interactive resume picker remains Slice 7 work.
+  the CLI. Phase 11 Slice 7 is done with the interactive local/global session
+  picker, cross-project confirmation/forking, and model/provider selection.
+- Phase 11 Slice 8 is done with a JLine 3-backed terminal rendering layer.
+  ANSI-aware terminals receive styled markdown headings/code, tool activity,
+  progress/status, and errors; pipes, tests, and `NO_COLOR`/dumb terminals use
+  the existing plain line renderer.
+- Phase 11 Slice 9 is done with fake-provider terminal contract coverage in
+  `InteractiveContractTest`, plus the lower-level live-session queue and abort
+  contracts. The closeout is recorded in `docs/phase-11-closeout.md`; the
+  remaining editor, rich-TUI, extension, filename, and production-provider
+  gaps are explicit and are not being counted as interactive parity.
 - Implement basic line-oriented interactive shell.
 - Add slash commands.
 - Add model selector.
@@ -984,7 +994,104 @@ Exit criteria:
 - Basic interactive mode can run real sessions.
 - Rich TUI has screenshot/manual QA coverage before being treated as parity.
 
-## Phase 12: Extension SPI
+## Phase 12: Live OpenAI Feature Walkthroughs
+
+Goal: provide a progressive, real-provider learning path that demonstrates
+agent4j's public feature composition against the OpenAI API.
+
+Principles:
+
+- Add an `agent4j-examples` Maven module containing runnable Java applications
+  and matching Markdown walkthroughs under `docs/examples/`.
+- Examples use the production `OpenAiResponsesProvider`, `CodingAgentRuntime`,
+  and `CodingAgentSession` boundaries. They must not substitute
+  fake models or fake providers for the feature being demonstrated.
+- Require `AGENT4J_API_KEY` and `AGENT4J_MODEL` from the environment;
+  never accept keys as command-line arguments, print them, persist them in
+  example sessions, or add them to source control.
+- Make all live runs opt-in and exclude them from normal `mvn test` execution.
+  CI compiles the examples; deterministic fake-provider tests remain the
+  regression safety net.
+- Bound each live invocation with explicit model, output-token, tool-round, and
+  workspace limits. Each walkthrough records usage, elapsed time, model ID,
+  request ID when available, cleanup instructions, and expected observable
+  behavior without asserting exact model prose.
+- Each successive example reuses the runtime/session setup established by the
+  prior example rather than reimplementing agent construction.
+
+Tasks:
+
+1. Establish the live-example foundation. Done with `agent4j-examples`, shared
+   `LiveExampleConfiguration`, and `LiveExamplePreflight`.
+   - `LiveExampleConfiguration` validates required environment variables without
+     displaying or persisting API-key values, bounds future example output/tool
+     limits, and creates temporary workspace/session directories unless the user
+     explicitly supplies paths. `CodingAgentRuntime` configures the production
+     OpenAI runtime from those values.
+   - The opt-in `live-openai-examples` Maven profile executes the selected
+     example entry point; the current preflight entry point validates setup and
+     cleanup without sending an API request. `docs/examples/README.md` covers
+     API-key configuration, model selection, cost estimation, and cleanup.
+   - The foundation registers no filesystem-writing or process-executing tools.
+     Future tool walkthroughs must constrain any side effects to the example
+     workspace and document them before execution.
+2. Add progressive real OpenAI walkthroughs. All twelve are complete.
+   - `01-real-prompt` creates the standard OpenAI runtime, sends one prompt,
+     prints streaming assistant text and provider usage.
+   - `02-streaming-events` reuses the runtime/session setup and renders public
+     `AgentEvent` lifecycle boundaries.
+   - `03-tool-calling` exposes only the no-side-effect `workspace_status` tool,
+     then demonstrates model selection and execution. It fails clearly when a
+     selected model does not support or invoke function calling.
+   - `04-persistent-sessions` creates, prompts, releases, resumes, and inspects
+     a JSONL session without callers rebuilding conversation history.
+   - `05-live-session-control` demonstrates steering, follow-up, and
+     cancellation during streamed real-provider runs, with terminal timing
+     guidance for manual execution rather than exact-text assertions.
+   - `06-resources-and-coding-tools` creates a disposable sample workspace,
+     discovers its settings/resources, builds a request-scoped system prompt,
+     and exposes only workspace-scoped read-only built-in tools.
+   - `07-model-switching` changes an application's selected model between
+     turns in one persisted session.
+   - `08-prompt-model-override` uses the default then a per-prompt model
+     override across consecutive turns in one persisted session.
+   - `09-compaction-and-branching` manually compacts a session, persists its
+     summary, forks a selected active path, resumes the compacted path, and
+     documents summary-token cost and generated-session cleanup.
+   - `10-cli-modes` invokes the actual CLI with the same environment-based
+     credentials for print, JSON, RPC, and session resume/fork flows.
+   - `11-interactive-shell` is complete: `InteractiveShellExample` starts the
+     real interactive CLI with only the read-only `read` tool and an initial
+     tool-use prompt. The example guide covers real streaming and tool activity,
+     `/status`, `/model`, `/new`, `/resume`, `/follow-up`, `/abort`, and an
+     ANSI/plain-terminal manual QA checklist.
+   - `12-reference-application` is complete: `ReferenceApplicationExample`
+     combines the public production runtime, a persisted session, streaming,
+     discovered workspace resources, and a workspace-scoped read-only tool
+     allowlist into the recommended safe onboarding application.
+3. Validate and close out the examples.
+   - Add compile-time/example-structure checks to normal CI.
+   - Add environment-gated live verification commands that assert stable facts
+     such as successful completion, event ordering, tool/session shape, and
+     cleanup; do not assert exact natural-language output.
+   - Record actual live execution evidence separately from deterministic unit
+     tests, including the selected model and date but no secrets.
+   - Reuse successful live OpenAI API examples as evidence toward the remaining
+     Phase 9 production-provider verification gate; do not declare that gate
+     closed until the documented OAuth and live subscription checks also pass.
+
+Exit criteria:
+
+- A user with a valid OpenAI API key can run the examples in order from a clean
+  checkout and see each feature extend the prior one.
+- Every feature introduced through Phase 11 has a real-provider walkthrough or
+  an explicit documented exclusion.
+- The reference application uses the same public runtime, session, and CLI
+  boundaries recommended to users.
+- Live examples are credential-safe, bounded, documented for cost and cleanup,
+  and never run unintentionally in CI.
+
+## Phase 13: Extension SPI
 
 Goal: support harness customization without embedding TypeScript first.
 
@@ -992,7 +1099,7 @@ Tasks:
 
 - Mirror PI extension lifecycle names and hook timing as the default Java SPI.
   Phase 8 pins current tool-hook timing in `docs/tool-hook-timing-audit.md`;
-  Phase 12 still owns exact extension hook names, discovery, and exception
+  Phase 13 still owns exact extension hook names, discovery, and exception
   policy.
 - Define Java extension interfaces.
 - Add lifecycle hooks:
@@ -1003,13 +1110,27 @@ Tasks:
   - provider request/response hooks
   - session lifecycle hooks
 - Add service-loader discovery.
-- Add project trust placeholder for extensions that require local resources.
+- Add extension scope and project-trust gating. Done: `ExtensionScope` marks
+  application versus project-scoped Java extensions; untrusted projects do not
+  activate project-scoped extensions. `requiresProjectTrust()` remains a
+  placeholder for later resource/package policy.
 
 Exit criteria:
 
 - A test extension can register a custom tool and mutate context.
+- The Java SPI documents application/project scope, its trust boundary, and
+  Phase 14 package-bridge non-goals.
 
-## Phase 13: PI Package Bridge
+Closeout: complete for the Java-only release. A ServiceLoader integration test
+loads one application-classpath extension that contributes a safe tool, context
+transform, lifecycle listener, and interactive command. Intentional gaps are
+PI TypeScript/package compatibility, Node or other subprocess execution,
+package installation/update/reconciliation, dynamic project-code loading,
+project-local discovery, trust prompting/persistence, extension UI/renderers,
+provider registration, session mutation, cancellation, and dynamic tool
+activation. Phase 14 owns any package bridge plus its sandbox and trust model.
+
+## Phase 14: PI Package Bridge
 
 Goal: decide whether PI package compatibility is worth the complexity.
 
@@ -1027,9 +1148,139 @@ Exit criteria:
 
 - Explicit ADR documents the compatibility level and security model.
 
+## Phase 15: Simple-Project Coding Agent
+
+Goal: operate agent4j as a small, reliable coding agent for simple projects.
+The agent must inspect a workspace, modify code, run verification, repair a
+simple failure, and report the outcome. This phase is intentionally narrower
+than full PI provider, package, and terminal parity; see
+`docs/pi-mini-coding-agent-parity-audit.md`.
+
+### Slice 1: Default coding-agent system prompt
+
+- Add a versioned built-in coding-agent prompt that establishes workspace
+  boundaries, inspect-before-edit behavior, tool use, verification, failure
+  handling, and concise final reporting.
+- Build selected-tool guidance from the active `ToolRegistry`.
+- Define prompt composition and precedence for the built-in prompt, global or
+  project `SYSTEM.md` replacement, `APPEND_SYSTEM.md`, `AGENTS.md` context,
+  eligible skills, and explicit caller/CLI prompt overrides.
+- Wire the resolved prompt into print, JSON, RPC, and interactive
+  `PromptRequest` creation.
+- Add OpenAI and Anthropic provider-request tests that assert the composed
+  system prompt is sent and is not persisted in session JSONL.
+
+Closeout: complete. `DefaultCodingSystemPrompt` provides the versioned
+`agent4j-coding-v1` baseline. `SystemPromptBuilder` composes system-prompt
+replacement, PI-style selected-tool listing and conditional guidelines, append
+prompts, context files, and eligible skills. The CLI passes the resolved prompt through print, JSON, RPC,
+and interactive requests; `--system-prompt` and repeatable
+`--append-system-prompt` provide explicit overrides. Tests cover composition,
+CLI construction, prompt requests, and OpenAI/Anthropic request serialization.
+
+### Slice 2: Runtime resource and prompt integration
+
+- Move resolved resource/prompt ownership behind a coding runtime preparation
+  boundary rather than leaving it as a CLI-only discovery result.
+- Ensure new, resumed, forked, and replaced sessions use the selected
+  workspace's resources and existing project-trust policy.
+- Add `--system-prompt` and `--append-system-prompt` with documented
+  precedence and validation.
+- Test project trust, resource precedence, session replacement, and all CLI
+  execution modes.
+
+### Slice 3: Tool reliability baseline
+
+- Drain bash stdout and stderr concurrently while retaining timeout and abort
+  behavior.
+- Reject ambiguous edits before writing.
+- Add bounded read offset/limit and line-number behavior for large files.
+- Define default coding, read-only, and full tool profiles; default coding is
+  `read`, `write`, `edit`, and `bash`.
+- Make search behavior `.gitignore` aware where practical, and prevent
+  symlink-based escapes from the workspace.
+- Add deterministic tool tests for output pressure, edit safety, path safety,
+  and profile selection.
+
+### Slice 4: Deterministic mini-agent acceptance fixture
+
+- Add a small fixture project containing one incomplete feature or intentional
+  test failure.
+- Drive the public CLI/runtime path with a scripted fake provider that inspects
+  files, edits code, runs a test/build command, repairs the failure, and emits
+  a final summary.
+- Assert changed files, tool sequence, verification result, persisted session,
+  and final assistant report.
+
+### Slice 5: Real-provider smoke validation
+
+- Reuse the acceptance fixture in credential-gated OpenAI and Anthropic smoke
+  tests.
+- Run inside an isolated temporary project, cap tool rounds/tokens, clean up
+  all generated files, and never log credentials.
+- Record provider/model, elapsed time, tool calls, changed files, and
+  verification result as live evidence without asserting exact prose.
+- Keep the tests out of normal CI.
+
+Closeout: `RealProviderSmokeTest` reuses the mini-agent fixture with an
+isolated temporary workspace and session directory. It is disabled unless
+`-Dagent4j.liveSmoke=true` is supplied and `AGENT4J_API_KEY` is present. It
+uses `AGENT4J_BASE_URL` and `AGENT4J_MODEL` to target one configured
+OpenAI Responses-compatible endpoint. Run it with
+`mvn -pl agent4j-cli -am test -Dagent4j.liveSmoke=true -Dtest=RealProviderSmokeTest`
+`-Dsurefire.failIfNoSpecifiedTests=false`.
+Each run limits output to 512 tokens, model calls to 90 seconds, and tool
+rounds to 8, then writes redacted live evidence to test output.
+
+### Slice 6: Practical provider expansion
+
+- Add a configurable OpenAI-compatible provider adapter with base URL,
+  headers, credentials, model capabilities, and model listing.
+- Preserve native OpenAI and Anthropic behavior.
+- Add further native providers according to user demand, beginning with the
+  highest-leverage providers after the compatible adapter.
+- Keep model catalog data separate from provider transports so catalog updates
+  do not require adapter code changes.
+
+### Slice 7: Essential CLI usability
+
+- Add piped stdin and automatic non-TTY print behavior.
+- Support text `@file` prompt inclusion; defer image attachments unless they
+  become necessary for the acceptance fixture.
+- Expose prompt templates and explicit model listing.
+- Add basic interactive history, completion, and multiline input only where
+  needed by normal coding-agent operation.
+
+### Explicit deferrals
+
+The following are not prerequisites for this phase:
+
+- complete PI provider/model catalog parity;
+- TypeScript extensions, PI packages, package installation, or dynamic
+  project-code loading;
+- rich TUI and full editor fidelity;
+- extension widgets and project trust dialogs;
+- a complete permission-policy engine, sandbox, subagents, or advanced
+  orchestration.
+
+Exit criteria:
+
+- The deterministic fixture proves an agent can complete a bounded coding task
+  through the public CLI/runtime path.
+- One configured OpenAI Responses-compatible model completes the opt-in smoke
+  fixture within documented resource limits.
+- The default prompt, project instructions, selected-tool guidance, and trust
+  policy are observable in provider-request tests.
+- Coding tools meet the documented reliability baseline.
+
+Phase 15 status: complete. On 2026-08-25, the configured OpenAI
+Responses-compatible endpoint completed `RealProviderSmokeTest` with model
+`openai/openrouter/free` in 17.47 seconds. The agent used `ls`, `read`,
+`edit`, and `bash`; the fixture reported changes to `Calculator.java`,
+`Calculator.class`, and `CalculatorTest.class`, and verification succeeded.
+No credentials were recorded.
+
 ## Current Next Actions
 
-1. Begin Phase 11 with the basic interactive shell over the established CLI and
-   `AgentSessionRuntime` boundaries.
-2. Keep Phase 9 production OAuth verification separate and expand PI fixtures
-   as they become available.
+1. Keep Phase 9 production OAuth verification separate; record live-provider
+   example evidence without treating it as sufficient OAuth closure evidence.

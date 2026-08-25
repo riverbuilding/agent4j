@@ -23,6 +23,7 @@ import java.util.regex.PatternSyntaxException;
 
 public final class CodingTools {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
+    private static final int DEFAULT_READ_LINE_LIMIT = 2_000;
 
     private final FileSystemOps fileSystemOps;
     private final ProcessOps processOps;
@@ -41,15 +42,25 @@ public final class CodingTools {
     }
 
     public ToolRegistry registry() {
-        return InMemoryToolRegistry.builder()
-                .register(readSpec(), this::read)
-                .register(writeSpec(), this::write)
-                .register(editSpec(), this::edit)
-                .register(bashSpec(), this::bash)
-                .register(lsSpec(), this::ls)
-                .register(grepSpec(), this::grep)
-                .register(findSpec(), this::find)
-                .build();
+        return registry(CodingToolProfile.DEFAULT_CODING);
+    }
+
+    public ToolRegistry registry(CodingToolProfile profile) {
+        Objects.requireNonNull(profile, "profile");
+        InMemoryToolRegistry.Builder registry = InMemoryToolRegistry.builder();
+        for (String name : profile.toolNames()) {
+            switch (name) {
+                case "read" -> registry.register(readSpec(), this::read);
+                case "write" -> registry.register(writeSpec(), this::write);
+                case "edit" -> registry.register(editSpec(), this::edit);
+                case "bash" -> registry.register(bashSpec(), this::bash);
+                case "ls" -> registry.register(lsSpec(), this::ls);
+                case "grep" -> registry.register(grepSpec(), this::grep);
+                case "find" -> registry.register(findSpec(), this::find);
+                default -> throw new IllegalStateException("unknown coding tool profile entry: " + name);
+            }
+        }
+        return registry.build();
     }
 
     private ToolResult read(com.agent4j.core.message.ToolCall call, com.agent4j.core.tool.ToolContext context) throws Exception {
@@ -61,12 +72,26 @@ public final class CodingTools {
             return error(call, "path is a directory: " + path);
         }
         String text = readTextFile(path);
-        TruncatedText content = TruncatedText.of(text, limits.maxOutputChars());
+        int offset = optionalNonNegativeInt(call.arguments(), "offset", 0);
+        int limit = optionalPositiveInt(call.arguments(), "limit", DEFAULT_READ_LINE_LIMIT);
+        String[] lines = text.split("\\R", -1);
+        int firstLine = Math.min(offset, lines.length);
+        int lastLine = (int) Math.min(lines.length, (long) firstLine + limit);
+        StringBuilder selected = new StringBuilder();
+        for (int i = firstLine; i < lastLine; i++) {
+            if (!selected.isEmpty()) {
+                selected.append('\n');
+            }
+            selected.append(i + 1).append(": ").append(lines[i]);
+        }
+        TruncatedText content = TruncatedText.of(selected.toString(), limits.maxOutputChars());
         ObjectNode result = JSON.objectNode();
         result.put("path", displayPath(context, path));
         result.put("content", content.text());
-        result.put("truncated", content.truncated());
-        result.put("originalLength", content.originalLength());
+        result.put("truncated", content.truncated() || lastLine < lines.length);
+        result.put("originalLength", text.length());
+        result.put("offset", offset);
+        result.put("limit", limit);
         return ok(call, result);
     }
 
@@ -93,13 +118,16 @@ public final class CodingTools {
             return error(call, "oldText not found in file: " + path);
         }
         int matchCount = countOccurrences(original, oldText);
+        if (matchCount != 1) {
+            return error(call, "oldText is ambiguous in file: " + path + " (matched " + matchCount + " times)");
+        }
         String updated = original.substring(0, first) + newText + original.substring(first + oldText.length());
         fileSystemOps.writeString(path, updated);
         ObjectNode result = JSON.objectNode();
         result.put("path", displayPath(context, path));
         result.put("replacements", 1);
         result.put("matchCount", matchCount);
-        result.put("ambiguous", matchCount > 1);
+        result.put("ambiguous", false);
         result.put("oldText", oldText);
         result.put("newText", newText);
         result.put("diff", diff(oldText, newText));
@@ -168,6 +196,9 @@ public final class CodingTools {
         var matches = JSON.arrayNode();
         int totalMatches = 0;
         for (FileSystemEntry candidate : candidates) {
+            if (isIgnored(context, candidate.path())) {
+                continue;
+            }
             String content = readTextFile(candidate.path());
             String[] lines = content.split("\\R", -1);
             for (int i = 0; i < lines.length; i++) {
@@ -205,6 +236,9 @@ public final class CodingTools {
         var entries = JSON.arrayNode();
         int totalMatches = 0;
         for (FileSystemEntry candidate : candidates) {
+            if (isIgnored(context, candidate.path())) {
+                continue;
+            }
             String fileName = candidate.path().getFileName() == null ? "" : candidate.path().getFileName().toString();
             if (!name.isBlank() && !fileName.contains(name)) {
                 continue;
@@ -251,6 +285,64 @@ public final class CodingTools {
             throw new IllegalArgumentException("timeoutSeconds must be positive");
         }
         return Duration.ofSeconds(seconds);
+    }
+
+    private static int optionalNonNegativeInt(JsonNode arguments, String fieldName, int defaultValue) {
+        JsonNode value = arguments == null ? null : arguments.get(fieldName);
+        if (value == null || value.isNull()) {
+            return defaultValue;
+        }
+        if (!value.isIntegralNumber() || !value.canConvertToInt() || value.asInt() < 0) {
+            throw new IllegalArgumentException("argument must be a non-negative integer: " + fieldName);
+        }
+        return value.asInt();
+    }
+
+    private static int optionalPositiveInt(JsonNode arguments, String fieldName, int defaultValue) {
+        int value = optionalNonNegativeInt(arguments, fieldName, defaultValue);
+        if (value < 1) {
+            throw new IllegalArgumentException("argument must be a positive integer: " + fieldName);
+        }
+        return value;
+    }
+
+    private boolean isIgnored(com.agent4j.core.tool.ToolContext context, Path path) throws Exception {
+        Path ignoreFile = context.cwd().resolve(".gitignore");
+        if (!fileSystemOps.exists(ignoreFile)) {
+            return false;
+        }
+        String relative = context.cwd().relativize(path).toString().replace('\\', '/');
+        boolean directory = fileSystemOps.isDirectory(path);
+        boolean ignored = false;
+        for (String line : readTextFile(ignoreFile).split("\\R")) {
+            String pattern = line.trim();
+            if (pattern.isEmpty() || pattern.startsWith("#")) {
+                continue;
+            }
+            boolean include = pattern.startsWith("!");
+            if (include) {
+                pattern = pattern.substring(1);
+            }
+            if (matchesIgnorePattern(relative, directory, pattern)) {
+                ignored = !include;
+            }
+        }
+        return ignored;
+    }
+
+    private static boolean matchesIgnorePattern(String relativePath, boolean directory, String pattern) {
+        boolean directoryOnly = pattern.endsWith("/");
+        String normalized = directoryOnly ? pattern.substring(0, pattern.length() - 1) : pattern;
+        if (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        String expression = normalized.replace(".", "\\.").replace("**", "§§")
+                .replace("*", "[^/]*").replace("?", "[^/]").replace("§§", ".*");
+        return (!directoryOnly || directory) && relativePath.matches("(?:.*/)?" + expression)
+                || relativePath.matches("(?:.*/)?" + expression + "/.*");
     }
 
     private static String requiredText(JsonNode arguments, String fieldName) {
@@ -319,7 +411,9 @@ public final class CodingTools {
 
     private static ToolSpec readSpec() {
         return new ToolSpec("read", "Read a UTF-8 text file from the workspace.", schema(
-                new Field("path", "string", "Workspace-relative file path to read.", true)));
+                new Field("path", "string", "Workspace-relative file path to read.", true),
+                new Field("offset", "integer", "Optional zero-based line offset.", false),
+                new Field("limit", "integer", "Optional maximum number of lines to return.", false)));
     }
 
     private static ToolSpec writeSpec() {
@@ -329,7 +423,7 @@ public final class CodingTools {
     }
 
     private static ToolSpec editSpec() {
-        return new ToolSpec("edit", "Replace the first exact text occurrence in a workspace file.", schema(
+        return new ToolSpec("edit", "Replace one exact text occurrence in a workspace file; fails if the text is ambiguous.", schema(
                 new Field("path", "string", "Workspace-relative file path to edit.", true),
                 new Field("oldText", "string", "Exact text to replace.", true),
                 new Field("newText", "string", "Replacement text.", true)));
@@ -369,7 +463,7 @@ public final class CodingTools {
                     .put("type", field.type())
                     .put("description", field.description());
             if ("integer".equals(field.type())) {
-                property.put("minimum", 1);
+                property.put("minimum", "offset".equals(field.name()) ? 0 : 1);
             }
             properties.set(field.name(), property);
             if (field.required()) {

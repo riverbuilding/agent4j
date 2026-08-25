@@ -38,4 +38,17 @@ class LocalProcessOpsTest {
         assertThat(result.timedOut()).isTrue();
         assertThat(result.exitCode()).isEqualTo(-1);
     }
+
+    @Test
+    void drainsBothStreamsWhileCommandIsRunning() throws Exception {
+        ProcessResult result = new LocalProcessOps().run(
+                List.of("/bin/sh", "-lc", "i=0; while [ $i -lt 20000 ]; do printf x; printf y >&2; i=$((i + 1)); done"),
+                tempDir,
+                Duration.ofSeconds(5));
+
+        assertThat(result.timedOut()).isFalse();
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.stdout()).hasSize(20_000);
+        assertThat(result.stderr()).hasSize(20_000);
+    }
 }

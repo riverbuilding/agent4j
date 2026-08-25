@@ -19,6 +19,11 @@ public final class Agent4jCli {
         return execute(new DefaultCliRuntimeFactory(), CliEnvironment.system(), args);
     }
 
+    /** Executes the CLI with caller-provided standard streams. */
+    public static int execute(Reader input, PrintWriter out, PrintWriter err, String... args) {
+        return execute(new DefaultCliRuntimeFactory(), CliEnvironment.system(), input, out, err, args);
+    }
+
     static int execute(CliRuntimeFactory runtimeFactory, CliEnvironment environment, String... args) {
         return execute(runtimeFactory, environment, new PrintWriter(System.out, true), new PrintWriter(System.err, true), args);
     }

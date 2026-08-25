@@ -18,13 +18,15 @@ public record PromptRequest(
         int maxToolRounds,
         int maxModelRetries,
         Optional<Duration> modelTimeout,
+        Optional<String> toolChoice,
         ToolExecutionMode toolExecutionMode,
         Map<String, Object> toolAttributes,
         List<AgentMessage> steeringMessages,
         List<AgentMessage> followUpMessages,
         QueueMode steeringMode,
         QueueMode followUpMode,
-        Optional<AbortSignal> abortSignal
+        Optional<AbortSignal> abortSignal,
+        Optional<String> systemPrompt
 ) {
     public PromptRequest(String prompt) {
         this(
@@ -33,12 +35,109 @@ public record PromptRequest(
                 0,
                 0,
                 Optional.empty(),
+                Optional.empty(),
                 ToolExecutionMode.PARALLEL,
                 Map.of(),
                 List.of(),
                 List.of(),
                 QueueMode.ONE_AT_A_TIME,
                 QueueMode.ONE_AT_A_TIME,
+                Optional.empty(),
+                Optional.empty());
+    }
+
+    public PromptRequest(
+            String prompt,
+            Optional<AiModelReference> model,
+            int maxToolRounds,
+            int maxModelRetries,
+            Optional<Duration> modelTimeout,
+            ToolExecutionMode toolExecutionMode,
+            Map<String, Object> toolAttributes,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode,
+            Optional<AbortSignal> abortSignal
+    ) {
+        this(
+                prompt,
+                model,
+                maxToolRounds,
+                maxModelRetries,
+                modelTimeout,
+                Optional.empty(),
+                toolExecutionMode,
+                toolAttributes,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode,
+                abortSignal,
+                Optional.empty());
+    }
+
+    public PromptRequest(
+            String prompt,
+            Optional<AiModelReference> model,
+            int maxToolRounds,
+            int maxModelRetries,
+            Optional<Duration> modelTimeout,
+            ToolExecutionMode toolExecutionMode,
+            Map<String, Object> toolAttributes,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode,
+            Optional<AbortSignal> abortSignal,
+            Optional<String> systemPrompt
+    ) {
+        this(
+                prompt,
+                model,
+                maxToolRounds,
+                maxModelRetries,
+                modelTimeout,
+                Optional.empty(),
+                toolExecutionMode,
+                toolAttributes,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode,
+                abortSignal,
+                systemPrompt);
+    }
+
+    public PromptRequest(
+            String prompt,
+            Optional<AiModelReference> model,
+            int maxToolRounds,
+            int maxModelRetries,
+            Optional<Duration> modelTimeout,
+            Optional<String> toolChoice,
+            ToolExecutionMode toolExecutionMode,
+            Map<String, Object> toolAttributes,
+            List<AgentMessage> steeringMessages,
+            List<AgentMessage> followUpMessages,
+            QueueMode steeringMode,
+            QueueMode followUpMode,
+            Optional<AbortSignal> abortSignal
+    ) {
+        this(
+                prompt,
+                model,
+                maxToolRounds,
+                maxModelRetries,
+                modelTimeout,
+                toolChoice,
+                toolExecutionMode,
+                toolAttributes,
+                steeringMessages,
+                followUpMessages,
+                steeringMode,
+                followUpMode,
+                abortSignal,
                 Optional.empty());
     }
 
@@ -60,6 +159,7 @@ public record PromptRequest(
                 throw new IllegalArgumentException("modelTimeout must be positive");
             }
         });
+        toolChoice = toolChoice == null ? Optional.empty() : toolChoice.map(String::strip).filter(value -> !value.isBlank());
         toolExecutionMode = toolExecutionMode == null ? ToolExecutionMode.PARALLEL : toolExecutionMode;
         toolAttributes = toolAttributes == null ? Map.of() : Map.copyOf(toolAttributes);
         steeringMessages = steeringMessages == null ? List.of() : List.copyOf(steeringMessages);
@@ -67,5 +167,6 @@ public record PromptRequest(
         steeringMode = steeringMode == null ? QueueMode.ONE_AT_A_TIME : steeringMode;
         followUpMode = followUpMode == null ? QueueMode.ONE_AT_A_TIME : followUpMode;
         abortSignal = abortSignal == null ? Optional.empty() : abortSignal;
+        systemPrompt = systemPrompt == null ? Optional.empty() : systemPrompt.map(String::strip).filter(value -> !value.isBlank());
     }
 }

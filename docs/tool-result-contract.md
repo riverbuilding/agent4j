@@ -60,15 +60,18 @@ but it does not issue another model request.
 Arguments:
 
 - `path`: workspace-relative file path
+- optional zero-based `offset` and positive `limit` for the line range
 
 Success content:
 
 ```json
 {
   "path": "/absolute/path",
-  "content": "file text",
+  "content": "1: file text",
   "truncated": false,
-  "originalLength": 123
+  "originalLength": 123,
+  "offset": 0,
+  "limit": 2000
 }
 ```
 
@@ -114,7 +117,8 @@ Success content:
 }
 ```
 
-Only the first exact occurrence is replaced. Binary files are rejected.
+The requested text must occur exactly once; missing or ambiguous edits fail
+without writing. Binary files are rejected.
 
 ## bash
 

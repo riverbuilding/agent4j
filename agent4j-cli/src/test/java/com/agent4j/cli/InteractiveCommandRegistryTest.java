@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class InteractiveCommandRegistryTest {
     @Test
     void parsesCaseInsensitiveCommandNamesAndTrimmedArguments() throws Exception {
-        InteractiveCommandRegistry registry = new InteractiveCommandRegistry();
+        InteractiveCommandDispatcher registry = new InteractiveCommandDispatcher();
         AtomicReference<String> received = new AtomicReference<>();
         registry.register("name", arguments -> {
             received.set(arguments);
@@ -27,7 +27,7 @@ class InteractiveCommandRegistryTest {
 
     @Test
     void rejectsDuplicateAndUnknownCommands() {
-        InteractiveCommandRegistry registry = new InteractiveCommandRegistry();
+        InteractiveCommandDispatcher registry = new InteractiveCommandDispatcher();
         registry.register("status", ignored -> InteractiveCommandResult.handledResult());
 
         assertThatThrownBy(() -> registry.register("status", ignored -> InteractiveCommandResult.handledResult()))

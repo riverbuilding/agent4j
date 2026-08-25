@@ -52,8 +52,17 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     @Option(names = "--model", description = "Model ID or provider/model")
     private String model;
 
+    @Option(names = "--list-models", description = "List configured models and exit")
+    private boolean listModels;
+
+    @Option(names = "--template", description = "Render a discovered prompt template")
+    private String template;
+
     @Option(names = "--api-key", description = "Non-persistent provider API key")
     private String apiKey;
+
+    @Option(names = "--base-url", description = "Non-persistent provider base URL")
+    private String baseUrl;
 
     @Option(names = {"--tools", "-t"}, split = ",", description = "Comma-separated enabled tool names")
     private List<String> includedTools = new ArrayList<>();
@@ -61,6 +70,9 @@ public final class Agent4jRootCommand implements Callable<Integer> {
     private List<String> excludedTools = new ArrayList<>();
     @Option(names = {"--no-tools", "-nt"}, description = "Disable all tools") private boolean noTools;
     @Option(names = {"--no-builtin-tools", "-nbt"}, description = "Disable built-in tools") private boolean noBuiltinTools;
+    @Option(names = "--system-prompt", description = "Replace the default system prompt") private String systemPrompt;
+    @Option(names = "--append-system-prompt", description = "Append instructions to the system prompt")
+    private List<String> appendSystemPrompts = new ArrayList<>();
 
     @Option(names = {"--continue", "-c"}) private boolean continueSession;
     @Option(names = {"--resume", "-r"}) private boolean resume;
@@ -107,19 +119,29 @@ public final class Agent4jRootCommand implements Callable<Integer> {
         CliSessionOptions sessionOptions = sessionOptions();
         CliSessionOptions.validate(sessionOptions);
         CliRuntime runtime = runtimeFactory.create(runtimeRequest());
+        if (listModels) {
+            listModels(runtime);
+            return 0;
+        }
+        boolean automaticPrint = System.console() == null && mode() == null && !print;
+        boolean readPipedInput = System.console() == null && mode() != CliMode.RPC && messages.isEmpty();
+        List<String> promptMessages = PromptInputResolver.resolve(messages, input, readPipedInput, environment.cwd());
+        if (template != null) {
+            promptMessages = List.of(PromptTemplateRenderer.render(runtime.resourceDiscovery(), template, promptMessages));
+        }
         CliSessionLifecycle sessions = new CliSessionLifecycle(runtime, environment, sessionOptions);
         try {
             if (mode() == CliMode.RPC) {
                 return rpcModeRunner.run(runtime, environment, input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
             if (mode() == CliMode.JSON) {
-                return jsonEventModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
+                return jsonEventModeRunner.run(runtime, environment, promptMessages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
-            if (print) {
-                return printModeRunner.run(runtime, environment, messages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
+            if (print || mode() == CliMode.TEXT || automaticPrint) {
+                return printModeRunner.run(runtime, environment, promptMessages, Optional.empty(), commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr(), sessions);
             }
             return interactiveModeRunner.run(runtime, sessions,
-                    new InteractiveTerminal(input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr()), messages);
+                    InteractiveTerminal.system(input, commandSpec.commandLine().getOut(), commandSpec.commandLine().getErr()), promptMessages);
         } finally {
             sessions.close();
         }
@@ -132,11 +154,14 @@ public final class Agent4jRootCommand implements Callable<Integer> {
                 Optional.ofNullable(provider),
                 Optional.ofNullable(model),
                 Optional.ofNullable(apiKey),
+                Optional.ofNullable(baseUrl),
                 new CliToolSelection(
                         includedTools.isEmpty() ? Optional.empty() : Optional.of(includedTools),
                         excludedTools,
                         noTools,
-                        noBuiltinTools));
+                        noBuiltinTools),
+                Optional.ofNullable(systemPrompt),
+                appendSystemPrompts);
     }
 
     CliRuntimeFactory runtimeFactory() {
@@ -151,7 +176,7 @@ public final class Agent4jRootCommand implements Callable<Integer> {
             resolvedModel = Optional.of("gpt-5");
         }
         return new CliRuntimeRequest(environment.cwd(), environment.homeDirectory(), resolvedProvider, resolvedModel,
-                Optional.ofNullable(apiKey), CliToolSelection.defaults());
+                Optional.ofNullable(apiKey), Optional.ofNullable(baseUrl), CliToolSelection.defaults());
     }
 
     CommandSpec commandSpec() {
@@ -173,5 +198,13 @@ public final class Agent4jRootCommand implements Callable<Integer> {
 
     List<String> messages() {
         return List.copyOf(messages);
+    }
+
+    private void listModels(CliRuntime runtime) {
+        var out = commandSpec.commandLine().getOut();
+        runtime.providerRegistry().orElseThrow(() -> new IllegalStateException("model registry is not configured"))
+                .providers().forEach(provider -> provider.models().forEach(candidate ->
+                        out.println(candidate.reference().displayName() + "\t" + candidate.name())));
+        out.flush();
     }
 }

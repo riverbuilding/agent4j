@@ -47,7 +47,7 @@ public final class EnvironmentAiAuthStore implements AiAuthStore {
 
     public static Map<String, ProviderEnvironmentAuth> defaults() {
         return Map.of(
-                "openai", new ProviderEnvironmentAuth(Optional.of("OPENAI_API_KEY"), Optional.of("OPENAI_BASE_URL")),
+                "openai", new ProviderEnvironmentAuth(Optional.of("AGENT4J_API_KEY"), Optional.of("AGENT4J_BASE_URL")),
                 "anthropic", new ProviderEnvironmentAuth(Optional.of("ANTHROPIC_API_KEY"), Optional.of("ANTHROPIC_BASE_URL")));
     }
 

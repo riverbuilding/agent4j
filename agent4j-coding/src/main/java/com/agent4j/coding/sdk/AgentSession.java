@@ -1,12 +1,13 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.core.runtime.AgentConversationContext;
+import com.agent4j.core.compaction.CompactionConfig;
 import com.agent4j.core.compaction.CompactionResult;
 
 /**
  * User-facing handle for one persisted coding-agent conversation.
  */
-public interface AgentSession {
+public interface AgentSession extends AutoCloseable {
     AgentSessionInfo info();
 
     AgentConversationContext conversationContext();
@@ -15,6 +16,10 @@ public interface AgentSession {
 
     default boolean isStreaming() {
         return false;
+    }
+
+    default int pendingMessageCount() {
+        return 0;
     }
 
     default void steer(String message) {
@@ -30,6 +35,10 @@ public interface AgentSession {
     }
 
     default CompactionResult compact(String focusInstructions) throws Exception {
+        return compact(focusInstructions, CompactionConfig.defaults());
+    }
+
+    default CompactionResult compact(String focusInstructions, CompactionConfig config) throws Exception {
         throw new IllegalStateException("manual compaction is not supported by this session");
     }
 
@@ -47,5 +56,9 @@ public interface AgentSession {
 
     default String activeEntryId() {
         return info().activeEntryId();
+    }
+
+    @Override
+    default void close() throws Exception {
     }
 }

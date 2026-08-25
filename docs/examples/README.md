@@ -1,0 +1,416 @@
+# Live OpenAI Examples
+
+Phase 12 examples use agent4j's production OpenAI Responses runtime. They are
+opt-in, may incur API charges, and do not run as part of normal `mvn test`.
+The current foundation provides a preflight check only; it validates local setup
+and creates then cleans temporary paths without sending an API request.
+
+## Setup
+
+Create an API key in the OpenAI Platform and export it only in your shell. Do
+not pass a key on the command line, add it to a settings file, or commit it.
+
+```bash
+export AGENT4J_API_KEY="..."
+export AGENT4J_MODEL="<enabled-model-id>"
+```
+
+To use an OpenAI Responses-compatible provider, retain the provider API key in
+`AGENT4J_API_KEY`, select its model identifier, and set its API base URL. For
+example, OpenRouter's free-model router is configured as follows:
+
+```bash
+export AGENT4J_API_KEY="<your-openrouter-api-key>"
+export AGENT4J_BASE_URL="https://openrouter.ai/api/v1"
+export AGENT4J_MODEL="openai/openrouter/free"
+# Select a distinct currently available free-model slug before running 07 or 08.
+export AGENT4J_SWITCH_MODEL="openai/<current-free-model>:free"
+```
+
+The live runtime keeps this credential and base URL only in memory for the
+example process; it does not write either to the user credential store. The
+configured URL must expose the OpenAI Responses endpoint at `/responses`.
+
+`AGENT4J_SWITCH_MODEL` is optional except for the model-switching walkthroughs.
+It must use `provider/model` form; for OpenRouter-compatible calls the provider
+is `openai` and the remainder is OpenRouter's exact model ID. Choose models
+currently available to your account, including `:free` variants when using an
+OpenRouter free-tier key. Free-model availability changes frequently: query
+[OpenRouter's model catalog](https://openrouter.ai/api/v1/models) and select an
+ID whose prompt and completion pricing are both zero before each walkthrough.
+
+Choose a model enabled for your account. The [official OpenAI model
+guidance](https://developers.openai.com/api/docs/guides/latest-model) recommends
+the Responses API for reasoning, tool-calling, and multi-turn workflows;
+agent4j's examples use that provider boundary. Select a lower-cost model
+appropriate for the walkthrough before running it, and consult current [OpenAI
+model pricing](https://developers.openai.com/api/docs/models) for the actual
+rates available to your account.
+
+## Run the preflight check
+
+```bash
+mvn -pl agent4j-examples -am test -Dagent4j.liveOpenAiExamples=true
+```
+
+The command reports the selected model, bounded output/tool limits, and the
+workspace/session locations. It deliberately does not print the API key and
+does not send a request.
+
+## Progressive live walkthroughs
+
+Each command below sends a real streamed request and may incur provider
+charges. They reuse the environment configuration above and create temporary
+workspaces and sessions unless you explicitly select their locations.
+
+### 01-real-prompt
+
+Sends one short prompt, prints assistant text as it arrives, then reports the
+usage returned by the provider.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.RealPromptExample
+```
+
+### 02-streaming-events
+
+Builds on the first walkthrough by printing the public `AgentEvent` lifecycle
+boundaries around a real streamed response.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.StreamingEventsExample
+```
+
+### 03-tool-calling
+
+Builds on streaming by exposing exactly one `workspace_status` tool. It only
+returns the session workspace path; it cannot read, write, delete, or execute
+anything. The walkthrough fails clearly if the selected model does not invoke
+the tool, so choose a model that supports function calling.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ToolCallingExample
+```
+
+### 04-persistent-sessions
+
+Creates a JSONL session, sends one real prompt, then releases that first session
+handle. It resumes the JSONL into a new `CodingAgentSession`, reports its
+persisted entry and restored-message counts, and sends a follow-up question
+that relies on the first turn's conversation history. Session writes are
+durable at turn completion, so there is no file handle to close between the
+initial and resumed sessions.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.PersistentSessionsExample
+```
+
+### 05-live-session-control
+
+Runs three real streamed prompts in one persisted session. It pauses for one
+terminal command during each active stream: `/steer <text>`, `/follow-up <text>`,
+and `/abort`. The first two commands are consumed in a subsequent model turn;
+the last produces the public aborted event and ends the active prompt locally.
+
+Run this from an interactive terminal. As soon as streamed text appears for a
+stage, enter the command it displays and press Enter. The model can finish a
+short response before a command is entered; if that happens, the walkthrough
+reports that completed response and automatically restarts the stage before
+applying your already-entered command. Cancellation stops the local streamed
+session at the next received provider event, so a small amount of
+already-buffered text may still be printed.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.LiveSessionControlExample
+```
+
+### 06-resources-and-coding-tools
+
+Creates a disposable `Lantern Library` workspace containing `README.md`, a
+source file, `AGENTS.md`, project `.pi` settings, and system-prompt resources.
+It discovers those resources from a temporary example home and workspace,
+prints the discovered settings/context files, builds a request-scoped system
+prompt, and sends one real prompt.
+
+Only the built-in `read`, `ls`, `grep`, and `find` tools are registered. The
+example asks the model to read `README.md`; the coding-tool path policy rejects
+paths outside the workspace, and no write, edit, or shell tool is available.
+The sample files live in a newly created child directory, so an explicitly
+configured workspace is never overwritten. They are deleted with the temporary
+workspace unless you set an explicit workspace path.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ResourcesAndCodingToolsExample
+```
+
+### 07-model-switching
+
+Uses one persisted session and an application-owned selected-model value. The
+first turn uses the initially selected model; the example then changes that
+value and sends the second turn with the configured switch model. A model is
+selected when a `PromptRequest` begins, so the change affects the next turn,
+not a request that is already streaming.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ModelSwitchingExample
+```
+
+### 08-prompt-model-override
+
+Sends two consecutive `PromptRequest`s through one persisted session. The first
+relies on the runtime/provider default; the second supplies
+`PromptRequest.model` with `AGENT4J_SWITCH_MODEL`. The second turn retains the
+first turn's conversation history while using its own model selection.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.PromptModelOverrideExample
+```
+
+### 09-compaction-and-branching
+
+Creates two turns in one JSONL session, runs manual compaction with a small
+retained tail, and prints the summary plus estimated before/after context
+tokens. It then forks from the first turn's active entry, showing that the fork
+contains only that selected path, while the original session is resumed from
+its latest compacted path and continued with one final prompt.
+
+Manual compaction sends a separate provider request whose input includes the
+history selected for summarization. This walkthrough makes four provider
+requests: two setup turns, one summary, and one resumed turn. The summary's
+input grows with the compacted history, so inspect the printed token counts and
+use a low-cost model before trying it on a large session.
+
+The original and forked JSONL paths are printed. Temporary paths are cleaned on
+normal exit; set `AGENT4J_EXAMPLES_SESSION_DIRECTORY` to retain them for
+inspection, or remove interrupted-run paths manually.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.CompactionAndBranchingExample
+```
+
+### 10-cli-modes
+
+Runs composed Java calls to the actual CLI command boundary: print mode, JSON
+event mode, JSONL RPC mode, session resume, and session fork. The example
+passes its existing in-memory live-example credential and optional base URL to
+each CLI request with `--api-key` and `--base-url`; it does not require a
+second set of provider environment variables.
+
+For OpenRouter, retain the `openai/` provider prefix in `AGENT4J_MODEL`, for
+example `openai/openrouter/free`. The Java example composes each argument list
+with `--no-tools`, `--model`, and an explicit `--session-dir`, so it has no
+workspace side effects. Its temporary session files are cleaned on normal exit;
+set `AGENT4J_EXAMPLES_SESSION_DIRECTORY` to retain and inspect them.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.CliModesExample
+```
+
+### 11-interactive-shell
+
+Starts the actual interactive CLI in the current project directory. Its initial
+real streamed prompt requires the model to read `pom.xml`, so a compatible
+tool-calling model shows `read` tool activity before the `agent4j>` prompt is
+displayed. The walkthrough enables only that read-only tool: it cannot write,
+edit, delete, or execute commands. Run it from the repository root so that
+`pom.xml` is in the CLI workspace.
+
+The shell itself is deliberately manual. After the initial turn, use `/status`
+to record the session ID and JSONL path, `/model` to inspect the selection, and
+`/model <[provider/]model>` to change the model used by the next prompt. `/new`
+creates another session; `/resume` opens the picker, where you can select the
+session ID recorded from `/status`. To exercise live controls, submit a long
+response request and, while text is still arriving, enter `/follow-up <text>`
+or `/abort`. The former reports a queued follow-up and runs it after the active
+turn; the latter reports a local abort. A model can finish before a command is
+entered, so use a longer request and enter the command as soon as the first
+text appears.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.InteractiveShellExample
+```
+
+For an ANSI-capable run, use an attached terminal with `TERM` not set to `dumb`
+and with `NO_COLOR` unset. For the plain-terminal fallback, run the same
+command with `NO_COLOR=1`:
+
+```bash
+NO_COLOR=1 mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.InteractiveShellExample
+```
+
+Manual QA checklist for both runs:
+
+- Confirm streamed assistant text arrives before the prompt returns and the
+  initial `read` call reports both started and completed tool rows.
+- Run `/status`, `/model`, `/model <[provider/]model>`, `/new`, then `/resume`;
+  select the session ID previously recorded from `/status` and confirm a
+  `resumed session` row.
+- Enter a long request such as `Write 100 short numbered facts about terminal
+  streaming.` As soon as text starts, enter `/follow-up End with the word
+  queued.` Confirm a follow-up queue row and a subsequent follow-up turn.
+- Repeat the long request and enter `/abort` immediately after the first text
+  arrives. Confirm an aborted diagnostic; a small amount of buffered text can
+  still appear after cancellation.
+- In the ANSI run, confirm tool/status rows are styled and no ANSI escape
+  sequences are printed literally. In the `NO_COLOR` run, confirm the same
+  information is readable as unstyled bracketed rows with no escape sequences.
+- Exit with `/exit`. Temporary session artifacts are cleaned on normal exit;
+  set `AGENT4J_EXAMPLES_SESSION_DIRECTORY` first if you want to retain the
+  JSONL files after the walkthrough.
+
+### 12-reference-application
+
+This is the recommended starting point for a small coding-assistant
+application. It combines the production runtime, a persisted JSONL session,
+streaming output, workspace resources, and a workspace-scoped tool registry.
+It creates a disposable `Lantern Library` workspace and passes its discovered
+instructions to the model. Only `read`, `ls`, `grep`, and `find` are enabled;
+the assistant cannot write, edit, delete, or execute commands, and the path
+policy rejects locations outside that sample workspace.
+
+The default request reads the sample `README.md`. Supply an optional request
+through the Maven example arguments to ask a different read-only question. The
+application requires a tool call, so choose a model that supports function
+calling. Its session path is printed for inspection and is removed on normal
+exit unless you set `AGENT4J_EXAMPLES_SESSION_DIRECTORY`.
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ReferenceApplicationExample
+```
+
+For example, inspect the bundled source file while retaining the standard safe
+tool boundary:
+
+```bash
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.ReferenceApplicationExample \
+  -Dagent4j.liveExample.args="Read src/Library.java and explain its package and class declaration."
+```
+
+The expected observable behavior is a streamed response with `tool started`
+and `tool completed` rows, followed by usage totals. Treat this as the
+onboarding baseline for production applications: replace the sample workspace
+and request text, retain the explicit tool allowlist, and add mutating tools
+only after defining and testing their workspace and user-confirmation policy.
+
+### 13-build-triage
+
+Runs a deliberately constrained build-failure triager against one explicit Maven
+workspace. The agent can call `run_maven_test`, which always executes exactly
+`mvn test`, and can then inspect files with `read`, `ls`, `grep`, and `find`.
+It has no `write`, `edit`, or general `bash` capability. Maven itself may create
+normal build artifacts under `target`; its plugins run according to the
+workspace's existing build configuration, so use this only with a workspace you
+trust.
+
+Set the workspace explicitly to avoid accidentally running a build in a
+temporary empty directory. The walkthrough allocates up to six tool rounds so
+the agent can inspect the relevant failure after the test command. An optional
+Maven failure snippet can be supplied as example arguments.
+
+```bash
+export AGENT4J_EXAMPLES_WORKSPACE="$PWD"
+
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.BuildTriageExample \
+  -Dagent4j.liveExample.args="Tests fail after the latest dependency update."
+```
+
+The result is a structured diagnosis with **Root cause**, **Evidence**,
+**Smallest viable fix**, and **Verification** sections. This is intentionally a
+read-only diagnosis prototype; it does not apply the suggested fix.
+
+### 14-java-pr-review
+
+Reviews the current tracked-file worktree diff against `HEAD`. The agent starts
+with a fixed `read_git_diff` command (`git diff --no-ext-diff --unified=80 HEAD
+--`) and may inspect related files using `read`, `ls`, `grep`, and `find`. It
+cannot write, edit, run general shell commands, stage files, or change the
+worktree. Untracked files are intentionally outside this first review scope.
+
+Set the Git workspace explicitly. You may add review context, such as an API
+contract or a risky code path, as example arguments.
+
+```bash
+export AGENT4J_EXAMPLES_WORKSPACE="$PWD"
+
+mvn -pl agent4j-examples -am test \
+  -Dagent4j.liveOpenAiExamples=true \
+  -Dagent4j.liveExample.mainClass=com.agent4j.examples.JavaPrReviewerExample \
+  -Dagent4j.liveExample.args="Focus on API compatibility and concurrency risks."
+```
+
+The reviewer reports actionable correctness, regression, security, concurrency,
+API-contract, and missing-test findings in `[severity] file:line` form. It
+omits style-only nits and ends with either **No findings** or a remaining-risk
+note.
+
+## Bounds and cost
+
+The walkthroughs pass these defaults from `LiveExampleConfiguration` to
+`CodingAgentRuntime`:
+
+- maximum output tokens: `256`
+- maximum tool rounds: `1`
+
+Override them only when a walkthrough explicitly needs more capacity:
+
+```bash
+export AGENT4J_EXAMPLES_MAX_OUTPUT_TOKENS=256
+export AGENT4J_EXAMPLES_MAX_TOOL_ROUNDS=1
+```
+
+The approximate request charge is the selected model's input-token rate times
+actual input tokens, plus its output-token rate times actual output tokens.
+The limits reduce exposure but do not guarantee a fixed price, because input,
+reasoning, and tool-related usage vary by model and prompt.
+
+## Workspace and session cleanup
+
+By default, the foundation creates separate operating-system temporary
+directories for the example workspace and session files. A walkthrough uses
+try-with-resources and deletes only the temporary directories it created when
+it exits normally. If the process is interrupted, the printed paths identify
+what you can inspect and remove manually.
+
+Set either variable only when you want to retain artifacts. Explicitly chosen
+directories are never deleted automatically:
+
+```bash
+export AGENT4J_EXAMPLES_WORKSPACE="/private/path/to/example-workspace"
+export AGENT4J_EXAMPLES_SESSION_DIRECTORY="/private/path/to/example-sessions"
+```
+
+The foundation does not register filesystem-writing or process-executing tools.
+The resources-and-coding-tools walkthrough adds only workspace-scoped,
+read-only filesystem tools. Future tool walkthroughs must keep their default
+tool sets constrained to the example workspace and document any side effects
+before they run.

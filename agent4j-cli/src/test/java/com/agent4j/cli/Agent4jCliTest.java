@@ -11,9 +11,7 @@ import com.agent4j.ai.AiResolvedAuth;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.AgentSessionRuntime;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.coding.sdk.AuthSession;
 import com.agent4j.coding.sdk.AuthStatus;
 import com.agent4j.coding.sdk.LoginService;
@@ -32,6 +30,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.PrintWriter;
+import java.io.StringReader;
 import java.io.StringWriter;
 import java.time.Clock;
 import java.time.Instant;
@@ -73,14 +72,16 @@ class Agent4jCliTest {
                 "--provider", "openai",
                 "--model", "gpt-test",
                 "--api-key", "sk-runtime-only",
+                "--base-url", "https://openrouter.example/api/v1",
                 "hello");
 
-        assertThat(exitCode).isEqualTo(1);
+        assertThat(exitCode).isZero();
         assertThat(received.get()).isNotNull();
         assertThat(received.get().cwd()).isEqualTo(temporaryDirectory.resolve("workspace").toAbsolutePath());
         assertThat(received.get().provider()).contains("openai");
         assertThat(received.get().model()).contains("gpt-test");
         assertThat(received.get().apiKey()).contains("sk-runtime-only");
+        assertThat(received.get().baseUrl()).contains("https://openrouter.example/api/v1");
     }
 
     @Test
@@ -108,28 +109,43 @@ class Agent4jCliTest {
     }
 
     @Test
-    void defaultTextModeBootstrapsResolvedSessionThroughInteractiveRunner() throws Exception {
+    void listsConfiguredModelsWithoutOpeningASession() throws Exception {
+        StringWriter stdout = new StringWriter();
+
+        int exitCode = Agent4jCli.execute(
+                request -> runtime(new FakeModelClient()),
+                environment(),
+                new PrintWriter(stdout),
+                new PrintWriter(new StringWriter()),
+                "--list-models");
+
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString()).contains("openai/gpt-test\tTest model");
+    }
+
+    @Test
+    void nonInteractiveInputRunsInPrintMode() throws Exception {
         AtomicReference<CliRuntimeRequest> request = new AtomicReference<>();
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(new AiStreamEvent.MessageCompleted(
+                "assistant-1",
+                new AiAssistantMessage(List.of(new AiTextContent("piped answer")), AiStopReason.STOP, AiUsage.zero()))));
         StringWriter stdout = new StringWriter();
         StringWriter stderr = new StringWriter();
 
         int exitCode = Agent4jCli.execute(
                 input -> {
                     request.set(input);
-                    return runtime();
+                    return runtime(model);
                 },
                 environment(),
-                new java.io.StringReader(""),
+                new java.io.StringReader("piped task\n"),
                 new PrintWriter(stdout),
                 new PrintWriter(stderr));
 
         assertThat(exitCode).isZero();
         assertThat(request.get()).isNotNull();
-        assertThat(stdout.toString()).isEqualTo("agent4j> ");
+        assertThat(stdout.toString()).isEqualTo("piped answer\n");
         assertThat(stderr.toString()).isEmpty();
-        try (var sessionFiles = Files.list(environment().homeDirectory().resolve(".pi/agent/sessions"))) {
-            assertThat(sessionFiles.anyMatch(path -> path.getFileName().toString().endsWith(".jsonl"))).isTrue();
-        }
     }
 
     @Test
@@ -237,6 +253,7 @@ class Agent4jCliTest {
         return Agent4jCli.execute(
                 factory,
                 environment(),
+                new StringReader(""),
                 new PrintWriter(new StringWriter()),
                 new PrintWriter(new StringWriter()),
                 args);
@@ -255,15 +272,16 @@ class Agent4jCliTest {
         Files.createDirectories(environment.cwd());
         ResourceDiscovery discovery = new ResourceLoader().discover(
                 ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
-        CodingAgentRuntimeServices.Builder services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime.Builder runtime = CodingAgentRuntime.builder()
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC())
                 .loginService(loginService);
         if (model != null) {
-            services.modelClient(model);
+            runtime.providerRegistry(com.agent4j.ai.AiProviderRegistry.fixedClient(
+                    new com.agent4j.ai.AiModel(new AiModelReference("openai", "gpt-test"), "Test model"), model));
         }
-        AgentSessionRuntime runtime = new CodingAgentSessionRuntime(services.build());
-        return new CliRuntime(runtime, discovery, new AiModelReference("openai", "gpt-test"));
+        CodingAgentRuntime builtRuntime = runtime.build();
+        return new CliRuntime(builtRuntime, discovery, new AiModelReference("openai", "gpt-test"), builtRuntime.optionalProviderRegistry());
     }
 
     private static final class FakeLoginService implements LoginService {

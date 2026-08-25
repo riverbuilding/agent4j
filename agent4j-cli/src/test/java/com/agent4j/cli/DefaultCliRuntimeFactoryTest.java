@@ -9,14 +9,33 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DefaultCliRuntimeFactoryTest {
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void resolvesAgent4jModelFromTheEnvironmentWhenNoModelIsConfigured() {
+        assertThat(DefaultCliRuntimeFactory.requestedModel(
+                Optional.empty(), Optional.empty(), Map.of("AGENT4J_MODEL", "openai/gpt-4.1")))
+                .contains("openai/gpt-4.1");
+    }
+
+    @Test
+    void givesConfiguredAndCommandLineModelsPrecedenceOverAgent4jModel() {
+        assertThat(DefaultCliRuntimeFactory.requestedModel(
+                Optional.empty(), Optional.of("gpt-from-settings"), Map.of("AGENT4J_MODEL", "openai/gpt-4.1")))
+                .contains("gpt-from-settings");
+        assertThat(DefaultCliRuntimeFactory.requestedModel(
+                Optional.of("gpt-from-command-line"), Optional.of("gpt-from-settings"),
+                Map.of("AGENT4J_MODEL", "openai/gpt-4.1")))
+                .contains("gpt-from-command-line");
+    }
 
     @Test
     void resolvesProjectSettingsAndBuildsSdkOwnedOpenAiRuntime() throws Exception {
@@ -45,7 +64,7 @@ class DefaultCliRuntimeFactoryTest {
 
         assertThat(runtime.defaultModel().displayName()).isEqualTo("openai/gpt-from-settings");
         assertThat(runtime.resourceDiscovery().directories().projectAgentDir()).isEqualTo(workspace.resolve(".pi"));
-        assertThat(runtime.sessionRuntime()).isNotNull();
+        assertThat(runtime.runtime()).isNotNull();
         assertThat(persistentStore.find("openai")).isEmpty();
     }
 
@@ -70,20 +89,126 @@ class DefaultCliRuntimeFactoryTest {
     }
 
     @Test
-    void rejectsAProviderTheBootstrapCannotConstruct() {
+    void loadsTheProjectModelsJsonBeforeSelectingTheDefaultModel() throws Exception {
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace.resolve(".pi"));
+        Files.writeString(workspace.resolve(".pi/models.json"), """
+                {
+                  "models": [{"provider": "openai", "id": "company-model", "name": "Company Model"}],
+                  "defaultModel": "openai/company-model"
+                }
+                """);
         DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
                 new ResourceLoader(),
                 new InMemoryAuthCredentialStore(),
                 CodingTools.localDefaults().registry(),
                 Clock.systemUTC());
 
-        assertThatThrownBy(() -> factory.create(new CliRuntimeRequest(
-                        temporaryDirectory.resolve("workspace"),
-                        temporaryDirectory.resolve("home"),
-                        Optional.of("anthropic"),
-                        Optional.of("claude"),
-                        Optional.empty())))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("not configured");
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                workspace, temporaryDirectory.resolve("home"), Optional.empty(), Optional.empty(), Optional.empty()));
+
+        assertThat(runtime.defaultModel().displayName()).isEqualTo("openai/company-model");
+    }
+
+    @Test
+    void loadsAnOpenAiCompatibleProviderFromProjectConfiguration() throws Exception {
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace.resolve(".pi"));
+        Files.writeString(workspace.resolve(".pi/models.json"), """
+                {
+                  "providers": {
+                    "gateway": {
+                      "type": "openai-compatible",
+                      "baseUrl": "https://gateway.example/v1",
+                      "headers": {"X-Client": "agent4j"},
+                      "models": [{"id": "coding-model", "features": {"toolCalling": true}}]
+                    }
+                  },
+                  "defaultModel": "gateway/coding-model"
+                }
+                """);
+        DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
+                new ResourceLoader(),
+                new InMemoryAuthCredentialStore(),
+                CodingTools.localDefaults().registry(),
+                Clock.systemUTC());
+
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                workspace, temporaryDirectory.resolve("home"), Optional.empty(), Optional.empty(), Optional.empty()));
+
+        assertThat(runtime.defaultModel().displayName()).isEqualTo("gateway/coding-model");
+        assertThat(runtime.providerRegistry().orElseThrow().requireDefault().provider().id()).isEqualTo("gateway");
+        assertThat(runtime.providerRegistry().orElseThrow().requireDefault().model().baseUrl())
+                .contains("https://gateway.example/v1");
+    }
+
+    @Test
+    void buildsAnAnthropicRuntimeFromTheBuiltInCatalog() throws Exception {
+        DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
+                new ResourceLoader(),
+                new InMemoryAuthCredentialStore(),
+                CodingTools.localDefaults().registry(),
+                Clock.systemUTC());
+
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                temporaryDirectory.resolve("workspace"),
+                temporaryDirectory.resolve("home"),
+                Optional.of("anthropic"),
+                Optional.of("claude"),
+                Optional.empty()));
+
+        assertThat(runtime.defaultModel().displayName()).isEqualTo("anthropic/claude");
+    }
+
+    @Test
+    void buildsTheDefaultCodingPromptWithProjectInstructionsAndSelectedTools() throws Exception {
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace);
+        Files.writeString(workspace.resolve("AGENTS.md"), "project instruction");
+        DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
+                new ResourceLoader(),
+                new InMemoryAuthCredentialStore(),
+                CodingTools.localDefaults().registry(),
+                Clock.systemUTC());
+
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                workspace,
+                temporaryDirectory.resolve("home"),
+                Optional.of("openai"),
+                Optional.of("gpt-5"),
+                Optional.empty(),
+                Optional.empty(),
+                CliToolSelection.defaults(),
+                Optional.empty(),
+                List.of()));
+
+        assertThat(runtime.systemPrompt())
+                .contains("agent4j-coding-v1", "project instruction", "read: Read a UTF-8 text file from the workspace.");
+    }
+
+    @Test
+    void letsExplicitCliPromptsReplaceAndAppendToTheDiscoveredSystemPrompt() throws Exception {
+        Path workspace = temporaryDirectory.resolve("workspace");
+        Files.createDirectories(workspace.resolve(".pi"));
+        Files.writeString(workspace.resolve(".pi/SYSTEM.md"), "project replacement");
+        DefaultCliRuntimeFactory factory = new DefaultCliRuntimeFactory(
+                new ResourceLoader(),
+                new InMemoryAuthCredentialStore(),
+                CodingTools.localDefaults().registry(),
+                Clock.systemUTC());
+
+        CliRuntime runtime = factory.create(new CliRuntimeRequest(
+                workspace,
+                temporaryDirectory.resolve("home"),
+                Optional.of("openai"),
+                Optional.of("gpt-5"),
+                Optional.empty(),
+                Optional.empty(),
+                CliToolSelection.defaults(),
+                Optional.of("CLI replacement"),
+                List.of("CLI append")));
+
+        assertThat(runtime.systemPrompt()).contains("CLI replacement", "CLI append");
+        assertThat(runtime.systemPrompt()).doesNotContain("project replacement", "agent4j-coding-v1");
     }
 }

@@ -44,10 +44,10 @@ public final class JsonEventSerializer {
     public ObjectNode event(AgentEvent event) {
         Objects.requireNonNull(event, "event");
         return switch (event) {
-            case AgentEvent.AgentStarted ignored -> type("agent_start");
-            case AgentEvent.AgentEnded ended -> type("agent_end")
+            case AgentEvent.AgentStarted ignored -> type(AgentEvent.AgentStarted.TYPE);
+            case AgentEvent.AgentEnded ended -> type(AgentEvent.AgentEnded.TYPE)
                     .set("messages", messages(ended.messages()));
-            case AgentEvent.TurnStarted ignored -> type("turn_start");
+            case AgentEvent.TurnStarted ignored -> type(AgentEvent.TurnStarted.TYPE);
             case AgentEvent.TurnEnded ended -> turnEnd(ended);
             case AgentEvent.MessageStarted started -> messageStart(started.message());
             case AgentEvent.MessageUpdated updated -> messageUpdate(updated);
@@ -68,7 +68,7 @@ public final class JsonEventSerializer {
                     .put("reason", started.reason());
             case AgentEvent.CompactionCompleted completed -> type("compaction_end")
                     .put("summaryMessageId", completed.summaryMessageId());
-            case AgentEvent.AgentAborted aborted -> type("agent_aborted")
+            case AgentEvent.AgentAborted aborted -> type(AgentEvent.AgentAborted.TYPE)
                     .put("reason", aborted.reason());
         };
     }
@@ -91,7 +91,7 @@ public final class JsonEventSerializer {
 
     private ObjectNode toolExecutionStart(ToolCall toolCall) {
         activeToolCalls.put(toolCall.id(), toolCall);
-        return type("tool_execution_start")
+        return type(AgentEvent.ToolExecutionStarted.TYPE)
                 .put("toolCallId", toolCall.id())
                 .put("toolName", toolCall.name())
                 .set("args", toolCall.arguments().deepCopy());
@@ -99,7 +99,7 @@ public final class JsonEventSerializer {
 
     private ObjectNode toolExecutionEnd(ToolResult result) {
         activeToolCalls.remove(result.toolCallId());
-        ObjectNode event = type("tool_execution_end")
+        ObjectNode event = type(AgentEvent.ToolExecutionEnded.TYPE)
                 .put("toolCallId", result.toolCallId())
                 .put("toolName", result.toolName());
         event.set("result", result.content() == null ? JSON.nullNode() : result.content().deepCopy());
@@ -108,7 +108,7 @@ public final class JsonEventSerializer {
     }
 
     private ObjectNode turnEnd(AgentEvent.TurnEnded ended) {
-        ObjectNode event = type("turn_end");
+        ObjectNode event = type(AgentEvent.TurnEnded.TYPE);
         event.set("message", message(ended.message()));
         event.set("toolResults", toolResults(ended.toolResults()));
         return event;
@@ -117,7 +117,7 @@ public final class JsonEventSerializer {
     private ObjectNode messageStart(AgentMessage message) {
         ObjectNode snapshot = message(message);
         streamingMessages.put(message.id(), snapshot);
-        ObjectNode event = type("message_start");
+        ObjectNode event = type(AgentEvent.MessageStarted.TYPE);
         event.set("message", snapshot.deepCopy());
         return event;
     }
@@ -125,7 +125,7 @@ public final class JsonEventSerializer {
     private ObjectNode messageUpdate(AgentEvent.MessageUpdated updated) {
         ObjectNode snapshot = streamingMessages.computeIfAbsent(updated.messageId(), ignored -> assistantMessage());
         applyDelta(snapshot, updated.delta());
-        ObjectNode event = type("message_update");
+        ObjectNode event = type(AgentEvent.MessageUpdated.TYPE);
         event.set("message", snapshot.deepCopy());
         event.set("assistantMessageEvent", updated.delta().deepCopy());
         return event;
@@ -133,14 +133,14 @@ public final class JsonEventSerializer {
 
     private ObjectNode messageEnd(AgentMessage message) {
         streamingMessages.remove(message.id());
-        ObjectNode event = type("message_end");
+        ObjectNode event = type(AgentEvent.MessageEnded.TYPE);
         event.set("message", message(message));
         return event;
     }
 
     private ObjectNode toolExecutionUpdate(AgentEvent.ToolExecutionUpdated updated) {
         ToolCall call = activeToolCalls.get(updated.toolCallId());
-        ObjectNode event = type("tool_execution_update").put("toolCallId", updated.toolCallId());
+        ObjectNode event = type(AgentEvent.ToolExecutionUpdated.TYPE).put("toolCallId", updated.toolCallId());
         if (call != null) {
             event.put("toolName", call.name());
             event.set("args", call.arguments().deepCopy());

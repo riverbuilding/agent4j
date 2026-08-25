@@ -4,8 +4,7 @@ import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
 import com.agent4j.core.tool.InMemoryToolRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -43,15 +42,31 @@ class InteractiveSessionControllerTest {
         }
     }
 
+    @Test
+    void promptModelUsesTheSessionSelectedModel() throws Exception {
+        CliRuntime runtime = runtime();
+        CliSessionLifecycle lifecycle = new CliSessionLifecycle(runtime, environment(), new CliSessionOptions(
+                false, false, false, Optional.empty(), Optional.empty(), Optional.empty(),
+                Optional.of(temporaryDirectory.resolve("sessions")), Optional.empty()));
+        var session = lifecycle.open();
+        InteractiveTerminal terminal = new InteractiveTerminal(new StringReader(""), new PrintWriter(new StringWriter()), new PrintWriter(new StringWriter()));
+
+        try (InteractiveSessionController controller = new InteractiveSessionController(runtime, lifecycle, session, terminal)) {
+            controller.selectModel("gpt-next");
+
+            assertThat(controller.promptModel()).contains(new AiModelReference("openai", "gpt-next"));
+        }
+    }
+
     private CliRuntime runtime() throws Exception {
         CliEnvironment environment = environment();
         Files.createDirectories(environment.cwd());
         ResourceDiscovery discovery = new ResourceLoader().discover(
                 ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
-        return new CliRuntime(new CodingAgentSessionRuntime(CodingAgentRuntimeServices.builder()
+        return new CliRuntime(CodingAgentRuntime.builder()
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC())
-                .build()), discovery, new AiModelReference("openai", "gpt-test"));
+                .build(), discovery, new AiModelReference("openai", "gpt-test"));
     }
 
     private CliEnvironment environment() {

@@ -1,6 +1,7 @@
 package com.agent4j.cli;
 
 import com.agent4j.ai.AiAssistantMessage;
+import com.agent4j.ai.AiSystemMessage;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiTextContent;
@@ -10,8 +11,9 @@ import com.agent4j.ai.AiModelReference;
 import com.agent4j.coding.resource.ResourceDiscovery;
 import com.agent4j.coding.resource.ResourceDiscoveryOptions;
 import com.agent4j.coding.resource.ResourceLoader;
-import com.agent4j.coding.sdk.CodingAgentRuntimeServices;
-import com.agent4j.coding.sdk.CodingAgentSessionRuntime;
+import com.agent4j.coding.sdk.CodingAgentRuntime;
+import com.agent4j.coding.sdk.RuntimePromptResolver;
+import com.agent4j.coding.resource.SystemPromptBuilder;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
 import com.agent4j.core.runtime.AbortController;
@@ -51,6 +53,13 @@ class PrintModeRunnerTest {
         assertThat(stdout.toString()).isEqualTo("print answer\n");
         assertThat(stderr.toString()).isEmpty();
         assertThat(model.requests()).hasSize(1);
+        assertThat(model.requests().getFirst().messages())
+                .filteredOn(AiSystemMessage.class::isInstance)
+                .extracting(AiSystemMessage.class::cast)
+                .extracting(AiSystemMessage::content)
+                .singleElement()
+                .asString()
+                .contains("agent4j-coding-v1");
         assertThat(noTemporarySessions()).isTrue();
     }
 
@@ -134,11 +143,18 @@ class PrintModeRunnerTest {
         ResourceDiscovery discovery = new ResourceLoader().discover(
                 ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()));
         return new CliRuntime(
-                new CodingAgentSessionRuntime(CodingAgentRuntimeServices.builder()
-                        .modelClient(model)
+                CodingAgentRuntime.builder()
+                        .providerRegistry(com.agent4j.ai.AiProviderRegistry.fixedClient(
+                                new com.agent4j.ai.AiModel(new AiModelReference("openai", "gpt-test"), "Test model"), model))
                         .toolRegistry(tools)
                         .clock(Clock.systemUTC())
-                        .build()),
+                        .promptResolver(new RuntimePromptResolver(
+                                new ResourceLoader(),
+                                new SystemPromptBuilder(),
+                                ResourceDiscoveryOptions.enabled(environment.homeDirectory(), environment.cwd()),
+                                Optional.empty(),
+                                List.of()))
+                        .build(),
                 discovery,
                 new AiModelReference("openai", "gpt-test"));
     }

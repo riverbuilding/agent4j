@@ -1,7 +1,10 @@
 package com.agent4j.coding.sdk;
 
 import com.agent4j.ai.AiAssistantMessage;
+import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelClient;
+import com.agent4j.ai.AiModelReference;
+import com.agent4j.ai.AiProviderRegistry;
 import com.agent4j.ai.AiStopReason;
 import com.agent4j.ai.AiStreamEvent;
 import com.agent4j.ai.AiTextContent;
@@ -115,12 +118,13 @@ class LiveAgentSessionControlTest {
         }
     }
 
-    private CodingAgentSessionRuntime runtime(AiModelClient model) {
-        return new CodingAgentSessionRuntime(CodingAgentRuntimeServices.builder()
-                .modelClient(model)
+    private CodingAgentRuntime runtime(AiModelClient model) {
+        return CodingAgentRuntime.builder()
+                .providerRegistry(AiProviderRegistry.fixedClient(
+                        new AiModel(new AiModelReference("test", "fixed"), "Fixed model"), model))
                 .toolRegistry(InMemoryToolRegistry.builder().build())
                 .clock(Clock.systemUTC())
-                .build());
+                .build();
     }
 
     private static AiStreamEvent.MessageCompleted completed(String id, String text) {

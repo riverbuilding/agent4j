@@ -6,7 +6,7 @@ import com.agent4j.core.message.ContentBlocks;
 import com.agent4j.core.message.TextBlock;
 import com.agent4j.core.message.ToolCall;
 import com.agent4j.core.message.ToolResult;
-import com.agent4j.core.runtime.FakeTextTurnRuntime;
+import com.agent4j.core.runtime.FakeAssistantTextTurnEmitter;
 import com.agent4j.core.runtime.QueueKind;
 import com.agent4j.core.runtime.Usage;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,9 +32,9 @@ class AgentEventBusTest {
         AgentEventBus bus = new AgentEventBus();
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
-        FakeTextTurnRuntime runtime = new FakeTextTurnRuntime(bus, clock);
+        FakeAssistantTextTurnEmitter emitter = new FakeAssistantTextTurnEmitter(bus, clock);
 
-        runtime.emitAssistantTextTurn(
+        emitter.emitAssistantTextTurn(
                 "session-1",
                 "turn-1",
                 "message-1",
@@ -50,6 +50,15 @@ class AgentEventBusTest {
                         "MessageEnded",
                         "TurnEnded",
                         "AgentEnded");
+        assertThat(events).extracting(AgentEvent::wireName)
+                .containsExactly(
+                        AgentEvent.AgentStarted.TYPE,
+                        AgentEvent.TurnStarted.TYPE,
+                        AgentEvent.MessageStarted.TYPE,
+                        AgentEvent.MessageUpdated.TYPE,
+                        AgentEvent.MessageEnded.TYPE,
+                        AgentEvent.TurnEnded.TYPE,
+                        AgentEvent.AgentEnded.TYPE);
         assertThat(((AgentEvent.MessageEnded) events.get(4)).message().content().get(0).get("text").asText())
                 .isEqualTo("hello");
         assertThat(((AgentEvent.MessageEnded) events.get(4)).message().textContent()).isEqualTo("hello");
@@ -82,7 +91,7 @@ class AgentEventBusTest {
         String json = mapper.writeValueAsString(event);
         AgentEvent readBack = mapper.readValue(json, AgentEvent.class);
 
-        assertThat(json).contains("\"type\":\"agent_end\"");
+        assertThat(json).contains("\"type\":\"" + event.wireName() + "\"");
         assertThat(readBack).isInstanceOf(AgentEvent.AgentEnded.class);
         assertThat(((AgentEvent.AgentEnded) readBack).turnId()).isEqualTo("turn-1");
     }

@@ -10,11 +10,26 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AiProviderAbstractionTest {
+    @Test
+    void fixedClientRegistryAdaptsDirectClientAsItsDefaultProvider() throws Exception {
+        AiModel model = new AiModel(new AiModelReference("test", "fixed"), "Fixed model");
+        AtomicReference<AiTurnRequest> received = new AtomicReference<>();
+        AiProviderRegistry registry = AiProviderRegistry.fixedClient(model, (request, sink) -> received.set(request));
+        AiTurnRequest turn = new AiTurnRequest(List.of(AiUserMessage.text("hello")), List.of());
+
+        registry.requireDefault().provider().stream(new AiProviderRequest(
+                model, turn, AiProviderContext.empty(), AiStreamOptions.defaults()), event -> { });
+
+        assertThat(registry.requireDefault().model()).isEqualTo(model);
+        assertThat(received.get()).isSameAs(turn);
+    }
+
     @Test
     void modelsCarryPiStyleProviderMetadataWithStableDefaults() {
         AiModel model = new AiModel(new AiModelReference("openai", "gpt-5.6-sol"), "GPT 5.6 Sol");
@@ -240,6 +255,8 @@ class AiProviderAbstractionTest {
                 .put("openai", configured)
                 .build();
         AiAuthStore environment = new EnvironmentAiAuthStore(Map.of(
+                "AGENT4J_API_KEY", "sk-openai-test",
+                "AGENT4J_BASE_URL", "https://openai.test",
                 "ANTHROPIC_API_KEY", "sk-ant-test",
                 "ANTHROPIC_BASE_URL", "https://anthropic.test"));
 
@@ -250,7 +267,11 @@ class AiProviderAbstractionTest {
             assertThat(auth.baseUrl()).contains("https://anthropic.test");
             assertThat(auth.source()).contains("environment");
         });
-        assertThat(environment.resolve("openai")).isEmpty();
+        assertThat(environment.resolve("openai")).hasValueSatisfying(auth -> {
+            assertThat(auth.apiKey()).contains("sk-openai-test");
+            assertThat(auth.baseUrl()).contains("https://openai.test");
+            assertThat(auth.source()).contains("environment");
+        });
     }
 
     @Test

@@ -22,7 +22,7 @@ final class AuthCommands {
         String providerId;
 
         final LoginService loginService() throws Exception {
-            return root.runtimeFactory().create(root.authRuntimeRequest(providerId)).sessionRuntime().loginService();
+            return root.runtimeFactory().create(root.authRuntimeRequest(providerId)).runtime().loginService();
         }
 
         final PrintWriter out() {

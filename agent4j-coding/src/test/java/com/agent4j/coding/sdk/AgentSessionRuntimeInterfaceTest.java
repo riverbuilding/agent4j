@@ -1,6 +1,8 @@
 package com.agent4j.coding.sdk;
 
+import com.agent4j.ai.AiModel;
 import com.agent4j.ai.AiModelReference;
+import com.agent4j.ai.AiProviderRegistry;
 import com.agent4j.core.event.AgentEvent;
 import com.agent4j.core.event.AgentEventBus;
 import com.agent4j.core.event.EventSubscription;
@@ -30,7 +32,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class AgentSessionRuntimeInterfaceTest {
+class CodingSdkApiTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Test
@@ -75,6 +77,7 @@ class AgentSessionRuntimeInterfaceTest {
         assertThat(request.maxToolRounds()).isZero();
         assertThat(request.maxModelRetries()).isZero();
         assertThat(request.modelTimeout()).isEmpty();
+        assertThat(request.toolChoice()).isEmpty();
         assertThat(request.toolExecutionMode()).isEqualTo(ToolExecutionMode.PARALLEL);
         assertThat(request.toolAttributes()).isEmpty();
         assertThat(request.steeringMessages()).isEmpty();
@@ -111,6 +114,26 @@ class AgentSessionRuntimeInterfaceTest {
         assertThat(request.toolAttributes()).containsEntry("key", "value");
         assertThat(request.steeringMessages()).isEmpty();
         assertThat(request.followUpMessages()).isEmpty();
+    }
+
+    @Test
+    void promptRequestNormalizesToolChoice() {
+        PromptRequest request = new PromptRequest(
+                "hello",
+                Optional.empty(),
+                1,
+                0,
+                Optional.empty(),
+                Optional.of(" required "),
+                null,
+                Map.of(),
+                List.of(),
+                List.of(),
+                null,
+                null,
+                Optional.empty());
+
+        assertThat(request.toolChoice()).contains("required");
     }
 
     @Test
@@ -154,14 +177,15 @@ class AgentSessionRuntimeInterfaceTest {
 
     @Test
     void subscribeSessionFiltersEventsBySessionId() {
-        TestRuntime runtime = new TestRuntime();
+        AgentEventBus eventBus = new AgentEventBus();
+        CodingAgentRuntime runtime = new CodingAgentRuntime(eventBus);
         List<AgentEvent> received = new ArrayList<>();
         EventSubscription subscription = runtime.subscribeSession("session-1", received::add);
 
-        runtime.publish(new AgentEvent.AgentStarted("session-2", Instant.EPOCH, "turn-1"));
-        runtime.publish(new AgentEvent.AgentStarted("session-1", Instant.EPOCH, "turn-2"));
+        eventBus.publish(new AgentEvent.AgentStarted("session-2", Instant.EPOCH, "turn-1"));
+        eventBus.publish(new AgentEvent.AgentStarted("session-1", Instant.EPOCH, "turn-2"));
         subscription.close();
-        runtime.publish(new AgentEvent.AgentStarted("session-1", Instant.EPOCH, "turn-3"));
+        eventBus.publish(new AgentEvent.AgentStarted("session-1", Instant.EPOCH, "turn-3"));
 
         assertThat(received)
                 .singleElement()
@@ -170,34 +194,34 @@ class AgentSessionRuntimeInterfaceTest {
     }
 
     @Test
-    void runtimeServicesDefaultsProvideSharedCoreServices() {
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.defaults();
+    void runtimeDefaultsProvideSharedCoreServices() {
+        CodingAgentRuntime runtime = new CodingAgentRuntime();
 
-        assertThat(services.eventBus()).isNotNull();
-        assertThat(services.optionalModelClient()).isEmpty();
-        assertThat(services.toolRegistry()).isNotNull();
-        assertThat(services.messageConverter()).isNotNull();
-        assertThat(services.clock()).isNotNull();
-        assertThat(services.requestFactory()).isNotNull();
-        assertThat(services.sessionCompactor()).isNotNull();
-        assertThat(services.branchSummarizer()).isNotNull();
+        assertThat(runtime.eventBus()).isNotNull();
+        assertThat(runtime.optionalProviderRegistry()).isEmpty();
+        assertThat(runtime.toolRegistry()).isNotNull();
+        assertThat(runtime.messageConverter()).isNotNull();
+        assertThat(runtime.clock()).isNotNull();
+        assertThat(runtime.sessionCompactor()).isNotNull();
+        assertThat(runtime.branchSummarizer()).isNotNull();
     }
 
     @Test
-    void runtimeServicesBuilderCarriesConfiguredServices() {
+    void runtimeBuilderCarriesConfiguredServices() {
         AgentEventBus eventBus = new AgentEventBus();
         FakeModelClient modelClient = new FakeModelClient();
         Clock clock = Clock.fixed(Instant.parse("2026-08-05T12:00:00Z"), ZoneOffset.UTC);
 
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.builder()
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder()
                 .eventBus(eventBus)
-                .modelClient(modelClient)
+                .providerRegistry(AiProviderRegistry.fixedClient(
+                        new AiModel(new AiModelReference("test", "fixed"), "Fixed model"), modelClient))
                 .clock(clock)
                 .build();
 
-        assertThat(services.eventBus()).isSameAs(eventBus);
-        assertThat(services.optionalModelClient()).containsSame(modelClient);
-        assertThat(services.clock()).isSameAs(clock);
+        assertThat(runtime.eventBus()).isSameAs(eventBus);
+        assertThat(runtime.optionalProviderRegistry()).isPresent();
+        assertThat(runtime.clock()).isSameAs(clock);
     }
 
     @Test
@@ -207,13 +231,12 @@ class AgentSessionRuntimeInterfaceTest {
                 .credentialStore(new InMemoryAuthCredentialStore())
                 .build();
 
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(options);
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder().openAi(options).build();
 
-        assertThat(services.optionalModelClient()).isEmpty();
-        assertThat(services.optionalProviderRegistry()).isPresent();
-        assertThat(services.optionalProviderRegistry().orElseThrow().requireDefault().model().reference())
+        assertThat(runtime.optionalProviderRegistry()).isPresent();
+        assertThat(runtime.optionalProviderRegistry().orElseThrow().requireDefault().model().reference())
                 .isEqualTo(model);
-        assertThat(services.loginService().loginApiKey(new ApiKeyLoginRequest("openai", "sk-test")).auth().apiKey())
+        assertThat(runtime.loginService().loginApiKey(new ApiKeyLoginRequest("openai", "sk-test")).auth().apiKey())
                 .contains("sk-test");
         assertThat(options.subscriptionLogin()).contains(OpenAiSubscriptionLoginClientOptions.codexDefaults());
     }
@@ -238,20 +261,20 @@ class AgentSessionRuntimeInterfaceTest {
                 .deviceAuthorizationEndpoint(URI.create("https://auth.example.test/device"))
                 .build();
 
-        CodingAgentRuntimeServices services = CodingAgentRuntimeServices.withOpenAi(
+        CodingAgentRuntime runtime = CodingAgentRuntime.builder().openAi(
                 OpenAiCodingRuntimeOptions.builder(model)
                         .credentialStore(new InMemoryAuthCredentialStore())
                         .subscriptionLogin(loginOptions)
                         .subscriptionLoginTransport(transport)
-                        .build());
+                        .build()).build();
 
-        SubscriptionLoginStart start = services.loginService()
+        SubscriptionLoginStart start = runtime.loginService()
                 .startDeviceCodeSubscriptionLogin(new DeviceCodeSubscriptionLoginRequest("openai"));
-        SubscriptionLoginPollResult result = services.loginService().pollSubscriptionLogin(start.flowId());
+        SubscriptionLoginPollResult result = runtime.loginService().pollSubscriptionLogin(start.flowId());
 
         assertThat(result.status()).isEqualTo(SubscriptionLoginStatus.COMPLETED);
-        assertThat(services.loginService().resolveAuth("openai").accessToken()).contains("subscription-token");
-        assertThat(services.loginService().status("openai").metadata()).containsEntry("plan", "plus");
+        assertThat(runtime.loginService().resolveAuth("openai").accessToken()).contains("subscription-token");
+        assertThat(runtime.loginService().status("openai").metadata()).containsEntry("plan", "plus");
         assertThat(transport.requests()).extracting(Request::endpoint)
                 .containsExactly(
                         URI.create("https://auth.example.test/device"),
@@ -272,49 +295,6 @@ class AgentSessionRuntimeInterfaceTest {
 
     private static ObjectNode object() {
         return MAPPER.createObjectNode();
-    }
-
-    private static final class TestRuntime implements AgentSessionRuntime {
-        private final AgentEventBus eventBus = new AgentEventBus();
-
-        @Override
-        public AgentSession createSession(CreateSessionRequest request) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public AgentSession resumeSession(ResumeSessionRequest request) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public AgentSession importSession(ImportSessionRequest request) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public AgentSession cloneSession(CloneSessionRequest request) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public AgentSession forkSession(ForkSessionRequest request) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public LoginService loginService() {
-            return CodingAgentRuntimeServices.defaults().loginService();
-        }
-
-        @Override
-        public EventSubscription subscribe(Consumer<AgentEvent> subscriber) {
-            return eventBus.subscribe(subscriber);
-        }
-
-        void publish(AgentEvent event) {
-            eventBus.publish(event);
-        }
     }
 
     private record Request(URI endpoint, Map<String, String> form, Map<String, String> headers) {

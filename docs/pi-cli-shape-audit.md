@@ -15,10 +15,10 @@ Primary references:
 
 `agent4j-cli` now has `Agent4jCli`, `Agent4jRootCommand`, and an injectable
 `CliRuntimeFactory`. `DefaultCliRuntimeFactory` discovers resources/settings,
-builds `CodingAgentRuntimeServices` with `CodingTools`, resolves the configured
-OpenAI model, and returns `CodingAgentSessionRuntime`. It does not construct an
+configures `CodingAgentRuntime` with `CodingTools`, resolves the configured
+OpenAI model, and returns `CodingAgentRuntime`. It does not construct an
 agent loop or provider execution path in the CLI module. The Phase 9
-`AgentSessionRuntime` and `LoginService` remain the only owners of session and
+`CodingAgentRuntime` and `LoginService` remain the only owners of session and
 authentication behavior.
 
 ## PI Command Surface
@@ -66,7 +66,7 @@ already implemented in agent4j:
 | --- | --- | --- |
 | `--provider`, `--model`, `--api-key`, `--thinking` | CLI runtime overrides; API keys are runtime-only and never written to session or credential files | Provider/model/API-key selection implemented for the current OpenAI bootstrap; `--thinking` remains unsupported. |
 | `--print` / `-p`, `--mode json`, `--mode rpc` | Mode selection above | 2 through 5 |
-| `--continue` / `-c`, `--session <path|id>`, `--session-id <id>`, `--fork <path|id>`, `--session-dir`, `--no-session`, `--name` / `-n` | Delegates to `AgentSessionRuntime` and `SessionManager` | Implemented in Slice 6. |
+| `--continue` / `-c`, `--session <path|id>`, `--session-id <id>`, `--fork <path|id>`, `--session-dir`, `--no-session`, `--name` / `-n` | Delegates to `CodingAgentRuntime` and `SessionManager` | Implemented in Slice 6. |
 | `--tools` / `-t`, `--exclude-tools` / `-xt`, `--no-tools` / `-nt`, `--no-builtin-tools` / `-nbt` | Validate and construct a tool selection; do not recreate tools inside the CLI mode runner | Implemented in Slice 7. |
 | `login`, `logout`, auth status, refresh | Thin command wrappers over `LoginService` | Implemented in Slice 8 as `login`, `logout`, `auth-status`, and `refresh`. |
 

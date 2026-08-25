@@ -3,6 +3,7 @@ package com.agent4j.core.runtime;
 import com.agent4j.ai.AiAssistantMessage;
 import com.agent4j.ai.AiMessage;
 import com.agent4j.ai.AiModel;
+import com.agent4j.ai.AiModelClientProvider;
 import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProviderApi;
 import com.agent4j.ai.AiResolvedAuth;
@@ -52,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentLoopTest {
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
+    private static final AiModel FIXED_MODEL = new AiModel(new AiModelReference("test", "fixed"), "Fixed model");
     private final Clock clock = Clock.fixed(Instant.parse("2026-07-28T10:00:00Z"), ZoneOffset.UTC);
 
     @Test
@@ -69,7 +71,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+        AgentLoopResult result = loop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(List.of(userMessage("user-1", "say hi")), 2));
 
         assertThat(result.assistantMessages()).hasSize(1);
@@ -96,6 +98,18 @@ class AgentLoopTest {
     }
 
     @Test
+    void reportsAProviderStreamErrorInsteadOfClaimingTheStreamHadNoMessage() {
+        FakeModelClient model = new FakeModelClient().enqueue(List.of(
+                new AiStreamEvent.MessageStarted("assistant-1"),
+                new AiStreamEvent.MessageErrored("assistant-1", "upstream unavailable")));
+
+        assertThatThrownBy(() -> loop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus())
+                .runTurn(request(List.of(userMessage("user-1", "say hi")), 2)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("model stream error: upstream unavailable");
+    }
+
+    @Test
     void prependsSystemPromptToModelRequestWithoutPersistingItInTranscript() throws Exception {
         FakeModelClient model = new FakeModelClient().enqueue(List.of(
                 new AiStreamEvent.MessageStarted("assistant-1"),
@@ -106,7 +120,7 @@ class AgentLoopTest {
                                 AiStopReason.STOP,
                                 AiUsage.zero()))));
 
-        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus())
+        AgentLoopResult result = loop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus())
                 .runTurn(new AgentLoopRequest(
                         "session-1",
                         "turn-1",
@@ -115,9 +129,11 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        "Use concise answers.",
-                        1));
+                        AgentLoopOptions.builder()
+                                .systemPrompt("Use concise answers.")
+                                .maxToolRounds(1)
+                                .promptMessages(List.of(userMessage("user-1", "say hi")))
+                                .build()));
 
         assertThat(model.requests()).hasSize(1);
         assertThat(model.requests().getFirst().messages()).extracting(AiMessage::role)
@@ -152,7 +168,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+        AgentLoopResult result = loop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(List.of(userMessage("user-1", "stream")), 2));
 
         assertThat(result.assistantMessages()).extracting(AgentMessage::id).containsExactly("assistant-1");
@@ -208,7 +224,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        AgentLoopResult result = new AgentLoop(model, registry, bus)
+        AgentLoopResult result = loop(model, registry, bus)
                 .runTurn(request(List.of(userMessage("user-1", "echo hello")), 2));
 
         assertThat(result.assistantMessages()).extracting(AgentMessage::id)
@@ -303,17 +319,12 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                null,
-                2,
-                3,
-                Optional.of(Duration.ofSeconds(30)),
-                ToolExecutionMode.PARALLEL,
-                List.of(prompt),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(2)
+                        .maxModelRetries(3)
+                        .modelTimeout(Optional.of(Duration.ofSeconds(30)))
+                        .promptMessages(List.of(prompt))
+                        .build());
 
         AgentLoopResult result = new AgentLoop(provider, model, registry, bus)
                 .runTurn(request);
@@ -416,22 +427,16 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        "Use concise answers.",
-                        1,
-                        0,
-                        Optional.empty(),
-                        ToolExecutionMode.PARALLEL,
-                        List.of(prompt),
-                        List.of(),
-                        List.of(),
-                        QueueMode.ONE_AT_A_TIME,
-                        QueueMode.ONE_AT_A_TIME,
-                        CompactionConfig.builder()
-                                .triggerMessages(2)
-                                .keepTokens(0)
-                                .keepMessages(1)
-                                .summaryPrompt("Summarize:\n{messages}")
+                        AgentLoopOptions.builder()
+                                .systemPrompt("Use concise answers.")
+                                .maxToolRounds(1)
+                                .promptMessages(List.of(prompt))
+                                .compactionConfig(CompactionConfig.builder()
+                                        .triggerMessages(2)
+                                        .keepTokens(0)
+                                        .keepMessages(1)
+                                        .summaryPrompt("Summarize:\n{messages}")
+                                        .build())
                                 .build()));
 
         assertThat(provider.requests()).hasSize(2);
@@ -523,22 +528,16 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        null,
-                        2,
-                        0,
-                        Optional.empty(),
-                        ToolExecutionMode.SEQUENTIAL,
-                        List.of(prompt),
-                        List.of(),
-                        List.of(),
-                        QueueMode.ONE_AT_A_TIME,
-                        QueueMode.ONE_AT_A_TIME,
-                        CompactionConfig.builder()
-                                .triggerMessages(2)
-                                .keepTokens(0)
-                                .keepMessages(2)
-                                .summaryPrompt("Summarize:\n{messages}")
+                        AgentLoopOptions.builder()
+                                .maxToolRounds(2)
+                                .toolExecutionMode(ToolExecutionMode.SEQUENTIAL)
+                                .promptMessages(List.of(prompt))
+                                .compactionConfig(CompactionConfig.builder()
+                                        .triggerMessages(2)
+                                        .keepTokens(0)
+                                        .keepMessages(2)
+                                        .summaryPrompt("Summarize:\n{messages}")
+                                        .build())
                                 .build()));
 
         assertThat(provider.requests()).hasSize(4);
@@ -607,22 +606,16 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        null,
-                        1,
-                        1,
-                        Optional.empty(),
-                        ToolExecutionMode.PARALLEL,
-                        List.of(prompt),
-                        List.of(),
-                        List.of(),
-                        QueueMode.ONE_AT_A_TIME,
-                        QueueMode.ONE_AT_A_TIME,
-                        CompactionConfig.builder()
-                                .triggerMessages(100)
-                                .keepTokens(0)
-                                .keepMessages(1)
-                                .summaryPrompt("Summarize:\n{messages}")
+                        AgentLoopOptions.builder()
+                                .maxToolRounds(1)
+                                .maxModelRetries(1)
+                                .promptMessages(List.of(prompt))
+                                .compactionConfig(CompactionConfig.builder()
+                                        .triggerMessages(100)
+                                        .keepTokens(0)
+                                        .keepMessages(1)
+                                        .summaryPrompt("Summarize:\n{messages}")
+                                        .build())
                                 .build()));
 
         assertThat(provider.requests()).hasSize(3);
@@ -672,23 +665,17 @@ class AgentLoopTest {
                         Path.of("/repo"),
                         clock,
                         new AbortController().signal(),
-                        Map.of(),
-                        null,
-                        1,
-                        1,
-                        Optional.empty(),
-                        ToolExecutionMode.PARALLEL,
-                        List.of(prompt),
-                        List.of(),
-                        List.of(),
-                        QueueMode.ONE_AT_A_TIME,
-                        QueueMode.ONE_AT_A_TIME,
-                        CompactionConfig.builder()
-                                .triggerMessages(100)
-                                .keepTokens(0)
-                                .keepMessages(1)
-                                .summaryPrompt("Summarize:\n{messages}")
-                                .overflowRetryEnabled(false)
+                        AgentLoopOptions.builder()
+                                .maxToolRounds(1)
+                                .maxModelRetries(1)
+                                .promptMessages(List.of(prompt))
+                                .compactionConfig(CompactionConfig.builder()
+                                        .triggerMessages(100)
+                                        .keepTokens(0)
+                                        .keepMessages(1)
+                                        .summaryPrompt("Summarize:\n{messages}")
+                                        .overflowRetryEnabled(false)
+                                        .build())
                                 .build())))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("maximum context length exceeded");
@@ -709,16 +696,11 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                null,
-                1,
-                0,
-                Optional.of(Duration.ZERO),
-                List.of(user),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME))
+                AgentLoopOptions.builder()
+                        .maxToolRounds(1)
+                        .modelTimeout(Optional.of(Duration.ZERO))
+                        .promptMessages(List.of(user))
+                        .build()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("modelTimeout");
     }
@@ -754,7 +736,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        AgentLoopResult result = new AgentLoop(model, registry, bus)
+        AgentLoopResult result = loop(model, registry, bus)
                 .runTurn(request(List.of(userMessage("user-1", "echo twice")), 2));
 
         assertThat(result.messages()).extracting(AgentMessage::id)
@@ -808,7 +790,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        new AgentLoop(model, registry, bus)
+        loop(model, registry, bus)
                 .runTurn(request(List.of(userMessage("user-1", "run progress")), 2));
 
         assertThat(events).extracting(event -> event.getClass().getSimpleName())
@@ -875,7 +857,7 @@ class AgentLoopTest {
                 })
                 .build();
 
-        new AgentLoop(model, registry, bus, List.of(hook))
+        loop(model, registry, bus, List.of(hook))
                 .runTurn(request(List.of(userMessage("user-1", "run hooked")), 2));
 
         assertThat(observations).containsExactly(
@@ -947,7 +929,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        AgentLoopResult result = new AgentLoop(model, registry, bus, List.of(hook))
+        AgentLoopResult result = loop(model, registry, bus, List.of(hook))
                 .runTurn(request(List.of(userMessage("user-1", "run blocked")), 2));
 
         assertThat(executed).isFalse();
@@ -995,7 +977,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        AgentLoopResult result = new AgentLoop(model, registry, bus)
+        AgentLoopResult result = loop(model, registry, bus)
                 .runTurn(request(List.of(userMessage("user-1", "finish")), 2));
 
         assertThat(model.requests()).hasSize(1);
@@ -1063,7 +1045,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        AgentLoopResult result = new AgentLoop(model, registry, bus)
+        AgentLoopResult result = loop(model, registry, bus)
                 .runTurn(request(List.of(userMessage("user-1", "run both")), 2));
 
         assertThat(firstObservedSecondTool).isTrue();
@@ -1119,7 +1101,7 @@ class AgentLoopTest {
                 })
                 .build();
 
-        AgentLoopResult result = new AgentLoop(model, registry, new AgentEventBus())
+        AgentLoopResult result = loop(model, registry, new AgentEventBus())
                 .runTurn(request(List.of(userMessage("user-1", "run both")), 2, ToolExecutionMode.SEQUENTIAL));
 
         assertThat(executionOrder).containsExactly("first", "second");
@@ -1157,7 +1139,7 @@ class AgentLoopTest {
         AgentMessage prompt = userMessage("user-1", "echo hello");
         AgentMessage steering = userMessage("steer-1", "change direction");
 
-        AgentLoopResult result = new AgentLoop(model, registry, bus)
+        AgentLoopResult result = loop(model, registry, bus)
                 .runTurn(request(List.of(prompt), 3, List.of(prompt), List.of(steering), List.of()));
 
         assertThat(result.messages()).extracting(AgentMessage::id)
@@ -1199,7 +1181,7 @@ class AgentLoopTest {
         AgentMessage firstSteering = userMessage("steer-1", "first steer");
         AgentMessage secondSteering = userMessage("steer-2", "second steer");
 
-        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+        AgentLoopResult result = loop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(
                         List.of(prompt),
                         3,
@@ -1249,7 +1231,7 @@ class AgentLoopTest {
         AgentMessage prompt = userMessage("user-1", "start");
         AgentMessage followUp = userMessage("follow-1", "also do this");
 
-        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+        AgentLoopResult result = loop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(List.of(prompt), 3, List.of(prompt), List.of(), List.of(followUp)));
 
         assertThat(result.messages()).extracting(AgentMessage::id)
@@ -1281,7 +1263,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        AgentLoopResult result = new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+        AgentLoopResult result = loop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(List.of(userMessage("user-1", "try")), 2, 1));
 
         assertThat(result.assistantMessages().getFirst().textContent()).isEqualTo("recovered");
@@ -1313,7 +1295,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        assertThatThrownBy(() -> new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+        assertThatThrownBy(() -> loop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(List.of(userMessage("user-1", "try")), 2, 1)))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("second provider failure");
@@ -1339,7 +1321,7 @@ class AgentLoopTest {
         List<AgentEvent> events = new ArrayList<>();
         bus.subscribe(events::add);
 
-        assertThatThrownBy(() -> new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+        assertThatThrownBy(() -> loop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(List.of(userMessage("user-1", "try")), 2, 3)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("bad request");
@@ -1371,7 +1353,7 @@ class AgentLoopTest {
             }
         });
 
-        assertThatThrownBy(() -> new AgentLoop(model, InMemoryToolRegistry.builder().build(), bus)
+        assertThatThrownBy(() -> loop(model, InMemoryToolRegistry.builder().build(), bus)
                 .runTurn(request(List.of(userMessage("user-1", "try")), 2, controller.signal())))
                 .isInstanceOf(AgentAbortException.class)
                 .hasMessage("stop model");
@@ -1407,7 +1389,7 @@ class AgentLoopTest {
             }
         });
 
-        assertThatThrownBy(() -> new AgentLoop(model, registry, bus)
+        assertThatThrownBy(() -> loop(model, registry, bus)
                 .runTurn(request(List.of(userMessage("user-1", "abort")), 2, controller.signal())))
                 .isInstanceOf(AgentAbortException.class)
                 .hasMessage("stop tool");
@@ -1426,7 +1408,7 @@ class AgentLoopTest {
                                 AiStopReason.STOP,
                                 AiUsage.zero()))));
 
-        new AgentLoop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus())
+        loop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus())
                 .runTurn(request(List.of(
                         customMessage("custom-1", AgentMessageRole.BASH_EXECUTION, "ls -la"),
                         customMessage("custom-2", AgentMessageRole.CUSTOM, "ui only"),
@@ -1456,7 +1438,7 @@ class AgentLoopTest {
                 .flatMap(Optional::stream)
                 .toList();
 
-        new AgentLoop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus(), converter)
+        loop(model, InMemoryToolRegistry.builder().build(), new AgentEventBus(), converter)
                 .runTurn(request(List.of(
                         customMessage("bash-1", AgentMessageRole.BASH_EXECUTION, "file list"),
                         userMessage("user-1", "summarize")), 1));
@@ -1481,15 +1463,11 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                maxToolRounds,
-                maxModelRetries,
-                Optional.empty(),
-                List.of(messages.getLast()),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(maxToolRounds)
+                        .maxModelRetries(maxModelRetries)
+                        .promptMessages(List.of(messages.getLast()))
+                        .build());
     }
 
     private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds, ToolExecutionMode toolExecutionMode) {
@@ -1501,17 +1479,35 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                null,
-                maxToolRounds,
-                0,
-                Optional.empty(),
-                toolExecutionMode,
-                List.of(messages.getLast()),
-                List.of(),
-                List.of(),
-                QueueMode.ONE_AT_A_TIME,
-                QueueMode.ONE_AT_A_TIME);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(maxToolRounds)
+                        .toolExecutionMode(toolExecutionMode)
+                        .promptMessages(List.of(messages.getLast()))
+                        .build());
+    }
+
+    private static AgentLoop loop(FakeModelClient client, ToolRegistry registry, AgentEventBus eventBus) {
+        return new AgentLoop(new AiModelClientProvider(FIXED_MODEL, client), FIXED_MODEL, registry, eventBus);
+    }
+
+    private static AgentLoop loop(
+            FakeModelClient client,
+            ToolRegistry registry,
+            AgentEventBus eventBus,
+            List<ToolExecutionHook> hooks
+    ) {
+        return new AgentLoop(new AiModelClientProvider(FIXED_MODEL, client), FIXED_MODEL,
+                registry, eventBus, DefaultAgentMessageConverter.INSTANCE, hooks);
+    }
+
+    private static AgentLoop loop(
+            FakeModelClient client,
+            ToolRegistry registry,
+            AgentEventBus eventBus,
+            AgentMessageConverter converter
+    ) {
+        return new AgentLoop(new AiModelClientProvider(FIXED_MODEL, client), FIXED_MODEL,
+                registry, eventBus, converter);
     }
 
     private AgentLoopRequest request(List<AgentMessage> messages, int maxToolRounds, AbortSignal signal) {
@@ -1523,8 +1519,10 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 signal,
-                Map.of(),
-                maxToolRounds);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(maxToolRounds)
+                        .promptMessages(List.of(messages.getLast()))
+                        .build());
     }
 
     private AgentLoopRequest request(
@@ -1561,15 +1559,13 @@ class AgentLoopTest {
                 Path.of("/repo"),
                 clock,
                 new AbortController().signal(),
-                Map.of(),
-                maxToolRounds,
-                0,
-                Optional.empty(),
-                promptMessages,
-                steeringMessages,
-                followUpMessages,
-                steeringMode,
-                followUpMode);
+                AgentLoopOptions.builder()
+                        .maxToolRounds(maxToolRounds)
+                        .promptMessages(promptMessages)
+                        .steeringMode(steeringMode)
+                        .followUpMode(followUpMode)
+                        .build(),
+                new LiveAgentQueues(steeringMessages, followUpMessages));
     }
 
     private AgentMessage userMessage(String id, String text) {

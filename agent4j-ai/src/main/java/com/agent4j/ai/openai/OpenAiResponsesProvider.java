@@ -95,6 +95,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
             hooked.options().signal().throwIfAborted();
             normalizer.acceptLine(line);
         });
+        normalizer.completeIfNecessary();
     }
 
     public ObjectNode toRequestJson(AiProviderRequest request) {
@@ -151,7 +152,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
         headers.putAll(request.options().headers());
         request.context().auth().headers().forEach(headers::put);
         Optional<String> bearerToken = request.context().auth().authorizationBearerToken()
-                .or(() -> Optional.ofNullable(System.getenv("OPENAI_API_KEY")));
+                .or(() -> Optional.ofNullable(System.getenv("AGENT4J_API_KEY")));
         bearerToken.ifPresent(value -> headers.putIfAbsent("Authorization", "Bearer " + value));
         return new OpenAiHttpRequest(
                 AiEndpointResolver.endpoint(request.model(), options.endpoint(), "/responses"),
@@ -167,7 +168,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
                 case AiSystemMessage ignored -> {
                 }
                 case AiUserMessage user -> input.add(message("user", user.content()));
-                case AiAssistantMessage assistant -> input.add(message("assistant", assistant.content()));
+                case AiAssistantMessage assistant -> assistantInput(input, assistant.content());
                 case AiToolResultMessage toolResult -> {
                     ObjectNode node = JSON.objectNode()
                             .put("type", "function_call_output")
@@ -183,11 +184,40 @@ public final class OpenAiResponsesProvider implements AiProvider {
         return input;
     }
 
+    private static void assistantInput(ArrayNode input, List<AiContentBlock> blocks) {
+        ArrayNode textContent = JSON.arrayNode();
+        for (AiContentBlock block : blocks) {
+            if (block instanceof AiToolCallContent toolCall) {
+                addAssistantMessage(input, textContent);
+                input.add(JSON.objectNode()
+                        .put("type", "function_call")
+                        .put("call_id", toolCall.id())
+                        .put("name", toolCall.name())
+                        .put("arguments", toolCall.arguments().toString()));
+            } else if (block instanceof AiTextContent text) {
+                textContent.add(JSON.objectNode()
+                        .put("type", "output_text")
+                        .put("text", text.text()));
+            }
+        }
+        addAssistantMessage(input, textContent);
+    }
+
+    private static void addAssistantMessage(ArrayNode input, ArrayNode content) {
+        if (!content.isEmpty()) {
+            input.add(JSON.objectNode()
+                    .put("type", "message")
+                    .put("role", "assistant")
+                    .set("content", content));
+        }
+    }
+
     private static ObjectNode message(String role, List<AiContentBlock> content) {
-        return JSON.objectNode()
+        ObjectNode message = JSON.objectNode()
                 .put("type", "message")
-                .put("role", role)
-                .set("content", openAiContent(content));
+                .put("role", role);
+        message.set("content", openAiContent(content));
+        return message;
     }
 
     private static ArrayNode openAiContent(List<AiContentBlock> blocks) {
@@ -204,7 +234,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
                         .put("type", "input_text")
                         .put("text", thinking.thinking()));
                 case AiToolCallContent toolCall -> content.add(JSON.objectNode()
-                        .put("type", "output_text")
+                        .put("type", "input_text")
                         .put("text", toolCall.name() + "(" + toolCall.arguments() + ")"));
             }
         }
@@ -241,6 +271,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
         private final Map<Integer, OutputSlot> outputSlots = new LinkedHashMap<>();
         private String messageId;
         private boolean started;
+        private boolean terminal;
 
         private OpenAiStreamNormalizer(ObjectMapper mapper, Consumer<AiStreamEvent> sink) {
             this.mapper = mapper;
@@ -253,6 +284,7 @@ public final class OpenAiResponsesProvider implements AiProvider {
             }
             String data = line.substring("data:".length()).trim();
             if (data.equals("[DONE]")) {
+                completeIfNecessary();
                 return;
             }
             try {
@@ -268,14 +300,14 @@ public final class OpenAiResponsesProvider implements AiProvider {
                 case "response.created" -> ensureStarted(event.path("response").path("id").asText("response"));
                 case "response.output_item.added" -> outputItemAdded(event);
                 case "response.content_part.added" -> contentPartAdded(event);
-                case "response.output_text.delta", "response.refusal.delta" -> textDelta(event);
+                case "response.output_text.delta", "response.content_part.delta", "response.refusal.delta" -> textDelta(event);
                 case "response.output_text.done", "response.output_item.done" -> outputItemDone(event);
                 case "response.reasoning_text.delta", "response.reasoning_summary_text.delta" -> thinkingDelta(event);
                 case "response.reasoning_text.done", "response.reasoning_summary_text.done" -> thinkingDone(event);
                 case "response.function_call_arguments.delta" -> functionCallDelta(event);
                 case "response.function_call_arguments.done" -> functionCallDone(event);
-                case "response.completed" -> completed(event);
-                case "response.failed", "response.incomplete", "error" -> error(event);
+                case "response.completed", "response.done", "response.incomplete" -> completed(event);
+                case "response.failed", "response.error", "error" -> error(event);
                 default -> {
                 }
             }
@@ -400,6 +432,9 @@ public final class OpenAiResponsesProvider implements AiProvider {
         }
 
         private void completed(JsonNode event) {
+            if (terminal) {
+                return;
+            }
             ensureStarted(event.path("response").path("id").asText("response"));
             JsonNode response = event.path("response");
             sink.accept(new AiStreamEvent.MessageCompleted(
@@ -408,12 +443,27 @@ public final class OpenAiResponsesProvider implements AiProvider {
                             content,
                             stopReason(response.path("status").asText("completed"), content),
                             usage(response.path("usage")))));
+            terminal = true;
         }
 
         private void error(JsonNode event) {
+            if (terminal) {
+                return;
+            }
             ensureStarted(event.path("response").path("id").asText(event.path("item_id").asText("response")));
-            String message = event.path("message").asText(event.path("response").path("error").path("message").asText("OpenAI stream error"));
+            String message = event.path("message").asText(event.path("error").path("message").asText(event.path("response").path("error").path("message").asText("OpenAI stream error")));
             sink.accept(new AiStreamEvent.MessageErrored(messageId, message));
+            terminal = true;
+        }
+
+        private void completeIfNecessary() {
+            if (!started || terminal) {
+                return;
+            }
+            sink.accept(new AiStreamEvent.MessageCompleted(
+                    messageId,
+                    new AiAssistantMessage(content, stopReason("completed", content), AiUsage.zero())));
+            terminal = true;
         }
 
         private void ensureStarted(String id) {

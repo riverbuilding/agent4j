@@ -32,7 +32,7 @@ internals into the SDK, CLI, or extension surfaces.
 
 ## Deferred Work
 
-- Phase 9 owns the PI-style `AgentSession`/`AgentSessionRuntime` API and should
+- Phase 9 owns the PI-style `AgentSession`/`CodingAgentRuntime` API and should
   attach the conversation context to runtime/session ownership rather than
   reintroducing loop-local canonical state.
 - Phase 9 also owns the live ChatGPT/Codex subscription login flow. Phase 8 only

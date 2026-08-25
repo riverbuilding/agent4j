@@ -14,10 +14,10 @@ Primary references:
 - [Built-in slash commands](https://raw.githubusercontent.com/earendil-works/pi/v0.82.1/packages/coding-agent/src/core/slash-commands.ts)
 
 PI's `InteractiveMode` owns terminal presentation and user interaction, while
-`AgentSessionRuntime` owns the active `AgentSession`, resources, model runtime,
+`CodingAgentRuntime` owns the active `AgentSession`, resources, model runtime,
 session manager, and agent behavior. It does not create a second agent loop.
 Agent4j must retain the same boundary: `agent4j-cli` renders and translates
-input; `AgentSessionRuntime` and `AgentSession` remain owners of conversation,
+input; `CodingAgentRuntime` and `AgentSession` remain owners of conversation,
 session persistence, events, tools, compaction, and authentication.
 
 ## Startup And Mode Selection
@@ -34,7 +34,7 @@ Phase 11 requirements:
 1. The root CLI must dispatch terminal-attached `--mode text`/default execution
    to an interactive runner.
 2. The runner must obtain its session through `CliSessionLifecycle` and
-   `AgentSessionRuntime`, including new, continue, explicit session, fork, and
+   `CodingAgentRuntime`, including new, continue, explicit session, fork, and
    no-session behavior already implemented for Phase 10.
 3. Terminal input/output, terminal capability detection, and shutdown signals
    must be injectable so fake-provider tests do not require a real terminal.
@@ -96,12 +96,13 @@ operations, login/settings/trust dialogs, and extension-provided commands.
 Its keybindings include submit, interrupt, exit, model selection/cycling,
 follow-up/dequeue, tool/thinking visibility, external editor, and shell input.
 
-The Java implementation order is:
+The Java implementation order was:
 
 1. `/help`, `/exit`, `/new`, `/abort`, `/status`, and `/compact` where the
    backing runtime operation already exists.
 2. `/session` and `/model` selection once the corresponding runtime APIs can
-   enumerate/select them without CLI-owned persistence logic.
+   enumerate/select them without CLI-owned persistence logic. This slice is
+   implemented through `CliSessionLifecycle` and the provider registry.
 3. Completion, history, keybinding configuration, trust/login/settings dialogs,
    extension commands, tree navigation, and external-editor support after the
    basic shell contract is stable.
@@ -113,12 +114,10 @@ only after the active operation is dealt with.
 
 ## Java Terminal Decision
 
-Phase 11 will introduce **JLine 3** after the basic loop contract is stable. It
-supplies the terminal abstraction, line editor, history, completion hooks, key
-maps, and testable terminal streams needed for the interactive editor without
-requiring a full-screen renderer. Slice 3 intentionally starts with injected
-buffered line I/O so prompt/session/error/EOF behavior is pinned before JLine
-key handling is added.
+Phase 11 uses **JLine 3** behind the terminal rendering boundary. The initial
+contract remains injectable buffered line I/O so prompt/session/error/EOF
+behavior is deterministic in tests; JLine-backed ANSI rendering is selected
+for capable terminals, while plain line rendering remains the fallback.
 
 No rich TUI library is selected in this slice. PI uses its own differential
 `@earendil-works/pi-tui`; JLine alone is not a comparable component framework.
@@ -135,15 +134,27 @@ fallback.
 | --- | --- | --- |
 | Basic line shell before full-screen TUI | The immediate goal is a usable interactive agent over the existing runtime, not a visual clone. | Add streaming renderer, then evaluate a rich TUI library. |
 | No extension commands/widgets in the first shell | Extension SPI is Phase 12 after the interactive contract is established. | Add command registration and UI hooks in Phase 12. |
-| No PI-compatible live steering/follow-up until session APIs support it | Current Java session queue input is only supplied at prompt start. | Add live queue operations before Slice 5 exposes queue controls. |
+| Buffered line input cannot express PI's Alt+Enter follow-up keybinding | The contract suite can exercise `/follow-up`, but the injected line reader has no key-event model. | Add JLine key maps and editor-level follow-up/dequeue coverage. |
 | No interactive project-trust or missing-cwd confirmation in the first shell | Java has only non-interactive trust gating today. | Add selector-backed trust and cwd decisions with session selection. |
 | No PI-specific custom TUI implementation | PI's `pi-tui` is TypeScript-specific. | Preserve external behavior with Java interfaces rather than porting internals. |
 
 ## Slice 1 Result
 
 The Phase 11 target is now pinned: build a JLine-backed, testable line shell in
-`agent4j-cli` over `AgentSessionRuntime`; do not create an interactive-only
+`agent4j-cli` over `CodingAgentRuntime`; do not create an interactive-only
 loop, session manager, provider path, or auth path. Rich terminal presentation
-and extension UI are later layers. The live queue API is a prerequisite for
-PI-compatible steering and follow-up controls, and remains a tracked runtime
-parity gap.
+and extension UI are later layers. Live steering/follow-up is implemented at
+the runtime boundary and covered by `LiveAgentSessionControlTest`; the
+remaining queue divergence is terminal keybinding fidelity.
+
+## Slice 9 Closeout
+
+`InteractiveContractTest` now drives the terminal host with a fake provider and
+covers streamed prompts, tool execution, persisted sessions, commands, model
+selection, session selection/replacement, and shutdown. Existing renderer and
+live-session tests cover event de-duplication, tool/status rows, queue updates,
+steering, follow-up, and cancellation. The basic observable contract is
+complete for the scoped line shell. Full PI parity remains open for editor
+history/completion/key maps, rich TUI layout and replay, extension UI,
+timestamp-plus-ID session filenames, and production provider/live-login
+verification; see `docs/phase-11-closeout.md`.

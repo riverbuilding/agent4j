@@ -10,6 +10,9 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public final class LocalProcessOps implements ProcessOps {
@@ -20,15 +23,35 @@ public final class LocalProcessOps implements ProcessOps {
                 .directory(cwd.toFile())
                 .redirectErrorStream(false)
                 .start();
-        boolean completed = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
-        if (!completed) {
-            process.destroyForcibly();
-            process.waitFor();
+        try (ExecutorService readers = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<String> stdout = readers.submit(() -> readRemaining(process.getInputStream()));
+            Future<String> stderr = readers.submit(() -> readRemaining(process.getErrorStream()));
+            boolean completed;
+            try {
+                completed = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
+                if (!completed) {
+                    process.destroyForcibly();
+                    process.waitFor();
+                }
+            } catch (InterruptedException e) {
+                process.destroyForcibly();
+                process.waitFor();
+                throw e;
+            }
+            Duration duration = Duration.between(started, Instant.now());
+            return new ProcessResult(completed ? process.exitValue() : -1, await(stdout), await(stderr), duration, !completed);
         }
-        Duration duration = Duration.between(started, Instant.now());
-        String stdout = readRemaining(process.getInputStream());
-        String stderr = readRemaining(process.getErrorStream());
-        return new ProcessResult(completed ? process.exitValue() : -1, stdout, stderr, duration, !completed);
+    }
+
+    private static String await(Future<String> reader) throws IOException, InterruptedException {
+        try {
+            return reader.get();
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new IOException("unable to read process output", e.getCause());
+        }
     }
 
     private static String readRemaining(InputStream stream) throws IOException {
