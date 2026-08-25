@@ -41,6 +41,14 @@ class ModelRuntimeTest {
     }
 
     @Test
+    void resolvesGeminiFromItsEnvironmentCredential() {
+        ModelRuntime runtime = new ModelRuntime(loginService(Map.of("GEMINI_API_KEY", "test-key")));
+
+        assertThat(runtime.resolve(Optional.empty(), Optional.empty()).displayName())
+                .isEqualTo("gemini/gemini-2.5-pro");
+    }
+
+    @Test
     void requiresASelectionWhenMultipleProvidersAreAuthenticated() {
         ModelRuntime runtime = new ModelRuntime(loginService(Map.of(
                 "AGENT4J_API_KEY", "openai-key",

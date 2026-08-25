@@ -5,6 +5,7 @@ import com.agent4j.ai.AiModelReference;
 import com.agent4j.ai.AiProvider;
 import com.agent4j.ai.EnvironmentAiAuthStore;
 import com.agent4j.ai.anthropic.AnthropicMessagesProvider;
+import com.agent4j.ai.gemini.GeminiGenerateContentProvider;
 import com.agent4j.ai.openai.OpenAiResponsesProvider;
 
 import java.util.List;
@@ -36,7 +37,14 @@ public final class BuiltInProviderCatalog {
                         List.of("claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5"),
                         new EnvironmentAiAuthStore.ProviderEnvironmentAuth(
                                 java.util.Optional.of("ANTHROPIC_API_KEY"), java.util.Optional.of("ANTHROPIC_BASE_URL")),
-                        AnthropicMessagesProvider::new)));
+                        AnthropicMessagesProvider::new),
+                new ProviderDefinition(
+                        "gemini",
+                        new AiModelReference("gemini", "gemini-2.5-pro"),
+                        List.of("gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"),
+                        new EnvironmentAiAuthStore.ProviderEnvironmentAuth(
+                                java.util.Optional.of("GEMINI_API_KEY"), java.util.Optional.of("GEMINI_BASE_URL")),
+                        GeminiGenerateContentProvider::new)));
     }
 
     public List<ProviderDefinition> providers() {
