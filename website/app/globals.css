@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root { --ink:#eaf0f7; --muted:#9caec2; --bg:#07101c; --panel:#0c1827; --line:rgba(184,208,236,.16); --lime:#d5ff51; --blue:#67a6ff; }
+:root { --ink:#eaf0f7; --muted:#9caec2; --bg:#07101c; --panel:#0c1827; --line:rgba(184,208,236,.16); --lime:#d5ff51; --blue:#67a6ff; --font-geist-sans:Arial,Helvetica,sans-serif; --font-geist-mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace; }
 @theme inline { --font-sans:var(--font-geist-sans); --font-mono:var(--font-geist-mono); }
 * { box-sizing:border-box; } html { scroll-behavior:smooth; } body { margin:0; background:var(--bg); color:var(--ink); font-family:Arial,Helvetica,sans-serif; line-height:1.5; } a { color:inherit; text-decoration:none; }
 .shell { width:min(1160px,calc(100% - 48px)); margin:0 auto; }.hero { position:relative; overflow:hidden; min-height:760px; background:radial-gradient(circle at 82% 20%,rgba(67,118,255,.17),transparent 29%),linear-gradient(145deg,#07101c,#081524 52%,#0c1322); }.grid-haze { position:absolute; inset:62% -8% -7% 44%; opacity:.2; background-image:linear-gradient(var(--blue) 1px,transparent 1px),linear-gradient(90deg,var(--blue) 1px,transparent 1px); background-size:31px 31px; transform:perspective(360px) rotateX(61deg); transform-origin:top; pointer-events:none; }
